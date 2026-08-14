@@ -44,6 +44,110 @@ export class Kit {
 
 const B = (x, y, z, r = 0) => ({ x, y, z, r });
 
+// ── moving parts ───────────────────────────────────────────────────────────
+/**
+ * Every drawer, cabinet door and curtain in the house animates off ONE
+ * updater per world.  A closure per panel would put a few hundred callbacks
+ * in the frame loop, almost all of them doing nothing; a part here sleeps the
+ * moment it reaches its target.  `t` runs 0 (shut) → 1 (open).
+ */
+export function movingPart(world, apply, speed = 2.6) {
+  let list = world.movingParts;
+  if (!list) {
+    list = world.movingParts = [];
+    world.onUpdate((dt) => {
+      for (const m of list) {
+        if (m.t === m.target) continue;
+        const d = m.target - m.t;
+        m.t += Math.sign(d) * Math.min(Math.abs(d), dt * m.speed);
+        m.apply(m.t);
+      }
+    });
+  }
+  const part = {
+    t: 0, target: 0, speed, apply,
+    toggle() { this.target = this.target ? 0 : 1; return this.target; },
+  };
+  list.push(part);
+  return part;
+}
+
+/**
+ * A drawer that really pulls out.  The front is a prop — the static batch is
+ * merged and can't move — and the box behind it is three thin boards, which
+ * is all you ever see of it.
+ */
+export function drawer(k, x, y, z, o = {}) {
+  const M = k.M, r = o.rotY || 0, rng = k.rng;
+  const w = o.w ?? 0.48, h = o.h ?? 0.18, out = o.out ?? 0.3;
+  const g = new THREE.Group();
+  g.position.set(x, y, z);
+  g.rotation.y = r;
+  g.add(boxMesh(w, h, 0.025, o.face || M.paint(0xe2dccf, 0.5), 0, 0, 0, { tile: 0.4, cast: false }));
+  g.add(boxMesh(w * 0.34, 0.02, 0.03, M.get('gold'), 0, 0, 0.025, { cast: false }));
+  g.add(boxMesh(w - 0.05, 0.014, out, M.get('maple'), 0, -h / 2 + 0.02, -out / 2 - 0.03, { tile: 0.3, cast: false }));
+  // something inside, so pulling it open is worth doing once
+  for (let i = 0, n = rng.int(1, 2); i < n; i++) {
+    const iw = rng.range(0.06, 0.16), ih = rng.range(0.03, 0.06);
+    g.add(boxMesh(iw, ih, rng.range(0.08, 0.18), M.solid(rng.pick([0x8c3b3b, 0x2f4f6b, 0x6b5330, 0xa8895b, 0x3f5c3a]), 0.75),
+      rng.range(-w / 2 + 0.1, w / 2 - 0.1), -h / 2 + 0.03 + ih / 2, -out * rng.range(0.25, 0.7), { cast: false }));
+  }
+  k.world.addProp(g);
+  const part = movingPart(k.world, (t) => {
+    g.position.set(x + Math.sin(r) * t * out, y, z + Math.cos(r) * t * out);
+  }, 3.2);
+  if (o.interact !== false) {
+    k.world.addInteract({
+      pos: new THREE.Vector3(x + Math.sin(r) * 0.12, y, z + Math.cos(r) * 0.12), radius: o.radius ?? 1.5,
+      label: () => (part.target ? 'Close the drawer' : (o.label || 'Open the drawer')),
+      onUse: () => { part.toggle(); return o.sound || 'creak'; },
+    });
+  }
+  return part;
+}
+
+/**
+ * A hinged panel — cabinet door, wardrobe leaf, fridge door.  `side` is which
+ * edge the hinge is on (-1 = the panel's own -x edge), and the leaf always
+ * swings out of the carcass, never through it.
+ */
+export function hingePanel(k, x, y, z, o = {}) {
+  const M = k.M, r = o.rotY || 0, side = o.side ?? -1;
+  const w = o.w ?? 0.5, h = o.h ?? 1.2, swing = o.swing ?? 1.85;
+  const g = new THREE.Group();
+  g.position.set(x + Math.cos(r) * side * w / 2, y, z - Math.sin(r) * side * w / 2);
+  g.rotation.y = r;
+  g.add(boxMesh(w, h, o.t ?? 0.035, o.face || M.paint(0xefe9dd, 0.45), -side * w / 2, 0, 0, { tile: 0.5, cast: false }));
+  if (o.handle !== false) {
+    g.add(boxMesh(0.03, o.handleH ?? Math.min(0.5, h * 0.34), 0.03, o.handleMat || M.get('gold'),
+      -side * (w - 0.09), o.handleY ?? 0, 0.035, { cast: false }));
+  }
+  k.world.addProp(g);
+  const part = movingPart(k.world, (t) => { g.rotation.y = r + t * swing * side; }, o.speed ?? 2.4);
+  if (o.label) {
+    k.world.addInteract({
+      pos: new THREE.Vector3(x + Math.sin(r) * 0.1, y, z + Math.cos(r) * 0.1), radius: o.radius ?? 1.8,
+      label: () => (part.target ? (o.closeLabel || 'Close it') : o.label),
+      onUse: () => { part.toggle(); return o.sound || 'latch'; },
+    });
+  }
+  return part;
+}
+
+/** One handle for several panels — a wardrobe or a fridge opens as a unit. */
+export function openTogether(k, parts, x, y, z, o = {}) {
+  k.world.addInteract({
+    pos: new THREE.Vector3(x, y, z), radius: o.radius ?? 2.0,
+    label: () => (parts[0].target ? (o.close || 'Close it') : (o.open || 'Open it')),
+    onUse: () => {
+      const t = parts[0].target ? 0 : 1;
+      for (const p of parts) p.target = t;
+      if (o.onToggle) o.onToggle(!!t);
+      return o.sound || 'latch';
+    },
+  });
+}
+
 // ── beds ───────────────────────────────────────────────────────────────────
 export function bed(k, x, y, z, o = {}) {
   const M = k.M, b = B(x, y, z, o.rotY || 0);
@@ -62,7 +166,22 @@ export function bed(k, x, y, z, o = {}) {
   k.p(b, -w * 0.25, 0.62, -d / 2 + 0.32, w * 0.42, 0.13, 0.44, pillow, 0.6);
   k.p(b, w * 0.25, 0.62, -d / 2 + 0.32, w * 0.42, 0.13, 0.44, pillow, 0.6);
   k.p(b, 0, 0.75, -d / 2 - 0.06, w + 0.2, 1.5, 0.1, frame, 1.2);  // headboard
+  // a throw folded over the foot and scatter cushions against the pillows —
+  // an unbroken duvet slab is what made every bed in the house read as unused
+  const thr = M.paint(o.throw ?? 0xb5a181, 0.96, 'bedthrow');
+  k.p(b, 0, 0.6, d / 2 - 0.42, w + 0.04, 0.05, 0.5, thr, 0.6);
+  k.p(b, 0, 0.48, d / 2 - 0.2, w + 0.04, 0.22, 0.06, thr, 0.5);
+  for (const s of [-1, 1]) {
+    k.p(b, s * w * 0.27, 0.72, -d / 2 + 0.52, 0.32, 0.32, 0.12, M.paint(o.cushion ?? 0x9aa8b4, 0.95, 'bedcushion'), 0.4);
+  }
   k.pc(b, 0, 0.35, 0, w + 0.2, 0.7, d + 0.2);
+  // you can lie on it.  The seat sits down at the foot so standing up steps
+  // you off the end of the frame instead of into the middle of it.
+  const [sx, sz] = k.L(0, d / 2 - 0.35, x, z, b.r);
+  k.world.addInteract({
+    pos: new THREE.Vector3(sx, y + 0.8, sz), radius: 1.9, label: o.seatLabel || 'Lie down',
+    kind: 'seat', seat: { x: sx, y: y + 0.36, z: sz, rotY: b.r },
+  });
   return b;
 }
 
@@ -75,7 +194,16 @@ export function bunkBed(k, x, y, z, o = {}) {
   }
   for (const ox of [-0.5, 0.5]) for (const oz of [-0.95, 0.95]) k.p(b, ox, 1.2, oz, 0.07, 2.4, 0.07, frame, 1);
   k.p(b, 0.55, 1.4, 0, 0.05, 1.4, 1.9, frame, 1);
+  // ladder up the foot end, and a soft toy left on the top bunk
+  for (let i = 0; i < 4; i++) k.p(b, -0.5, 0.55 + i * 0.42, 0.95, 0.9, 0.05, 0.05, frame, 0.3);
+  k.p(b, 0.2, 2.03, 0.3, 0.22, 0.24, 0.2, M.paint(0xd8a05e, 0.95, 'plush'), 0.3);
   k.pc(b, 0, 1.2, 0, 1.2, 2.4, 2.1);
+  // the bottom bunk takes you; the top one is a climb the player can't do
+  const [sx, sz] = k.L(0, 0.62, x, z, b.r);
+  k.world.addInteract({
+    pos: new THREE.Vector3(sx, y + 0.9, sz), radius: 1.7, label: 'Climb into the bunk',
+    kind: 'seat', seat: { x: sx, y: y + 0.36, z: sz, rotY: b.r },
+  });
   return b;
 }
 
@@ -83,11 +211,17 @@ export function bunkBed(k, x, y, z, o = {}) {
 export function nightstand(k, x, y, z, o = {}) {
   const b = B(x, y, z, o.rotY || 0), M = k.M;
   k.p(b, 0, 0.28, 0, 0.55, 0.56, 0.45, M.get('walnut'), 0.7);
-  k.p(b, 0, 0.4, 0.23, 0.48, 0.16, 0.02, M.paint(0xd8d2c6, 0.5), 0.4);
   k.p(b, 0, 0.18, 0.23, 0.48, 0.16, 0.02, M.paint(0xd8d2c6, 0.5), 0.4);
-  k.p(b, 0, 0.4, 0.25, 0.1, 0.02, 0.03, M.get('gold'), 0.3);
   k.pc(b, 0, 0.28, 0, 0.6, 0.6, 0.5);
+  // the top drawer opens — the bottom one is a face, nobody opens both
+  const [ndx, ndz] = k.L(0, 0.235, x, z, b.r);
+  drawer(k, ndx, y + 0.4, ndz, { rotY: b.r, w: 0.48, h: 0.16, out: 0.26, radius: 1.3, face: M.paint(0xd8d2c6, 0.5) });
   if (o.lamp !== false) tableLamp(k, ...k.L(0, 0, x, z, b.r), y + 0.56, { rotY: b.r });
+  // a book and a glass of water, because a bare nightstand is a shop display
+  if (o.clutter !== false) {
+    k.p(b, 0.17, 0.585, 0.02, 0.14, 0.05, 0.2, M.solid(k.rng.pick([0x8c3b3b, 0x2f4f6b, 0x3f5c3a]), 0.7), 0.2);
+    k.p(b, -0.18, 0.62, 0.1, 0.07, 0.12, 0.07, M.get('glass'), 0.2);
+  }
   return b;
 }
 
@@ -101,9 +235,22 @@ export function tableLamp(k, x, z, y, o = {}) {
   k.box(0.34, 0.1, 0.34, cloth, x, y + 0.35, z, { tile: 0.3 });
   k.box(0.3, 0.09, 0.3, cloth, x, y + 0.44, z, { tile: 0.3 });
   k.box(0.26, 0.09, 0.26, cloth, x, y + 0.53, z, { tile: 0.3 });
-  k.box(0.3, 0.02, 0.3, M.emissive(0xffdca8, 1.5), x, y + 0.31, z, { tile: 0.2 });
-  k.box(0.22, 0.02, 0.22, M.emissive(0xffe8c8, 1.0), x, y + 0.575, z, { tile: 0.2 });
-  k.world.addLight({ pos: new THREE.Vector3(x, y + 0.42, z), color: 0xffd39a, intensity: 6, distance: 6.5, lamp: true });
+  // the bulb is a prop, not batched geometry: switching the lamp off has to
+  // put the glow out as well as the light, or the shade keeps burning at night
+  const bulb = boxMesh(0.24, 0.3, 0.24, M.emissive(0xffdca8, 1.4), x, y + 0.44, z, { cast: false });
+  k.world.addProp(bulb);
+  const light = k.world.addLight({ pos: new THREE.Vector3(x, y + 0.42, z), color: 0xffd39a, intensity: 6, distance: 6.5, lamp: true });
+  lampSwitch(k, light, bulb, x, y + 0.45, z, 1.4);
+  return light;
+}
+
+/** Pull-cord shared by every lamp: kills the bulb and the light together. */
+export function lampSwitch(k, light, bulb, x, y, z, radius = 1.5) {
+  k.world.addInteract({
+    pos: new THREE.Vector3(x, y, z), radius,
+    label: () => (light.on ? 'Turn off the lamp' : 'Turn on the lamp'),
+    onUse: () => { light.on = !light.on; bulb.visible = light.on; return 'click'; },
+  });
 }
 
 /** Linen with a warm bulb behind it — shared by every shade in the house. */
@@ -126,9 +273,12 @@ export function dresser(k, x, y, z, o = {}) {
   const w = o.w || 1.8;
   k.p(b, 0, 0.45, 0, w, 0.9, 0.52, M.get('walnut'), 0.9);
   for (let i = 0; i < 3; i++) for (const s of [-1, 1]) {
+    if (i === 2 && s === -1) continue;                 // that one really opens
     k.p(b, s * w * 0.24, 0.2 + i * 0.27, 0.27, w * 0.44, 0.22, 0.02, M.paint(0xe2dccf, 0.5), 0.4);
     k.p(b, s * w * 0.24, 0.2 + i * 0.27, 0.29, 0.16, 0.02, 0.03, M.get('gold'), 0.3);
   }
+  const [dx, dz] = k.L(-w * 0.24, 0.28, x, z, b.r);
+  drawer(k, dx, y + 0.74, dz, { rotY: b.r, w: w * 0.44, h: 0.22, out: 0.34 });
   k.pc(b, 0, 0.45, 0, w, 0.9, 0.55);
   return b;
 }
@@ -137,8 +287,21 @@ export function wardrobe(k, x, y, z, o = {}) {
   const b = B(x, y, z, o.rotY || 0), M = k.M;
   const w = o.w || 1.6, h = o.h || 2.3;
   k.p(b, 0, h / 2, 0, w, h, 0.62, M.get('walnut'), 1);
-  for (const s of [-1, 1]) k.p(b, s * w * 0.25, h / 2, 0.32, w * 0.46, h - 0.1, 0.02, M.paint(0xefe9dd, 0.45), 0.6);
-  for (const s of [-1, 1]) k.p(b, s * 0.06, h / 2, 0.35, 0.03, 0.4, 0.03, M.get('gold'), 0.3);
+  // hanging rail and a row of shirts, seen once the leaves swing back
+  k.p(b, 0, h - 0.35, 0, w - 0.12, 0.04, 0.04, M.get('chrome'), 0.3);
+  for (let i = 0; i < 7; i++) {
+    k.p(b, -w / 2 + 0.16 + i * ((w - 0.32) / 6), h - 0.75, 0.02, 0.1, 0.66, 0.3,
+      M.paint(k.rng.pick([0x2f6fb5, 0x8a5b3a, 0x6b7a54]), 0.9, 'coat'), 0.4);
+  }
+  const leaves = [];
+  for (const s of [-1, 1]) {
+    const [lx, lz] = k.L(s * w * 0.25, 0.32, x, z, b.r);
+    leaves.push(hingePanel(k, lx, y + h / 2, lz, {
+      rotY: b.r, w: w * 0.46, h: h - 0.1, side: s, face: M.paint(0xefe9dd, 0.45), handleY: -h * 0.05,
+    }));
+  }
+  const [hx, hz] = k.L(0, 0.4, x, z, b.r);
+  openTogether(k, leaves, hx, y + 1.2, hz, { open: 'Open the wardrobe', close: 'Close the wardrobe', radius: 1.9 });
   k.pc(b, 0, h / 2, 0, w, h, 0.65);
   return b;
 }
@@ -207,6 +370,12 @@ export function officeChair(k, x, y, z, o = {}) {
     k.p(b, Math.cos(a) * 0.22, 0.06, Math.sin(a) * 0.22, 0.3, 0.05, 0.07, M.get('darkPlastic'), 0.3);
   }
   k.pc(b, 0, 0.4, 0, 0.6, 0.9, 0.6);
+  if (o.seat !== false) {
+    k.world.addInteract({
+      pos: new THREE.Vector3(x, y + 0.55, z), radius: 1.4, label: 'Sit at the desk',
+      kind: 'seat', seat: { x, y: y + 0.5, z, rotY: b.r },
+    });
+  }
   return b;
 }
 
@@ -219,6 +388,14 @@ export function diningChair(k, x, y, z, o = {}) {
   for (const [ox, oz] of [[-0.2, -0.2], [0.2, -0.2], [-0.2, 0.2], [0.2, 0.2]])
     k.p(b, ox, 0.22, oz, 0.05, 0.44, 0.05, wood, 0.4);
   k.pc(b, 0, 0.4, 0, 0.5, 0.8, 0.5);
+  // every chair in the house is a chair you can actually sit in; stand() fans
+  // out from behind the seat, so a chair pushed under a table still lets go
+  if (o.seat !== false) {
+    k.world.addInteract({
+      pos: new THREE.Vector3(x, y + 0.55, z), radius: 1.3, label: 'Sit down',
+      kind: 'seat', seat: { x, y: y + 0.5, z, rotY: b.r },
+    });
+  }
   return b;
 }
 
@@ -407,9 +584,20 @@ export function counterRun(k, x, y, z, len, o = {}) {
     if (i === 0 && o.drawers !== false) {
       for (let dr = 0; dr < 3; dr++) {                      // drawer bank at one end
         const dy = 0.24 + dr * 0.26;
+        if (dr === 2) {                                     // the cutlery drawer opens
+          const [dx, dz] = k.L(ox, 0.33, x, z, b.r);
+          drawer(k, dx, y + dy, dz, { rotY: b.r, w: bay - 0.045, h: 0.22, out: 0.36, face, label: 'Open the drawer' });
+          continue;
+        }
         k.p(b, ox, dy, 0.32, bay - 0.045, 0.22, 0.02, face, 0.5);
         k.p(b, ox, dy, 0.345, bay * 0.5, 0.02, 0.03, pull, 0.2);
       }
+    } else if (i === 1 && o.drawers !== false) {            // one cupboard swings
+      const [cx2, cz2] = k.L(ox, 0.33, x, z, b.r);
+      hingePanel(k, cx2, y + 0.5, cz2, {
+        rotY: b.r, w: bay - 0.045, h: 0.74, side: 1, face, handleMat: pull, handleH: 0.22,
+        label: 'Open the cupboard', closeLabel: 'Close the cupboard', radius: 1.6,
+      });
     } else {
       k.p(b, ox, 0.5, 0.32, bay - 0.045, 0.74, 0.02, face, 0.5);
       k.p(b, ox, 0.79, 0.345, 0.22, 0.02, 0.03, pull, 0.2);
@@ -459,6 +647,7 @@ export function island(k, x, y, z, o = {}) {
   k.p(b, 0, 1.29, sz - 0.29, 0.05, 0.06, 0.2, chrome, 0.2);
   k.p(b, 0, 1.24, sz - 0.19, 0.045, 0.12, 0.045, chrome, 0.2);
   k.p(b, 0.11, 1.0, sz - 0.36, 0.03, 0.03, 0.13, chrome, 0.2);            // lever
+  tap(k, ...k.L(0, sz - 0.19, x, z, b.r), y + 1.18, { h: 0.45, label: 'Run the tap' });
   k.pc(b, 0, 0.46, 0, w + 0.24, 0.98, d + 0.24);
   for (let i = 0; i < 3; i++) barstool(k, ...k.L(-w / 3 + i * (w / 3), d / 2 + 0.55, x, z, b.r), y, { rotY: b.r });
   // pendant lights
@@ -485,13 +674,40 @@ export function fridge(k, x, y, z, o = {}) {
   const b = B(x, y, z, o.rotY || 0), M = k.M;
   const steel = M.get('steel'), chrome = M.get('chrome');
   const gap = M.paint(0x23272c, 0.6, 'appliancegap');
-  k.p(b, 0, 1.05, 0, 1.1, 2.1, 0.72, steel, 1);
-  // French doors over a freezer drawer, each read by its shadow gap
-  for (const s of [-1, 1]) {
-    k.p(b, s * 0.27, 1.42, 0.37, 0.52, 1.24, 0.03, steel, 0.8);
-    k.p(b, s * 0.055, 1.44, 0.405, 0.035, 0.86, 0.04, chrome, 0.2);        // bar handle
-    for (const t of [-1, 1]) k.p(b, s * 0.055, 1.44 + t * 0.41, 0.392, 0.035, 0.04, 0.05, chrome, 0.2);
+  // the carcass is a shell, not a solid block — swing the doors on a block and
+  // all you have opened is a view of steel
+  k.p(b, 0, 1.05, -0.34, 1.1, 2.1, 0.04, steel, 1);                          // back
+  for (const s of [-1, 1]) k.p(b, s * 0.53, 1.05, 0, 0.04, 2.1, 0.72, steel, 1);
+  k.p(b, 0, 2.08, 0, 1.1, 0.04, 0.72, steel, 1);
+  k.p(b, 0, 0.02, 0, 1.1, 0.04, 0.72, steel, 1);
+  k.p(b, 0, 0.77, 0, 1.02, 0.05, 0.68, steel, 0.6);                          // freezer deck
+  // shelves and food inside, lit by a strip that comes on with the doors
+  for (const sy of [0.95, 1.35, 1.75]) k.p(b, 0, sy, 0.02, 1.0, 0.03, 0.6, M.get('glass'), 0.4);
+  for (let i = 0; i < 9; i++) {
+    const sy = [1.0, 1.4, 1.8][i % 3];
+    k.p(b, -0.38 + Math.floor(i / 3) * 0.36, sy + 0.09, -0.1 + (i % 3) * 0.12, 0.14, 0.18, 0.14,
+      M.solid(k.rng.pick([0xd0342c, 0xf0b429, 0x6ab04c, 0xe8e4db, 0x8a5b3a]), 0.6), 0.2);
   }
+  const [gx, gz] = k.L(0, 0, x, z, b.r);
+  const glow = boxMesh(0.9, 0.05, 0.5, M.emissive(0xfff2d8, 1.6), gx, y + 2.02, gz, { cast: false });
+  glow.visible = false;
+  k.world.addProp(glow);
+  // French doors over a freezer drawer, each read by its shadow gap.  The bar
+  // handles ride on the leaves — a handle left behind in the batch is the
+  // tell-tale of a door that only pretends to open.
+  const doors = [];
+  for (const s of [-1, 1]) {
+    const [dx, dz] = k.L(s * 0.27, 0.37, x, z, b.r);
+    doors.push(hingePanel(k, dx, y + 1.42, dz, {
+      rotY: b.r, w: 0.52, h: 1.24, side: s, t: 0.05, face: steel, swing: 1.7,
+      handleMat: chrome, handleH: 0.86, speed: 2.0,
+    }));
+  }
+  const [fhx, fhz] = k.L(0, 0.45, x, z, b.r);
+  openTogether(k, doors, fhx, y + 1.4, fhz, {
+    open: 'Open the fridge', close: 'Close the fridge', radius: 2.2,
+    onToggle: (on) => { glow.visible = on; },
+  });
   k.p(b, 0, 1.42, 0.372, 0.016, 1.24, 0.02, gap, 0.2);                     // between the doors
   k.p(b, 0, 0.77, 0.372, 1.06, 0.02, 0.02, gap, 0.2);                      // fridge / freezer split
   k.p(b, 0, 0.42, 0.37, 1.06, 0.64, 0.03, steel, 0.8);                     // freezer drawer
@@ -528,6 +744,16 @@ export function range(k, x, y, z, o = {}) {
   k.p(b, 0, 2.0, -0.06, 1.2, 0.7, 0.55, steel, 0.8);                       // hood
   k.p(b, 0, 1.67, -0.06, 1.0, 0.04, 0.42, M.emissive(0xffe6bd, 0.9), 0.3); // hood lights
   k.p(b, 0, (2.35 + (o.ceil ?? 3.78)) / 2, -0.1, 0.5, (o.ceil ?? 3.78) - 2.35, 0.4, steel, 0.6);
+  // the oven lights up behind its glass when you put it on
+  const [ox2, oz2] = k.L(0, 0.34, x, z, b.r);
+  const oven = boxMesh(0.78, 0.36, 0.02, M.emissive(0xff9a3c, 1.5), ox2, y + 0.45, oz2, { rotY: b.r, cast: false });
+  oven.visible = false;
+  k.world.addProp(oven);
+  k.world.addInteract({
+    pos: new THREE.Vector3(ox2, y + 0.5, oz2), radius: 1.8,
+    label: () => (oven.visible ? 'Turn the oven off' : 'Preheat the oven'),
+    onUse: () => { oven.visible = !oven.visible; return 'click'; },
+  });
   k.pc(b, 0, 0.45, 0, 1.1, 0.95, 0.68);
 }
 
@@ -556,6 +782,12 @@ export function vanity(k, x, y, z, o = {}) {
   k.p(b, 0.08, 1.31, -0.19, 0.03, 0.03, 0.1, chrome, 0.2);
   k.p(b, 0, 1.75, -0.26, w - 0.1, 1.2, 0.03, M.get('mirror'), 1);
   k.p(b, 0, 2.42, -0.2, w - 0.4, 0.06, 0.14, M.emissive(0xf6f9ff, 1.8), 0.4);
+  tap(k, ...k.L(0, -0.03, x, z, b.r), y + 1.29, { h: 0.34, radius: 1.4 });
+  // soap, a tumbler of brushes and a folded hand towel on the stone
+  k.p(b, w * 0.28, 0.96, -0.02, 0.07, 0.11, 0.07, M.paint(0xd8e3ea, 0.4, 'soap'), 0.2);
+  k.p(b, -w * 0.3, 0.96, -0.02, 0.08, 0.12, 0.08, M.get('chrome'), 0.2);
+  k.p(b, -w * 0.3, 1.06, -0.02, 0.05, 0.1, 0.05, M.solid(0x3f6ea8, 0.8), 0.2);
+  k.p(b, w * 0.36, 0.93, 0.14, 0.24, 0.05, 0.18, M.paint(0xe8eef2, 0.95, 'towel'), 0.3);
   k.pc(b, 0, 0.45, 0, w, 0.9, 0.6);
   k.world.addLight({ pos: new THREE.Vector3(x, y + 2.3, z), color: 0xf2f6ff, intensity: 7, distance: 6, lamp: true });
 }
@@ -593,16 +825,32 @@ export function shower(k, x, y, z, o = {}) {
 export function plant(k, x, y, z, scale = 1) {
   const M = k.M, rng = k.rng;
   k.box(0.4 * scale, 0.42 * scale, 0.4 * scale, M.paint(0x9a8b78, 0.8, 'pot'), x, y + 0.21 * scale, z, { tile: 0.3 });
-  const g = new THREE.Group();
-  g.position.set(x, y + 0.42 * scale, z);
+  const leaf = new THREE.PlaneGeometry(0.14 * scale, 0.75 * scale);
   for (let i = 0; i < 14; i++) {
     const a = rng() * Math.PI * 2, tilt = rng.range(0.2, 0.9);
-    const leaf = new THREE.Mesh(new THREE.PlaneGeometry(0.14 * scale, 0.75 * scale), k.M.get('foliage'));
-    leaf.position.set(Math.cos(a) * 0.1 * scale, 0.32 * scale, Math.sin(a) * 0.1 * scale);
-    leaf.rotation.set(tilt * (rng() - 0.5), a, tilt);
-    g.add(leaf);
+    batched(k, leaf, M.get('foliage'),
+      x + Math.cos(a) * 0.1 * scale, y + 0.74 * scale, z + Math.sin(a) * 0.1 * scale,
+      tilt * (rng() - 0.5), a, tilt);
   }
-  k.world.addProp(g);
+  leaf.dispose();
+}
+
+const _bm = new THREE.Matrix4();
+const _be = new THREE.Euler();
+const _bq = new THREE.Quaternion();
+const _bp = new THREE.Vector3();
+const _bs = new THREE.Vector3(1, 1, 1);
+
+/**
+ * Drops a non-box geometry — a leaf, a piece of fruit, a ball — into the
+ * merged static batch.  A Group of fourteen leaf planes per pot is fourteen
+ * draw calls of nothing, and this house has forty pots in it.
+ */
+function batched(k, geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) {
+  _be.set(rx, ry, rz);
+  _bq.setFromEuler(_be);
+  _bm.compose(_bp.set(x, y, z), _bq, _bs);
+  k.B.add(geo, mat, _bm);
 }
 
 export function artwork(k, x, y, z, w, h, rotY, color) {
@@ -655,6 +903,406 @@ function artMaterial(M, color, x, y, z) {
       ctx.fill();
     }
   }, { roughness: 0.85 });
+}
+
+// ── occasional furniture ───────────────────────────────────────────────────
+export function sideTable(k, x, y, z, o = {}) {
+  const b = B(x, y, z, o.rotY || 0), M = k.M;
+  const w = o.w ?? 0.55, h = o.h ?? 0.56;
+  k.p(b, 0, h, 0, w, 0.05, w, o.top || M.get('walnut'), 0.5);
+  if (o.pedestal) {
+    k.p(b, 0, h / 2, 0, 0.1, h, 0.1, M.get('blackMetal'), 0.3);
+    k.p(b, 0, 0.03, 0, w * 0.72, 0.05, w * 0.72, M.get('blackMetal'), 0.3);
+  } else {
+    for (const [ox, oz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      k.p(b, ox * (w / 2 - 0.06), h / 2, oz * (w / 2 - 0.06), 0.05, h, 0.05, M.get('walnut'), 0.3);
+    }
+    k.p(b, 0, h * 0.38, 0, w - 0.14, 0.04, w - 0.14, M.get('walnut'), 0.4);   // lower shelf
+  }
+  k.pc(b, 0, h / 2, 0, w, h + 0.06, w);
+  if (o.lamp) tableLamp(k, ...k.L(0, 0, x, z, b.r), y + h + 0.03, { rotY: b.r });
+  return b;
+}
+
+export function consoleTable(k, x, y, z, o = {}) {
+  const b = B(x, y, z, o.rotY || 0), M = k.M;
+  const w = o.w ?? 1.4, d = o.d ?? 0.4, h = o.h ?? 0.85;
+  k.p(b, 0, h, 0, w, 0.06, d, o.top || M.get('walnut'), 0.8);
+  for (const s of [-1, 1]) for (const t of [-1, 1]) {
+    k.p(b, s * (w / 2 - 0.08), h / 2, t * (d / 2 - 0.06), 0.07, h, 0.07, M.get('walnut'), 0.4);
+  }
+  k.p(b, 0, h * 0.26, 0, w - 0.2, 0.04, d - 0.1, M.get('walnut'), 0.5);
+  k.pc(b, 0, h / 2, 0, w, h, d);
+  return b;
+}
+
+/** Upholstered bench — foot of the bed, foyer, mud room. You can sit on it. */
+export function bench(k, x, y, z, o = {}) {
+  const b = B(x, y, z, o.rotY || 0), M = k.M;
+  const w = o.w ?? 1.4, d = o.d ?? 0.44, h = o.h ?? 0.45;
+  k.p(b, 0, h, 0, w, 0.16, d, M.paint(o.color ?? 0x8a8172, 0.92, 'benchpad'), 0.5);
+  for (const s of [-1, 1]) k.p(b, s * (w / 2 - 0.09), (h - 0.08) / 2, 0, 0.07, h - 0.08, d - 0.08, M.get('walnut'), 0.3);
+  if (o.rack) {                                     // luggage rack slats underneath
+    for (let i = 0; i < 4; i++) k.p(b, 0, h * 0.42, -d / 2 + 0.08 + i * ((d - 0.16) / 3), w - 0.2, 0.03, 0.05, M.get('walnut'), 0.3);
+  }
+  k.pc(b, 0, h / 2, 0, w, h + 0.1, d);
+  k.world.addInteract({
+    pos: new THREE.Vector3(x, y + h, z), radius: 1.5, label: 'Sit down',
+    kind: 'seat', seat: { x, y: y + h + 0.04, z, rotY: b.r },
+  });
+  return b;
+}
+
+export function floorLamp(k, x, y, z, o = {}) {
+  const M = k.M, h = o.h ?? 1.5, sw = o.shade ?? 0.42;
+  k.box(0.3, 0.05, 0.3, M.get('blackMetal'), x, y + 0.025, z, { tile: 0.2 });
+  k.box(0.05, h, 0.05, M.get('blackMetal'), x, y + h / 2, z, { tile: 0.2 });
+  const cloth = shadeFabric(M);
+  k.box(sw, 0.12, sw, cloth, x, y + h + 0.06, z, { tile: 0.3 });
+  k.box(sw - 0.05, 0.11, sw - 0.05, cloth, x, y + h + 0.17, z, { tile: 0.3 });
+  k.box(sw - 0.1, 0.1, sw - 0.1, cloth, x, y + h + 0.27, z, { tile: 0.3 });
+  const bulb = boxMesh(sw - 0.14, 0.36, sw - 0.14, M.emissive(0xffdca8, 1.4), x, y + h + 0.16, z, { cast: false });
+  k.world.addProp(bulb);
+  const light = k.world.addLight({
+    pos: new THREE.Vector3(x, y + h + 0.1, z), color: o.color ?? 0xffd39a,
+    intensity: o.intensity ?? 7, distance: 8, lamp: true,
+  });
+  lampSwitch(k, light, bulb, x, y + 1.25, z, 1.9);
+  k.col(0.3, h, 0.3, x, y + h / 2, z);
+  return light;
+}
+
+/** Wall sconce — the pair that flank a fireplace, a mirror or a bed. */
+export function sconce(k, x, y, z, rotY = 0, o = {}) {
+  const M = k.M;
+  const nx = Math.sin(rotY), nz = Math.cos(rotY);
+  k.box(0.12, 0.22, 0.05, M.get('gold'), x, y, z, { rotY, tile: 0.2 });
+  k.box(0.06, 0.06, 0.14, M.get('gold'), x + nx * 0.07, y + 0.06, z + nz * 0.07, { rotY, tile: 0.2 });
+  k.box(0.22, 0.2, 0.22, shadeFabric(M), x + nx * 0.15, y + 0.16, z + nz * 0.15, { rotY, tile: 0.2 });
+  const bulb = boxMesh(0.15, 0.24, 0.15, M.emissive(0xffdca8, 1.3), x + nx * 0.15, y + 0.16, z + nz * 0.15, { cast: false });
+  k.world.addProp(bulb);
+  const light = k.world.addLight({
+    pos: new THREE.Vector3(x + nx * 0.3, y + 0.2, z + nz * 0.3),
+    color: 0xffd39a, intensity: o.intensity ?? 5, distance: 6.5, lamp: true,
+  });
+  lampSwitch(k, light, bulb, x + nx * 0.15, y, z + nz * 0.15, 1.7);
+  return light;
+}
+
+/**
+ * The switch by the door.  It flips whatever the plan declared for this room
+ * — mansion.js tags every ceiling fixture with the room it hangs in — and
+ * leaves the lamps alone, so you can kill the overheads and read by one lamp.
+ */
+export function lightSwitch(k, R, x, y, z, o = {}) {
+  const M = k.M, rotY = o.rotY || 0;
+  const plate = M.paint(0xf6f4ee, 0.4, 'switchplate');
+  k.box(0.1, 0.14, 0.02, plate, x, y, z, { rotY, tile: 0.1 });
+  k.box(0.05, 0.07, 0.03, plate, x + 0.014 * Math.sin(rotY), y, z + 0.014 * Math.cos(rotY), { rotY, tile: 0.1 });
+  const lights = k.world.lights.filter((l) => l.room === R.name && l.floor === R.floor);
+  const st = { on: true };
+  k.world.addInteract({
+    pos: new THREE.Vector3(x, y, z), radius: 1.7,
+    label: () => (st.on ? 'Lights off' : 'Lights on'),
+    onUse: () => { st.on = !st.on; for (const l of lights) l.on = st.on; return 'click'; },
+  });
+}
+
+/** A tap that runs: a thread of water into the basin and a small splash. */
+export function tap(k, x, z, y, o = {}) {
+  const h = o.h ?? 0.4;
+  const g = new THREE.Group();
+  g.position.set(x, y, z);
+  g.add(boxMesh(0.028, h, 0.028, k.M.get('water'), 0, -h / 2, 0, { cast: false }));
+  g.add(boxMesh(0.16, 0.006, 0.16, k.M.get('water'), 0, -h, 0, { cast: false }));
+  g.visible = false;
+  k.world.addProp(g);
+  k.world.addInteract({
+    pos: new THREE.Vector3(x, y - h * 0.4, z), radius: o.radius ?? 1.5,
+    label: () => (g.visible ? 'Turn off the tap' : (o.label || 'Run the tap')),
+    onUse: () => { g.visible = !g.visible; return g.visible ? 'splash' : 'click'; },
+  });
+}
+
+// ── wall treatment ─────────────────────────────────────────────────────────
+/** Moulding right round the room — what the bare wall above the furniture
+ *  line was missing.  Hung above the tallest opening so it never crosses one. */
+export function pictureRail(k, R, o = {}) {
+  const M = k.M, y = R.y + (o.h ?? 2.5), skip = o.skip || [];
+  const m = M.paint(o.color ?? 0xf3efe6, 0.72, 'picrail');
+  const hw = R.w / 2 - 0.07, hd = R.d / 2 - 0.07;
+  if (!skip.includes('n')) k.box(R.w - 0.14, 0.08, 0.05, m, R.x, y, R.z - hd, { tile: 0.3 });
+  if (!skip.includes('s')) k.box(R.w - 0.14, 0.08, 0.05, m, R.x, y, R.z + hd, { tile: 0.3 });
+  if (!skip.includes('w')) k.box(0.05, 0.08, R.d - 0.14, m, R.x - hw, y, R.z, { tile: 0.3 });
+  if (!skip.includes('e')) k.box(0.05, 0.08, R.d - 0.14, m, R.x + hw, y, R.z, { tile: 0.3 });
+}
+
+/** Shelf on brackets with a few things on it. */
+export function wallShelf(k, x, y, z, o = {}) {
+  const b = B(x, y, z, o.rotY || 0), M = k.M, rng = k.rng;
+  const w = o.w ?? 1.1, d = o.d ?? 0.24;
+  k.p(b, 0, 0, 0, w, 0.045, d, M.get('walnut'), 0.5);
+  for (const s of [-1, 1]) k.p(b, s * (w / 2 - 0.14), -0.1, -d * 0.1, 0.04, 0.18, d - 0.08, M.get('blackMetal'), 0.2);
+  const hues = [0x8c3b3b, 0x2f4f6b, 0x3f5c3a, 0x6b5330, 0x4a3355, 0xa8895b];
+  for (let i = 0, n = o.items ?? 3; i < n; i++) {
+    const ox = -w / 2 + (i + 0.5) * (w / n);
+    if (rng.chance(0.55)) {                       // a short run of books
+      for (let j = 0, m2 = rng.int(3, 5); j < m2; j++) {
+        const bh = rng.range(0.18, 0.26);
+        k.p(b, ox - 0.08 + j * 0.05, 0.025 + bh / 2, 0, 0.045, bh, rng.range(0.14, 0.2), M.solid(rng.pick(hues), 0.7), 0.2);
+      }
+    } else if (rng.chance(0.5)) {                 // a pot
+      k.p(b, ox, 0.11, 0, 0.16, 0.17, 0.16, M.paint(rng.pick([0xc9d4cb, 0xd8cfbe, 0x9aa8b4]), 0.5, 'shelfpot'), 0.2);
+    } else {                                      // a small framed picture
+      k.p(b, ox, 0.13, -0.03, 0.2, 0.24, 0.03, M.get('gold'), 0.2);
+      k.p(b, ox, 0.13, -0.005, 0.16, 0.2, 0.01, M.solid(rng.pick(hues), 0.8), 0.2);
+    }
+  }
+}
+
+/** Tall mirror — hung in the formal rooms, leaned in the bedrooms. */
+export function tallMirror(k, x, y, z, o = {}) {
+  const b = B(x, y, z, o.rotY || 0), M = k.M;
+  const w = o.w ?? 0.9, h = o.h ?? 1.9, base = o.base ?? 0.25;
+  k.p(b, 0, base + h / 2, 0, w + 0.1, h + 0.1, 0.06, o.frame || M.get('gold'), 0.5);
+  k.p(b, 0, base + h / 2, 0.045, w, h, 0.02, M.get('mirror'), 1);
+  if (o.lean) k.pc(b, 0, base + h / 2, 0.05, w + 0.1, h, 0.24);
+}
+
+/** A pinned-up poster: flat blocks of colour on paper, no frame. */
+export function poster(k, x, y, z, o = {}) {
+  const M = k.M, w = o.w ?? 0.7, h = o.h ?? 1.0, seed = o.seed ?? 1;
+  const hue = o.hue ?? 0.6;
+  const mat = panelMaterial(M, `poster:${seed}:${hue.toFixed(2)}`, 96, 128, (c, cw, ch) => {
+    const rng = makeRng((seed * 2654435761) >>> 0);
+    const H = (d) => `hsl(${(((hue + d) % 1) * 360).toFixed(0)},${rng.int(55, 90)}%,${rng.int(30, 62)}%)`;
+    c.fillStyle = H(0); c.fillRect(0, 0, cw, ch);
+    c.fillStyle = H(0.5);
+    c.beginPath(); c.arc(cw * 0.5, ch * rng.range(0.3, 0.45), cw * rng.range(0.24, 0.36), 0, Math.PI * 2); c.fill();
+    c.fillStyle = H(0.12);
+    for (let i = 0, n = rng.int(2, 4); i < n; i++) c.fillRect(cw * 0.1, ch * (0.6 + i * 0.09), cw * rng.range(0.3, 0.8), ch * 0.045);
+    c.fillStyle = H(0.35);
+    c.fillRect(0, ch - 12, cw, 12);
+  }, { roughness: 0.92 });
+  k.box(w, h, 0.012, mat, x, y, z, { rotY: o.rotY || 0 });
+}
+
+// ── small dressing ─────────────────────────────────────────────────────────
+export function bookStack(k, x, y, z, o = {}) {
+  const M = k.M, rng = k.rng, n = o.n ?? rng.int(2, 4);
+  const hues = [0x8c3b3b, 0x2f4f6b, 0x3f5c3a, 0x6b5330, 0x4a3355, 0xa8895b];
+  let yy = y;
+  for (let i = 0; i < n; i++) {
+    const w = (o.w ?? 0.24) * rng.range(0.86, 1), h = rng.range(0.035, 0.055);
+    k.box(w, h, w * 0.72, M.solid(rng.pick(hues), 0.7), x + rng.range(-0.02, 0.02), yy + h / 2, z + rng.range(-0.02, 0.02),
+      { rotY: (o.rotY || 0) + rng.range(-0.2, 0.2), tile: 0.2 });
+    yy += h;
+  }
+  return yy;
+}
+
+export function magazines(k, x, y, z, o = {}) {
+  const M = k.M, rng = k.rng;
+  for (let i = 0, n = o.n ?? 3; i < n; i++) {
+    k.box(0.24, 0.008, 0.32, M.solid(rng.pick([0xd0342c, 0xf0b429, 0x2f81ff, 0xe8e4db]), 0.55),
+      x + rng.range(-0.05, 0.05), y + 0.005 + i * 0.009, z + rng.range(-0.05, 0.05),
+      { rotY: (o.rotY || 0) + rng.range(-0.4, 0.4), tile: 0.2 });
+  }
+}
+
+export function vase(k, x, y, z, o = {}) {
+  const M = k.M, s = o.scale ?? 1, col = o.color ?? 0xc9d4cb;
+  k.box(0.16 * s, 0.1 * s, 0.16 * s, M.paint(col, 0.4, `vase${col}`), x, y + 0.05 * s, z, { tile: 0.2 });
+  k.box(0.13 * s, 0.22 * s, 0.13 * s, M.paint(col, 0.4, `vase${col}`), x, y + 0.2 * s, z, { tile: 0.2 });
+  k.box(0.15 * s, 0.05 * s, 0.15 * s, M.paint(col, 0.4, `vase${col}`), x, y + 0.33 * s, z, { tile: 0.2 });
+  if (o.stems !== false) {                        // a few stems standing out of it
+    const leaf = new THREE.PlaneGeometry(0.08 * s, 0.34 * s);
+    for (let i = 0, n = 4; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      batched(k, leaf, M.get('foliage'),
+        x + Math.cos(a) * 0.04 * s, y + 0.51 * s, z + Math.sin(a) * 0.04 * s,
+        0.3 * Math.cos(a), a, 0.3);
+    }
+    leaf.dispose();
+  }
+}
+
+export function fruitBowl(k, x, y, z, o = {}) {
+  const M = k.M;
+  k.box(0.32, 0.09, 0.32, M.paint(o.color ?? 0xd8cfbe, 0.4, 'bowl'), x, y + 0.045, z, { tile: 0.2 });
+  const fruit = new THREE.SphereGeometry(0.055, 8, 6);
+  for (let i = 0; i < 5; i++) {
+    batched(k, fruit, M.solid([0xd0342c, 0xf0b429, 0x6ab04c][i % 3], 0.5),
+      x - 0.06 + (i % 3) * 0.06, y + 0.12 + (i > 2 ? 0.05 : 0), z - 0.04 + Math.floor(i / 3) * 0.07);
+  }
+  fruit.dispose();
+}
+
+/**
+ * A photo standing on a surface — the family is on the sideboards too.  These
+ * draw from a small shared pool of canvases: a unique painting per frame is
+ * right for the walls, but forty one-off textures for forty snapshots is not.
+ */
+export function photoFrame(k, x, y, z, o = {}) {
+  const M = k.M, w = o.w ?? 0.18, h = o.h ?? 0.22, r = o.rotY || 0;
+  k.box(w + 0.03, h + 0.03, 0.02, o.frame || M.get('gold'), x, y + h / 2, z, { rotY: r, tile: 0.2 });
+  const pick = (o.seed ?? k.rng.int(0, 3)) * 7;
+  k.box(w, h, 0.012, artMaterial(M, o.color ?? 0x4b5a68, pick, 0, 0), x + 0.014 * Math.sin(r), y + h / 2, z + 0.014 * Math.cos(r), { rotY: r });
+  k.box(0.02, h * 0.7, 0.02, M.get('walnut'), x - 0.05 * Math.sin(r), y + h * 0.35, z - 0.05 * Math.cos(r), { rotY: r, tile: 0.2 });
+}
+
+export function wastebasket(k, x, y, z, o = {}) {
+  const M = k.M, w = o.w ?? 0.28, h = o.h ?? 0.34;
+  const m = o.metal ? M.get('blackMetal') : M.paint(0x8a8172, 0.7, 'bin');
+  k.box(w, h, w, m, x, y + h / 2, z, { tile: 0.2 });
+  k.box(w + 0.03, 0.03, w + 0.03, m, x, y + h, z, { tile: 0.2 });
+  k.col(w + 0.04, h, w + 0.04, x, y + h / 2, z);
+}
+
+export function laundryBasket(k, x, y, z, o = {}) {
+  const M = k.M, w = o.w ?? 0.46, d = o.d ?? 0.36, h = o.h ?? 0.44;
+  const weave = M.paint(0xd9cbb4, 0.9, 'wicker');
+  k.box(w, h, d, weave, x, y + h / 2, z, { rotY: o.rotY || 0, tile: 0.25 });
+  k.box(w + 0.04, 0.04, d + 0.04, weave, x, y + h, z, { rotY: o.rotY || 0, tile: 0.25 });
+  // laundry spilling over the rim
+  k.box(w - 0.08, 0.14, d - 0.08, M.paint(0xe8eef2, 0.95, 'linen'), x, y + h + 0.04, z, { rotY: o.rotY || 0, tile: 0.3 });
+  k.col(w, h, d, x, y + h / 2, z, o.rotY || 0);
+}
+
+export function umbrellaStand(k, x, y, z, o = {}) {
+  const M = k.M, rng = k.rng;
+  k.box(0.3, 0.6, 0.3, M.get('blackMetal'), x, y + 0.3, z, { tile: 0.25 });
+  for (let i = 0; i < 3; i++) {
+    const a = rng() * Math.PI * 2;
+    k.box(0.06, 0.95, 0.06, M.solid(rng.pick([0x2f4f6b, 0x8c3b3b, 0x3f5c3a]), 0.8),
+      x + Math.cos(a) * 0.06, y + 0.62, z + Math.sin(a) * 0.06, { rotZ: Math.cos(a) * 0.09, rotX: Math.sin(a) * 0.09, tile: 0.2 });
+  }
+  k.col(0.34, 0.6, 0.34, x, y + 0.3, z);
+}
+
+export function coatHooks(k, x, y, z, o = {}) {
+  const b = B(x, y, z, o.rotY || 0), M = k.M, rng = k.rng;
+  const w = o.w ?? 1.4, n = o.n ?? 4;
+  k.p(b, 0, 0, -0.02, w, 0.16, 0.04, M.get('walnut'), 0.5);
+  for (let i = 0; i < n; i++) {
+    const ox = -w / 2 + (i + 0.5) * (w / n);
+    k.p(b, ox, 0, 0.04, 0.04, 0.04, 0.1, M.get('chrome'), 0.2);
+    if (!rng.chance(o.full ?? 0.7)) continue;
+    k.p(b, ox, -0.36, 0.08, 0.34, 0.66, 0.14, M.paint(rng.pick([0x2f6fb5, 0xb56fa8, 0x6b7a54, 0x8a5b3a, 0x37485c]), 0.9, 'coat'), 0.3);
+  }
+}
+
+/** Record player / radio — something to put on that the game can hook later. */
+export function radio(k, x, y, z, o = {}) {
+  const b = B(x, y, z, o.rotY || 0), M = k.M;
+  const w = o.w ?? 0.44;
+  k.p(b, 0, 0.07, 0, w, 0.14, 0.32, M.get('walnut'), 0.4);
+  k.p(b, 0, 0.15, -0.02, w - 0.06, 0.02, 0.26, M.paint(0x1b1d20, 0.5, 'platter'), 0.2);
+  k.p(b, 0, 0.165, -0.02, 0.09, 0.01, 0.09, M.get('gold'), 0.2);
+  k.p(b, w / 2 - 0.06, 0.17, 0.08, 0.03, 0.02, 0.2, M.get('chrome'), 0.2);   // tone arm
+  for (const s of [-1, 1]) k.p(b, s * (w / 2 - 0.07), 0.05, 0.15, 0.05, 0.05, 0.02, M.get('gold'), 0.2);
+  k.world.addInteract({
+    pos: new THREE.Vector3(x, y + 0.2, z), radius: 1.6,
+    label: o.label || 'Put a record on', onUse: () => 'click',
+  });
+}
+
+export function boardGame(k, x, y, z, o = {}) {
+  const M = k.M, rng = k.rng, r = o.rotY || 0;
+  k.box(0.4, 0.05, 0.3, M.solid(rng.pick([0x8c3b3b, 0x2f4f6b, 0x3f5c3a]), 0.7), x, y + 0.025, z, { rotY: r, tile: 0.2 });
+  k.box(0.36, 0.02, 0.26, M.paint(0xe8e4db, 0.6, 'boardtop'), x, y + 0.06, z, { rotY: r, tile: 0.2 });
+  for (let i = 0; i < 4; i++) {
+    k.box(0.03, 0.04, 0.03, M.solid([0xd0342c, 0xf0b429, 0x2f81ff, 0x6ab04c][i], 0.6),
+      x + rng.range(-0.14, 0.14), y + 0.09, z + rng.range(-0.1, 0.1), { tile: 0.1 });
+  }
+}
+
+// ── kids' rooms ────────────────────────────────────────────────────────────
+export function toyBox(k, x, y, z, o = {}) {
+  const b = B(x, y, z, o.rotY || 0), M = k.M, rng = k.rng;
+  const w = o.w ?? 0.9, d = o.d ?? 0.5, h = o.h ?? 0.5;
+  k.p(b, 0, h / 2, 0, w, h, d, M.paint(o.color ?? 0xd8a05e, 0.75, 'toybox'), 0.5);
+  k.p(b, 0, h + 0.03, 0, w + 0.05, 0.06, d + 0.05, M.get('maple'), 0.5);
+  for (let i = 0; i < 4; i++) {                    // toys spilling out beside it
+    k.p(b, -w / 2 + 0.15 + i * 0.22, 0.09, d / 2 + rng.range(0.16, 0.34), 0.17, 0.17, 0.17,
+      M.solid(rng.pick([0xd0342c, 0x2f81ff, 0xf0b429, 0x6ab04c, 0xe86fa8]), 0.7), 0.2);
+  }
+  k.pc(b, 0, h / 2, 0, w, h + 0.1, d);
+}
+
+/** A soft toy: body, head, two ears — three boxes and it reads across a room. */
+export function softToy(k, x, y, z, o = {}) {
+  const M = k.M, s = o.scale ?? 1, r = o.rotY || 0;
+  const fur = M.paint(o.color ?? 0xd8a05e, 0.95, `plush${o.color ?? 0}`);
+  k.box(0.2 * s, 0.22 * s, 0.16 * s, fur, x, y + 0.11 * s, z, { rotY: r, tile: 0.2 });
+  k.box(0.16 * s, 0.15 * s, 0.14 * s, fur, x, y + 0.29 * s, z, { rotY: r, tile: 0.2 });
+  for (const sg of [-1, 1]) {
+    k.box(0.06 * s, 0.07 * s, 0.04 * s, fur, x + Math.cos(r) * sg * 0.07 * s, y + 0.38 * s, z - Math.sin(r) * sg * 0.07 * s, { rotY: r, tile: 0.1 });
+  }
+}
+
+/** Bed canopy: four posts and a fabric roof with drapes at the corners. */
+export function canopy(k, x, y, z, o = {}) {
+  const M = k.M, w = o.w ?? 1.5, d = o.d ?? 2.2, h = o.h ?? 2.0;
+  const post = M.get('maple'), veil = M.paint(o.color ?? 0xfbe6f4, 0.96, 'veil');
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    k.box(0.06, h, 0.06, post, x + sx * w / 2, y + h / 2, z + sz * d / 2, { tile: 0.3 });
+    k.box(0.16, h * 0.8, 0.1, veil, x + sx * (w / 2 - 0.05), y + h * 0.5, z + sz * (d / 2 - 0.05), { tile: 0.5 });
+  }
+  k.box(w + 0.12, 0.06, d + 0.12, veil, x, y + h, z, { tile: 0.6 });
+  for (const sx of [-1, 1]) k.box(0.06, 0.06, d, post, x + sx * w / 2, y + h - 0.03, z, { tile: 0.3 });
+}
+
+/** Wall rack of sports gear — balls in a cradle, a bat and a helmet. */
+export function sportsRack(k, x, y, z, o = {}) {
+  const b = B(x, y, z, o.rotY || 0), M = k.M;
+  const w = o.w ?? 1.0;
+  k.p(b, 0, 0, -0.02, w, 0.05, 0.04, M.get('maple'), 0.4);
+  k.p(b, 0, -0.55, -0.02, w, 0.05, 0.04, M.get('maple'), 0.4);
+  for (const s of [-1, 1]) k.p(b, s * w / 2, -0.28, -0.02, 0.05, 0.62, 0.04, M.get('maple'), 0.4);
+  const [gx, gz] = k.L(0, 0.14, x, z, b.r);
+  for (const [r2, col, ox] of [[0.12, 0xd4762c, -0.3], [0.11, 0xe8e4db, 0.0], [0.1, 0xf0b429, 0.28]]) {
+    const ball = new THREE.SphereGeometry(r2, 12, 9);
+    batched(k, ball, M.solid(col, 0.75), gx + Math.cos(b.r) * ox, y - 0.42 + r2, gz - Math.sin(b.r) * ox);
+    ball.dispose();
+  }
+  k.p(b, -w / 2 + 0.12, -0.3, 0.1, 0.07, 0.8, 0.07, M.get('maple'), 0.3);      // bat
+  k.p(b, w / 2 - 0.16, 0.2, 0.08, 0.24, 0.2, 0.24, M.solid(0x2f6fb5, 0.6), 0.2); // helmet
+}
+
+/** Shelf of trophies and medals — the thing that makes a kid's room theirs. */
+export function trophyShelf(k, x, y, z, o = {}) {
+  const b = B(x, y, z, o.rotY || 0), M = k.M, rng = k.rng;
+  const w = o.w ?? 1.2, gold = M.get('gold');
+  k.p(b, 0, 0, 0, w, 0.05, 0.22, M.get('maple'), 0.4);
+  for (let i = 0, n = 4; i < n; i++) {
+    const ox = -w / 2 + (i + 0.5) * (w / n), s = rng.range(0.8, 1.3);
+    k.p(b, ox, 0.05 + 0.03 * s, 0, 0.12 * s, 0.05 * s, 0.12 * s, M.get('walnut'), 0.2);
+    k.p(b, ox, 0.12 * s + 0.05, 0, 0.04, 0.1 * s, 0.04, gold, 0.2);
+    k.p(b, ox, 0.22 * s + 0.05, 0, 0.13 * s, 0.13 * s, 0.1 * s, gold, 0.2);
+  }
+}
+
+/** Dressing table: a slim desk under a mirror, with its own stool. */
+export function dressingTable(k, x, y, z, o = {}) {
+  const b = B(x, y, z, o.rotY || 0), M = k.M;
+  const w = o.w ?? 1.3;
+  k.p(b, 0, 0.74, 0, w, 0.06, 0.45, M.get('walnut'), 0.7);
+  for (const s of [-1, 1]) k.p(b, s * (w / 2 - 0.07), 0.37, 0, 0.07, 0.74, 0.4, M.get('walnut'), 0.4);
+  k.p(b, 0, 1.32, -0.19, w - 0.3, 1.0, 0.04, M.get('gold'), 0.5);
+  k.p(b, 0, 1.32, -0.16, w - 0.4, 0.9, 0.02, M.get('mirror'), 0.8);
+  // bottles and a jewellery tray on the top
+  k.p(b, -w / 2 + 0.2, 0.83, 0.02, 0.07, 0.14, 0.07, M.paint(0xd8bfd8, 0.35, 'bottle'), 0.2);
+  k.p(b, -w / 2 + 0.32, 0.8, -0.02, 0.06, 0.1, 0.06, M.paint(0xf0d8b0, 0.35, 'bottle'), 0.2);
+  k.p(b, w / 2 - 0.26, 0.79, 0.02, 0.2, 0.04, 0.14, M.get('gold'), 0.2);
+  k.pc(b, 0, 0.4, 0, w, 0.8, 0.45);
+  const [sx, sz] = k.L(0, 0.62, x, z, b.r);
+  k.p(b, 0, 0.44, 0.62, 0.42, 0.12, 0.36, M.paint(o.stool ?? 0xd8dee6, 0.92, 'stoolpad'), 0.4);
+  for (const [ox, oz] of [[-0.16, 0.5], [0.16, 0.5], [-0.16, 0.74], [0.16, 0.74]]) k.p(b, ox, 0.19, oz, 0.04, 0.38, 0.04, M.get('walnut'), 0.3);
+  k.world.addInteract({
+    pos: new THREE.Vector3(sx, y + 0.5, sz), radius: 1.4, label: 'Sit down',
+    kind: 'seat', seat: { x: sx, y: y + 0.48, z: sz, rotY: b.r + Math.PI },
+  });
 }
 
 // ── painted panels ─────────────────────────────────────────────────────────
@@ -759,10 +1407,38 @@ export function wallClock(k, x, y, z, rotY = 0, o = {}) {
   k.box(d, d, 0.02, face, x + 0.035 * Math.sin(rotY), y, z + 0.035 * Math.cos(rotY), { rotY });
 }
 
+/**
+ * Curtains you can draw.  The pole stays in the static batch; the two panels
+ * are props that slide along it and stretch as they close (one box scaled on
+ * its own axis, rather than two boxes of different widths).
+ */
 export function curtains(k, x, y, z, w, rotY, color = 0xb9ada0) {
   const M = k.M;
-  for (const s of [-1, 1]) {
-    k.box(w * 0.3, 2.5, 0.1, M.paint(color, 0.96, `cur${color}`), x + Math.cos(rotY) * s * (w / 2 - w * 0.15), y + 1.9, z - Math.sin(rotY) * s * (w / 2 - w * 0.15), { rotY, tile: 1 });
-  }
+  const cos = Math.cos(rotY), sin = Math.sin(rotY);
+  const pw = w * 0.52;                                   // panel width, drawn
   k.box(w + 0.4, 0.05, 0.05, M.get('blackMetal'), x, y + 3.15, z, { rotY, tile: 0.3 });
+  for (const s of [-1, 1]) {
+    k.box(0.09, 0.09, 0.09, M.get('gold'), x + cos * s * (w / 2 + 0.22), y + 3.15, z - sin * s * (w / 2 + 0.22), { rotY, tile: 0.2 });
+  }
+  const cloth = M.paint(color, 0.96, `cur${color}`);
+  const panels = [];
+  for (const s of [-1, 1]) {
+    const m = boxMesh(pw, 2.5, 0.1, cloth, x, y + 1.9, z, { rotY, tile: 1, cast: false });
+    k.world.addProp(m);
+    panels.push({ m, s, open: s * (w / 2 - pw * 0.29), shut: s * pw * 0.48 });
+  }
+  const place = (t) => {
+    for (const p of panels) {
+      const off = p.open + (p.shut - p.open) * t;
+      p.m.position.set(x + cos * off, y + 1.9, z - sin * off);
+      p.m.scale.x = 0.56 + 0.44 * t;                     // bunched → hanging flat
+    }
+  };
+  const part = movingPart(k.world, place, 1.6);
+  place(0);
+  k.world.addInteract({
+    pos: new THREE.Vector3(x, y + 1.6, z), radius: 2.2,
+    label: () => (part.target ? 'Open the curtains' : 'Draw the curtains'),
+    onUse: () => { part.toggle(); return 'creak'; },
+  });
 }

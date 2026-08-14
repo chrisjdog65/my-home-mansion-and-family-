@@ -9,6 +9,8 @@ import {
 } from './plan.js';
 
 const EPS = 0.01;
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 // Terrace openings in the south shell, in wall-local (= world x) coordinates:
 // the family room's pair sits west of the great room's curtain wall, the
@@ -170,35 +172,6 @@ export function buildMansion(world) {
         name: R.name, type: R.type, floor: F.key, floorName: F.name,
         x, z, w, d, y, h: isTall ? F.ceil + 4.2 : F.ceil, def: R,
       });
-
-      // ceiling lights: one per ~30 m²
-      const n = Math.max(1, Math.min(6, Math.round((w * d) / 34)));
-      for (let i = 0; i < n; i++) {
-        const lx = n === 1 ? x : R.x0 + ((i + 0.5) / n) * w;
-        const ly = y + (isTall ? F.ceil + 2.6 : F.ceil) - 0.85;
-        world.addLight({
-          pos: new THREE.Vector3(lx, ly, z),
-          color: lightColor(R.type), intensity: lightPower(R.type), decay: 1.85,
-          distance: Math.max(9, Math.min(22, Math.hypot(w, d) * 0.85)),
-          room: R.name, floor: F.key,
-        });
-        // the visible housing hangs from the real ceiling — a long pendant in
-        // tall rooms — while the virtual light stays lower so the room reads lit
-        const fy = isTall ? ceilY - 2.9 : ceilY - 0.28;
-        addFixture(world, R.type, lx, fy, z, ceilY);
-      }
-    }
-
-    // corridor lights
-    if (F.key !== 'ground' || true) {
-      for (let lx = HOUSE.x0 + 5; lx <= HOUSE.x1 - 5; lx += 9) {
-        if (holes.some((h) => lx > h.x0 && lx < h.x1)) continue;
-        world.addLight({
-          pos: new THREE.Vector3(lx, y + F.ceil - 0.8, 0), color: 0xffdcb4,
-          intensity: 11, decay: 1.85, distance: 14, room: 'Gallery', floor: F.key,
-        });
-        addFixture(world, 'corridor', lx, y + F.ceil - 0.3, 0, y + F.ceil);
-      }
     }
 
     buildExteriorShell(world, F, matStone, matStucco, matWall, matGlass, matTrim);
@@ -221,6 +194,10 @@ export function buildMansion(world) {
     });
   }
 
+  // Lighting runs once the shells are up: it reads the window map the facade
+  // grid publishes to decide how much daylight each room already gets.
+  buildLighting(world);
+
   buildStairs(world);
   buildRoof(world);
   buildFoyerFeature(world);
@@ -235,38 +212,101 @@ function nextKey(k) {
   return order[order.indexOf(k) + 1];
 }
 
-function lightColor(type) {
-  switch (type) {
-    case 'theater': return 0xffa070;
-    case 'gaming': return 0x8fb7ff;
-    case 'bath': return 0xf4f7ff;
-    case 'court': return 0xf2f6ff;
-    case 'bowling': return 0xffd8a8;
-    case 'garage': case 'workshop': case 'storage': return 0xf0f4ff;
-    default: return 0xffe6cc;
+// ───────────────────────────────────────────────────────────────────────────
+// Lighting.
+//
+// The house declares far more lights than the renderer will ever run — the
+// manager promotes the ~14 nearest the camera into real point lights and
+// cross-fades the rest — so the job here is to leave a light wherever one
+// would do work, and to make sure every one of them has something to hit.
+//
+// One calibration underpins every number below: a light of intensity I lands
+// roughly I / r^decay on a surface r metres away, and the ACES curve at this
+// exposure clips to white somewhere past 6.  So a ceiling fixture 3 m above
+// the floor wants I ≈ 14, a cove 1 m off the plaster wants I ≈ 1.5, and a
+// sconce any closer than that has to come down to well under 1 or it burns a
+// hole in the wall behind it.
+//
+//   color/i   the ceiling fixture's colour and intensity
+//   per/cap   floor area one fixture covers, and the most a room may have
+//   wash/wi   the perimeter wash that keeps walls and corners off black
+//   g         the lamp glass, which reads as the colour it throws.  Every
+//             distinct emissive hex is another material and another few draw
+//             calls, so it comes out of a four-colour set, not the palette.
+const WARM = 0xffd9a8, BRIGHT = 0xf4f8ff, AMBER = 0xff8a5c, COOL = 0x9dc0ff;
+const ROOM_LIGHT = {
+  great:     { color: 0xffdcb4, i: 17, per: 27, cap: 6, wash: 0xffd0a0, wi: 4.6, g: WARM },
+  family:    { color: 0xffdcb4, i: 15, per: 27, cap: 5, wash: 0xffd0a0, wi: 4.4, g: WARM },
+  library:   { color: 0xffd6a4, i: 13, per: 30, cap: 4, wash: 0xffc890, wi: 4.4, g: WARM },
+  dining:    { color: 0xffdcb0, i: 14, per: 28, cap: 4, wash: 0xffcf9e, wi: 4.4, g: WARM },
+  foyer:     { color: 0xffe2bc, i: 15, per: 30, cap: 6, wash: 0xffd8ae, wi: 4.2, g: WARM },
+  stairhall: { color: 0xffe2bc, i: 14, per: 30, cap: 6, wash: 0xffd8ae, wi: 4.2, g: WARM },
+  // work surfaces and mirrors want it cooler and brighter than the sitting rooms
+  kitchen:   { color: 0xfff2e4, i: 17, per: 24, cap: 6, wash: 0xffeeda, wi: 4.2, g: BRIGHT },
+  pantry:    { color: 0xfff2e4, i: 12, per: 26, cap: 4, wash: 0xffeeda, wi: 3.2, g: BRIGHT },
+  sunroom:   { color: 0xffeed6, i: 13, per: 28, cap: 4, wash: 0xffe4c4, wi: 3.8, g: WARM },
+  bath:      { color: 0xf2f8ff, i: 11, per: 26, cap: 4, wash: 0xe6f0ff, wi: 3.4, g: BRIGHT },
+  laundry:   { color: 0xf4f8ff, i: 15, per: 28, cap: 4, wash: 0xeaf2ff, wi: 4.0, g: BRIGHT },
+  bedroom:   { color: 0xffdcb4, i: 13, per: 29, cap: 4, wash: 0xffd2a2, wi: 3.8, g: WARM },
+  mud:       { color: 0xffe8cc, i: 12, per: 28, cap: 3, wash: 0xffdcb4, wi: 3.2, g: WARM },
+  // the theater stays dim and amber; its aisle lighting does the rest
+  theater:   { color: 0xffa878, i: 9, per: 32, cap: 6, wash: 0xff8f56, wi: 2.6, g: AMBER },
+  gaming:    { color: 0x9dc0ff, i: 8, per: 32, cap: 4, wash: 0x6f9dff, wi: 3.0, g: COOL },
+  court:     { color: 0xf4f8ff, i: 22, per: 44, cap: 8, wash: 0xeef4ff, wi: 5.0, g: BRIGHT },
+  bowling:   { color: 0xffd8a8, i: 15, per: 34, cap: 6, wash: 0xffc48a, wi: 4.2, g: WARM },
+  gym:       { color: 0xeef4ff, i: 18, per: 28, cap: 6, wash: 0xe6eefa, wi: 4.6, g: BRIGHT },
+  garage:    { color: 0xeef4ff, i: 17, per: 34, cap: 5, wash: 0xe4ecfa, wi: 4.0, g: BRIGHT },
+  workshop:  { color: 0xeef4ff, i: 17, per: 30, cap: 5, wash: 0xe4ecfa, wi: 4.2, g: BRIGHT },
+  storage:   { color: 0xeef4ff, i: 15, per: 34, cap: 4, wash: 0xe4ecfa, wi: 3.4, g: BRIGHT },
+  corridor:  { color: 0xffdcb4, i: 13, per: 26, cap: 4, wash: 0xffd2a2, wi: 3.6, g: WARM },
+};
+const DEFAULT_LIGHT = { color: 0xffdcb4, i: 13, per: 29, cap: 4, wash: 0xffd2a2, wi: 3.8, g: WARM };
+const lightProfile = (type) => ROOM_LIGHT[type] || DEFAULT_LIGHT;
+
+// Rooms with a wall of glass are lit for free half the day; interior rooms and
+// the whole basement carry the load on their own fixtures, so bias the
+// artificial default by how many panes the facade grid actually landed here.
+function daylightBias(world, R, F) {
+  if (F.key === 'basement') return 1.2;
+  if (R.glassSouth) return 0.88;
+  let panes = 0;
+  for (const wn of world.windowMap) {
+    if (wn.floor !== F.key) continue;
+    const on = wn.side === 'n' ? Math.abs(wn.z - R.z0) < 0.4 && wn.x > R.x0 && wn.x < R.x1
+      : wn.side === 's' ? Math.abs(wn.z - R.z1) < 0.4 && wn.x > R.x0 && wn.x < R.x1
+        : wn.side === 'w' ? Math.abs(wn.x - R.x0) < 0.4 && wn.z > R.z0 && wn.z < R.z1
+          : Math.abs(wn.x - R.x1) < 0.4 && wn.z > R.z0 && wn.z < R.z1;
+    if (on) panes++;
   }
+  return panes >= 2 ? 0.95 : panes === 1 ? 1.05 : 1.16;
 }
-function lightPower(type) {
-  switch (type) {
-    case 'theater': return 7;
-    case 'court': return 34;
-    case 'bowling': return 18;
-    case 'great': return 24;
-    case 'garage': case 'workshop': case 'storage': return 18;
-    case 'gym': return 26;
-    case 'gaming': return 7;
-    case 'bath': return 9;              // baths also have a vanity light
-    default: return 14;
+
+// How many wash lights a wall of this length carries — one every ~6 m, so a
+// bedroom gets six (two down each long wall, one on each end) and the
+// basketball court ten.  Denser than this and a room's own washers start
+// crowding its ceiling fixtures out of the fourteen live slots.
+const washCount = (len) => (len < 3 ? 0 : clamp(Math.round(len / 6.4), 1, 4));
+
+// Is a stretch of wall free of doorways at head height?  `F._cuts` is every
+// opening punched into this level, in world coordinates.
+function wallClear(F, axis, coord, from, to) {
+  for (const c of F._cuts || []) {
+    if (c.axis !== axis || Math.abs(c.coord - coord) > 0.3) continue;
+    if ((c.y0 || 0) > 2.2) continue;                    // an overlook, not a door
+    if (c.pos + c.w / 2 > from && c.pos - c.w / 2 < to) return false;
   }
+  return true;
 }
 
 // ── fixtures ───────────────────────────────────────────────────────────────
 // `y` anchors the visible housing; `ceilY` is the real ceiling it hangs from.
-function addFixture(world, type, x, y, z, ceilY = y + 0.2) {
+// The glass takes the room's own lamp colour, so a fixture looks like the
+// light it is throwing instead of a white box in a warm room.
+function addFixture(world, type, x, y, z, ceilY = y + 0.2, color = lightProfile(type).g) {
   const M = world.mats, B = world.static;
   if (type === 'theater') {
     // recessed can, flush with the ceiling — no stem
-    B.box(0.22, 0.1, 0.22, M.emissive(0xff8a5c, 1.4), x, ceilY - 0.06, z, { tile: 1 });
+    B.box(0.22, 0.1, 0.22, M.emissive(color, 1.4), x, ceilY - 0.06, z, { tile: 1 });
     return;
   }
   // a thin drop rod ties the housing to the ceiling instead of floating free
@@ -275,13 +315,310 @@ function addFixture(world, type, x, y, z, ceilY = y + 0.2) {
   }
   if (type === 'court' || type === 'garage' || type === 'workshop' || type === 'storage' || type === 'gym') {
     B.box(2.4, 0.09, 0.34, M.get('steel'), x, y + 0.1, z, { tile: 1 });
-    B.box(2.3, 0.06, 0.28, M.emissive(0xf4f8ff, 1.9), x, y + 0.03, z, { tile: 1 });
+    B.box(2.3, 0.06, 0.28, M.emissive(color, 1.9), x, y + 0.03, z, { tile: 1 });
   } else if (type === 'corridor') {
     B.box(0.3, 0.06, 0.3, M.get('gold'), x, y + 0.16, z, { tile: 1 });
-    B.box(0.24, 0.16, 0.24, M.emissive(0xffd9a8, 1.6), x, y + 0.02, z, { tile: 1 });
+    B.box(0.24, 0.16, 0.24, M.emissive(color, 1.6), x, y + 0.02, z, { tile: 1 });
   } else {
     B.box(0.55, 0.05, 0.55, M.get('chrome'), x, y + 0.14, z, { tile: 1 });
-    B.box(0.46, 0.14, 0.46, M.emissive(0xfff0d8, 1.5), x, y + 0.02, z, { tile: 1 });
+    B.box(0.46, 0.14, 0.46, M.emissive(color, 1.5), x, y + 0.02, z, { tile: 1 });
+  }
+}
+
+// A wall sconce: backplate, shade, and the pool it throws.  (nx,nz) is the
+// unit normal pointing off the wall into the room.
+function sconce(world, x, y, z, nx, nz, color, o = {}) {
+  const M = world.mats, B = world.static;
+  B.box(nz ? 0.2 : 0.05, 0.34, nz ? 0.05 : 0.2, M.get('gold'), x + nx * 0.03, y, z + nz * 0.03, { tile: 0.3 });
+  B.box(nz ? 0.26 : 0.15, 0.2, nz ? 0.15 : 0.26, M.emissive(color, 1.6), x + nx * 0.13, y + 0.06, z + nz * 0.13, { tile: 0.3 });
+  world.addLight({
+    pos: V(x + nx * 0.55, y + 0.04, z + nz * 0.55), color,
+    intensity: o.i ?? 0.95, decay: 2, distance: o.dist ?? 4.4, room: o.room, floor: o.floor,
+  });
+}
+
+// Picture light: a little brass arm over a canvas, throwing down its face.
+function pictureLight(world, x, y, z, nx, nz, w, o = {}) {
+  const M = world.mats, B = world.static;
+  const color = o.color || 0xffe4bc;
+  B.box(nz ? 0.05 : 0.18, 0.05, nz ? 0.18 : 0.05, M.get('gold'), x + nx * 0.09, y + 0.08, z + nz * 0.09, { tile: 0.2 });
+  B.box(nz ? w : 0.09, 0.07, nz ? 0.09 : w, M.emissive(color, 1.3), x + nx * 0.2, y, z + nz * 0.2, { tile: 0.3 });
+  world.addLight({
+    pos: V(x + nx * 0.36, y - 0.3, z + nz * 0.36), color,
+    intensity: o.i ?? 0.7, decay: 2, distance: 3.4, room: o.room, floor: o.floor,
+  });
+}
+
+// Step light: a slim strip let into the outer face of a stringer, plus the
+// pool it puts on the treads.  (nx,nz) points away from the flight.
+function stepLight(world, x, y, z, nx, nz) {
+  const M = world.mats, B = world.static;
+  B.box(nz ? 0.16 : 0.03, 0.07, nz ? 0.03 : 0.16, M.emissive(0xffd9a8, 1.5), x, y, z, { tile: 0.2 });
+  world.addLight({
+    pos: V(x + nx * 0.34, y + 0.05, z + nz * 0.34), color: 0xffd0a0,
+    intensity: 0.42, decay: 2, distance: 2.8,
+  });
+}
+
+// Cove: a trim valance run along a wall with a strip tucked behind it, and a
+// couple of soft lights bouncing off the ceiling and the wall above the rail.
+function coveRun(world, x, y, z, len, horiz, nx, nz, color, o = {}) {
+  const M = world.mats, B = world.static;
+  const trim = M.paint(0xf7f4ee, 0.5, 'trim');
+  B.box(horiz ? len : 0.15, 0.08, horiz ? 0.15 : len, trim, x + nx * 0.075, y, z + nz * 0.075, { tile: 1 });
+  B.box(horiz ? len - 0.3 : 0.05, 0.05, horiz ? 0.05 : len - 0.3, M.emissive(color, 1.0),
+    x + nx * 0.03, y - 0.07, z + nz * 0.03, { tile: 1 });
+  const n = clamp(Math.round(len / 5), 1, 3);
+  for (let i = 0; i < n; i++) {
+    const t = -len / 2 + (len * (i + 0.5)) / n;
+    world.addLight({
+      pos: V(x + (horiz ? t : nx * 0.8), y - 0.18, z + (horiz ? nz * 0.8 : t)), color,
+      intensity: o.i ?? 1.5, decay: 1.9, distance: 5.6, room: o.room, floor: o.floor,
+    });
+  }
+}
+
+// ── the lighting pass ──────────────────────────────────────────────────────
+function buildLighting(world) {
+  for (const F of FLOORS) {
+    for (const R of FLOOR_ROOMS[F.key] || []) {
+      lightRoom(world, R, F);
+      accentLights(world, R, F);
+    }
+    lightGallery(world, F);
+  }
+}
+
+// Rooms formal enough (or dark enough) to carry a lit valance.
+const COVE = new Set(['great', 'dining', 'library', 'foyer', 'stairhall', 'theater']);
+
+// Ceiling grid + perimeter wash.  One fixture in the middle of an 11 m room
+// leaves every wall in it black, so the count follows the floor area and the
+// layout follows the room's proportions.
+function lightRoom(world, R, F) {
+  const w = rw(R), d = rd(R);
+  const P = lightProfile(R.type);
+  const bias = daylightBias(world, R, F);
+  const isTall = !!R.tall;
+  const ceilY = F.y + (isTall ? F.ceil + 4.2 : F.ceil);
+  const voids = SLAB_HOLES[nextKey(F.key)] || [];
+
+  // grid: aim for one fixture per P.per m², proportioned to the room and
+  // trimmed back to the cap.  Cells are laid out inset from the walls by half
+  // a cell, which is what stops the far wall going dark.
+  const cell = Math.sqrt(P.per);
+  let cols = Math.max(1, Math.round(w / cell + 0.15));
+  let rows = Math.max(1, Math.round(d / cell + 0.15));
+  while (cols * rows > P.cap) { if (cols >= rows) cols--; else rows--; }
+  // a 5.4 m basement ceiling hangs its fixtures down where the light is useful
+  const stem = F.ceil >= 5 ? 1.2 : 0.28;
+  const dist = clamp(Math.hypot(w / cols, d / rows) * 1.3 + 6.5, 10, 20);
+
+  for (let i = 0; i < cols; i++) {
+    for (let j = 0; j < rows; j++) {
+      const lx = R.x0 + (w * (i + 0.5)) / cols;
+      const lz = R.z0 + (d * (j + 0.5)) / rows;
+      // in a double-height bay the pendant drops to where it can do work; the
+      // rest of a tall room still has a normal storey above it
+      const open = isTall && voids.some((h) => lx > h.x0 && lx < h.x1 && lz > h.z0 && lz < h.z1);
+      const top = open ? ceilY : F.y + F.ceil;
+      const fy = open ? F.y + 4.6 : top - stem;
+      world.addLight({
+        pos: V(lx, fy - 0.55, lz), color: P.color, intensity: P.i * bias * (open ? 1.4 : 1),
+        decay: 1.85, distance: open ? dist + 6 : dist, room: R.name, floor: F.key,
+      });
+      addFixture(world, R.type, lx, fy, lz, top, P.g);
+    }
+  }
+
+  // Wall wash.  Dim, short-range, a metre off the plaster: the walls and the
+  // corners pick up falloff instead of dropping to black, which does more for
+  // how lit a room feels than any amount of extra light in the middle of it.
+  // A narrow room has to stand its washers closer in, so their intensity comes
+  // down with the offset — at 0.7 m the old figure would scorch the wall.
+  const inset = clamp(Math.min(w, d) / 4, 0.7, 1.3);
+  const wi = P.wi * bias * (inset / 1.3) ** 1.9;
+  const nx = washCount(w), nz = washCount(d);
+  const wash = (x, y, z, upper) => {
+    // the upper tier only exists where the void does — anywhere else it would
+    // be buried in the floor slab of the storey above
+    if (upper && !voids.some((h) => x > h.x0 && x < h.x1 && z > h.z0 && z < h.z1)) return;
+    world.addLight({
+      pos: V(x, y, z), color: P.wash, intensity: wi * (upper ? 0.85 : 1),
+      decay: 1.9, distance: 6.4, room: R.name, floor: F.key,
+    });
+  };
+  const tiers = [F.y + Math.min(2.3, F.ceil - 1.2)];
+  if (isTall) tiers.push(F.y + 5.8);            // the storey of wall above the void
+  for (const wy of tiers) {
+    const upper = wy > F.y + F.ceil;
+    for (let i = 0; i < nx; i++) {
+      const lx = R.x0 + (w * (i + 0.5)) / nx;
+      wash(lx, wy, R.z0 + inset, upper);
+      wash(lx, wy, R.z1 - inset, upper);
+    }
+    for (let i = 0; i < nz; i++) {
+      const lz = R.z0 + (d * (i + 0.5)) / nz;
+      wash(R.x0 + inset, wy, lz, upper);
+      wash(R.x1 - inset, wy, lz, upper);
+    }
+  }
+
+  // Cove lighting in the formal rooms and the theater, on the long pair of
+  // walls — but never across a wall of glass.
+  if (!COVE.has(R.type)) return;
+  const glassWall = !!R.glassSouth;
+  // clear of the window heads at 2.85 and well under the crown at 3.71
+  const coveY = F.y + (F.ceil >= 5 ? 3.7 : 3.05);
+  const o = { room: R.name, floor: F.key, i: R.type === 'theater' ? 1.1 : 1.5 };
+  const col = P.g;                                // strip and spill, same colour
+  if (w >= d && !glassWall) {
+    coveRun(world, cx(R), coveY, R.z0 + 0.13, w - 0.5, true, 0, 1, col, o);
+    coveRun(world, cx(R), coveY, R.z1 - 0.13, w - 0.5, true, 0, -1, col, o);
+  } else {
+    coveRun(world, R.x0 + 0.13, coveY, cz(R), d - 0.5, false, 1, 0, col, o);
+    coveRun(world, R.x1 - 0.13, coveY, cz(R), d - 0.5, false, -1, 0, col, o);
+  }
+}
+
+// The fixtures that sell a room: sconces at the fireplace and the bed, strips
+// under the kitchen cabinets, picture lights on the art, aisle lights in the
+// theater.  Every position is re-derived from the same plan furnish.js uses.
+function accentLights(world, R, F) {
+  const w = rw(R), d = rd(R), x = cx(R), z = cz(R);
+  const y = F.y;
+  const tag = { room: R.name, floor: F.key };
+
+  if (R.type === 'great' || R.type === 'family') {
+    // furnish.js stands the fireplace against the north wall
+    const fx = R.type === 'great' ? R.x0 + 3.4 : x - 3.2;
+    const half = R.type === 'great' ? 1.8 : 1.2;
+    for (const s of [-1, 1]) {
+      for (const gap of [0.75, 1.45, 2.15]) {
+        const sx = fx + s * (half + gap);
+        if (sx < R.x0 + 0.55 || sx > R.x1 - 0.55) break;
+        if (!wallClear(F, 'z', R.z0, sx - 0.28, sx + 0.28)) continue;
+        sconce(world, sx, y + 1.95, R.z0 + 0.14, 0, 1, 0xffd2a4, { ...tag, i: 1.0 });
+        break;
+      }
+    }
+  }
+
+  if (R.type === 'bedroom') {
+    // headboard wall is the window wall; sconces flank the bed unless a pane
+    // (or the curtains hung on it) is already in that stretch of wall
+    const north = z < 0;
+    const wallZ = north ? R.z0 : R.z1;
+    const inward = north ? 1 : -1;
+    const panes = world.windowMap.filter((wn) => wn.floor === F.key &&
+      wn.side === (north ? 'n' : 's') && Math.abs(wn.z - wallZ) < 0.5);
+    for (const s of [-1, 1]) {
+      for (const gap of [1.45, 2.2]) {
+        const sx = x + s * gap;
+        if (sx < R.x0 + 0.6 || sx > R.x1 - 0.6) break;
+        if (panes.some((p) => Math.abs(sx - p.x) < p.w / 2 + 0.55)) continue;
+        sconce(world, sx, y + 1.6, wallZ + inward * 0.14, 0, inward, 0xffd2a4,
+          { ...tag, i: 0.8, dist: 3.8 });
+        break;
+      }
+    }
+  }
+
+  if (R.type === 'kitchen') {
+    // the counter run's valance already carries a strip — give it the light
+    const backZ = z + d / 2 - 0.4;
+    for (const ox of [-4.2, -2.6, -1.0]) {
+      world.addLight({
+        pos: V(x + ox, y + 1.36, backZ - 0.3), color: 0xffe6bd,
+        intensity: 0.55, decay: 2, distance: 3.0, ...tag,
+      });
+    }
+  }
+
+  if (R.type === 'dining') {
+    // the canvas furnish.js hangs on the north wall — unless the facade grid
+    // put a pane in that stretch, in which case there is nothing to light
+    const glazed = world.windowMap.some((wn) => wn.floor === F.key && wn.side === 'n' &&
+      Math.abs(wn.z - R.z0) < 0.5 && Math.abs(wn.x - x) < wn.w / 2 + 0.9);
+    if (!glazed) pictureLight(world, x, y + 2.75, R.z0 + 0.16, 0, 1, 1.5, tag);
+  }
+
+  if (R.type === 'library') {
+    // the west wall's bookcase run, lit from above
+    for (const zz of [z - 2.8, z + 2.7]) {
+      if (!wallClear(F, 'x', R.x0, zz - 0.9, zz + 0.9)) continue;
+      pictureLight(world, R.x0 + 0.16, y + 2.85, zz, 1, 0, 1.7, tag);
+    }
+  }
+
+  if (R.type === 'foyer') {
+    // the family photo wall climbing the west side of the stair
+    for (let i = 0; i < 5; i += 2) {
+      const pz = z - 4.0 + i * 1.1;
+      if (!wallClear(F, 'x', R.x0, pz - 0.5, pz + 0.5)) continue;
+      pictureLight(world, R.x0 + 0.16, y + 2.5 + i * 0.55, pz, 1, 0, 0.9, { ...tag, i: 0.55 });
+    }
+  }
+
+  if (R.type === 'theater') {
+    // aisle markers along the south wall — these stay lit during the film, so
+    // they are deliberately not tagged with the room the projector switches off
+    const M = world.mats, B = world.static;
+    for (let ax = R.x0 + 2.2; ax < R.x1 - 1.4; ax += 3.2) {
+      if (!wallClear(F, 'z', R.z1, ax - 0.2, ax + 0.2)) continue;
+      B.box(0.18, 0.07, 0.05, M.emissive(0xff8a4a, 1.5), ax, y + 0.34, R.z1 - 0.18, { tile: 0.2 });
+      world.addLight({
+        pos: V(ax, y + 0.45, R.z1 - 0.6), color: 0xff8a4a,
+        intensity: 0.45, decay: 2, distance: 3.4, room: `${R.name} aisle`, floor: F.key,
+      });
+    }
+  }
+
+  if (R.type === 'bath' && w > 3.4) {
+    // mirror light over the vanity end of the room (furnish gathers the
+    // fixtures at the window wall)
+    const north = z < 0;
+    const wallZ = north ? R.z0 : R.z1;
+    const inward = north ? 1 : -1;
+    world.addLight({
+      pos: V(x, y + 1.9, wallZ + inward * 0.75), color: 0xf4faff,
+      intensity: 1.1, decay: 2, distance: 4.2, ...tag,
+    });
+  }
+}
+
+// The galleries were lit every 9 m by a rule that also skipped any bay sharing
+// an x with a stairwell anywhere on the level — which blanked whole runs of
+// the second floor.  Light them every 5.6 m, skip only where a well genuinely
+// crosses the band, and wash the walls between the fixtures.
+function lightGallery(world, F) {
+  const P = lightProfile('corridor');
+  const y = F.y, ceilH = F.ceil;
+  const z1 = F.key === 'basement' ? 1.6 : CORR.z1;
+  const wells = [...(SLAB_HOLES[F.key] || []), ...(SLAB_HOLES[nextKey(F.key)] || [])];
+  const blocked = (lx) => wells.some((h) => lx > h.x0 - 0.5 && lx < h.x1 + 0.5 &&
+    h.z0 < z1 - 0.2 && h.z1 > -z1 + 0.2);
+
+  // even bays end to end, so a skipped one leaves a gap and not a dark half
+  const span = HOUSE.x1 - HOUSE.x0 - 5;
+  const bays = Math.round(span / 5.6);
+  for (let i = 0; i <= bays; i++) {
+    const lx = HOUSE.x0 + 2.5 + (span * i) / bays;
+    if (blocked(lx)) continue;
+    world.addLight({
+      pos: V(lx, y + ceilH - 0.75, 0), color: P.color,
+      intensity: 12.5, decay: 1.85, distance: 13, room: 'Gallery', floor: F.key,
+    });
+    addFixture(world, 'corridor', lx, y + ceilH - 0.3, 0, y + ceilH, P.g);
+  }
+  // staggered wall wash, so both sides of the run pick up a pool of light
+  let side = 1;
+  for (let lx = HOUSE.x0 + 6; lx <= HOUSE.x1 - 4; lx += 6.4, side = -side) {
+    if (blocked(lx)) continue;
+    world.addLight({
+      pos: V(lx, y + 2.3, side * (z1 - 0.95)), color: P.wash,
+      intensity: 3.6, decay: 1.9, distance: 6.2, room: 'Gallery', floor: F.key,
+    });
   }
 }
 
@@ -719,6 +1056,10 @@ function buildStairs(world) {
         B.box(0.15, 1.16, 0.15, post, bx, ny + 0.58, nz, { tile: 0.4 });
         B.box(0.19, 0.09, 0.19, rail, bx, ny + 1.2, nz, { tile: 0.4 });
       }
+      // step lights let into the outer face of the stringer
+      for (let i = 2; i < N; i += 6) {
+        stepLight(world, s * (W / 2 + 0.075), (i + 1) * rise + 0.13, z0 + (i + 0.5) * run, s, 0);
+      }
     }
     // upper gallery railing along the void's south rim — split at x ±1.5 so
     // the stair mouth stays open.  The void's east and west sides are solid
@@ -741,9 +1082,20 @@ function buildStairs(world) {
       x: x0, y: 4.2, z: zc, rotY: Math.PI / 2, steps: N, rise, run, w: W,
       tread, riser, stringer: tread, soffit, tile: 1.2,
     });
+    for (let i = 2; i < N; i += 6) {
+      stepLight(world, x0 + (i + 0.5) * run, 4.2 + (i + 1) * rise + 0.13, zc + W / 2 + 0.075, 0, 1);
+    }
     railing(world, post, rail, x0 + 3.5, 4.2, zc - 0.8, 7.2, 0, 1.0);
     railing(world, post, rail, 19.4, 8.4, 0.3, 8.0, 0, 1.05);
     railing(world, post, rail, 15.35, 8.4, 1.1, 1.5, Math.PI / 2, 1.05);   // west edge of the well
+    // The well takes the gallery ceiling — and with it the run of gallery
+    // fixtures — out of both storeys it passes through, so the shaft hangs its
+    // own lantern: high enough to clear the flight, close enough to light it.
+    world.addLight({
+      pos: V(19.3, 8.85, zc), color: 0xffdcb4, intensity: 17,
+      decay: 1.85, distance: 18, room: 'Gallery', floor: 'third',
+    });
+    addFixture(world, 'corridor', 19.3, 9.4, zc, 12.0);
     world.spot('thirdStairBottom', 15.4, 4.2, zc);
     world.spot('thirdStairTop', 23.6, 8.4, zc);
     world.stairLinks.push({ a: new THREE.Vector3(15.6, 4.2, zc), b: new THREE.Vector3(23.6, 8.4, zc) });
@@ -757,6 +1109,8 @@ function buildStairs(world) {
       const yTop = -rise * (i + 1);
       B.box(run, 0.24, W, tread, -21.6 - (i + 0.5) * run, yTop + 0.12, -0.9, { tile: 1.1 });
       world.collider(run, 0.24, W, -21.6 - (i + 0.5) * run, yTop + 0.12, -0.9);
+      // the long way down is the darkest run in the house — light the treads
+      if (i % 5 === 2) stepLight(world, -21.6 - (i + 0.5) * run, yTop + 0.31, -0.9 - W / 2 - 0.075, 0, -1);
     }
     const landY = -rise * 17;
     B.box(1.7, 0.24, 3.6, tread, -26.8, landY + 0.12, 0, { tile: 1.2 });
@@ -766,6 +1120,7 @@ function buildStairs(world) {
       const yTop = landY - rise * (i + 1);
       B.box(run, 0.24, W, tread, -25.9 + (i + 0.5) * run, yTop + 0.12, 0.9, { tile: 1.1 });
       world.collider(run, 0.24, W, -25.9 + (i + 0.5) * run, yTop + 0.12, 0.9);
+      if (i % 5 === 2) stepLight(world, -25.9 + (i + 0.5) * run, yTop + 0.31, 0.9 + W / 2 + 0.075, 0, 1);
     }
     // Skirt boards down both flights.  These treads are already thick enough
     // to close their own risers, so they only want a stringer: A climbs east
@@ -785,6 +1140,22 @@ function buildStairs(world) {
     // hall's archway puts you on flight A — the old 1.4 m slot sat off the
     // arch's centreline, so the way down read as walled off.
     railing(world, post, rail, -21.55, 0, 1.125, 1.55, Math.PI / 2, 1.0);  // drop over flight B
+    // The well is a hole in the lower gallery's ceiling, so the gallery's run
+    // of fixtures steps around it and the way down was the blackest corner of
+    // the house.  A lantern on a long drop lights the shaft and the landing
+    // under it; a second fixture picks up the foot of flight B.
+    world.addLight({ pos: V(-26.8, 1.0, 0), color: 0xffdcb4, intensity: 17, decay: 1.85, distance: 20, room: 'Stair Hall', floor: 'ground' });
+    addFixture(world, 'corridor', -26.8, 1.55, 0, 3.75);
+    // a second lantern lower on the same drop — the shaft is ten metres deep,
+    // and one light at the top of it never reaches the landing
+    world.addLight({ pos: V(-26.8, -0.9, 0), color: 0xffdcb4, intensity: 13, decay: 1.85, distance: 15, room: 'Stair Hall', floor: 'basement' });
+    addFixture(world, 'corridor', -26.8, -0.35, 0, 0.9);
+    // a sconce on the shaft wall picks the landing itself out of the dark
+    sconce(world, -29.86, landY + 1.9, 0, 1, 0, 0xffd2a4, { i: 1.1, dist: 6.5, room: 'Stair Hall', floor: 'basement' });
+    // and one fixture at the foot of flight B, just east of the ceiling the
+    // well takes out (the gallery run has to step around it)
+    world.addLight({ pos: V(-20.9, -2.6, 0.9), color: 0xffdcb4, intensity: 18, decay: 1.85, distance: 16, room: 'Lower Gallery', floor: 'basement' });
+    addFixture(world, 'corridor', -20.9, -2.05, 0.9, -0.65);
     world.spot('basementStairTop', -20.6, 0, -0.9);
     world.spot('basementStairBottom', -22.2, -6.0, 0.9);
     world.stairLinks.push({ a: new THREE.Vector3(-20.8, 0, -0.9), b: new THREE.Vector3(-22.2, -6.0, 0.9), via: new THREE.Vector3(-26.8, -3.4, 0) });
