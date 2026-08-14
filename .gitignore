@@ -1,3 +1,7 @@
 node_modules/
 *.log
 .DS_Store
+
+# scratch files left by tooling
+tools/.verify-*
+build/

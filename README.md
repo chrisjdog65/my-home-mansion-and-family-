@@ -5,14 +5,23 @@ James and Chloie living in it alongside you. It runs in the browser, needs no
 build step and no downloads — every wall, every piece of furniture, every
 texture and every sound is generated in code when the page loads.
 
+## Just play it
+
+**Download [`play.html`](play.html) and double-click it.** That one file is the
+whole game — every module, all of three.js and the stylesheet are inlined, so it
+runs straight off your disk with no server, no install and no network at all.
+
+Or run the multi-file version from any static server:
+
 ```bash
-# any static server works
-python3 -m http.server 8080
-# then open http://localhost:8080
+python3 -m http.server 8080     # then open http://localhost:8080
 ```
 
 Chrome, Edge, Firefox or Safari with WebGL2. Click **Enter the House**, then
 click once more to capture the mouse.
+
+<sub>`play.html` is generated — edit the sources under `src/` and regenerate with
+`npm i --no-save esbuild@0.28.2 && node tools/build-single-file.mjs`.</sub>
 
 ![The approach](screenshots/01-approach.jpg)
 
@@ -98,6 +107,8 @@ No engine, no asset pipeline, no dependencies beyond a vendored copy of
 [three.js](https://threejs.org) (r169, MIT) in `vendor/`.
 
 ```
+play.html             the whole game as one self-contained file (generated)
+tools/build-single-file.mjs   how play.html is produced
 index.html            import map + all the DOM for the UI
 styles/ui.css         menus, HUD, dialogue, minimap
 src/

@@ -128,8 +128,8 @@ const GEN = {
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
       const n = fb(x / S * 34, y / S * 34, 4);
       const g = fb(x / S * 90, y / S * 90, 2);
-      const v = 0.28 + n * 0.14 + (g > 0.72 ? 0.16 : 0);
-      px(ctx, x, y, 96 * v * 1.05, 96 * v, 100 * v);
+      const v = 0.60 + n * 0.15 + (g > 0.72 ? 0.13 : 0);
+      px(ctx, x, y, 132 * v * 1.02, 130 * v, 136 * v);
       h[y * S + x] = v;
     }
   },

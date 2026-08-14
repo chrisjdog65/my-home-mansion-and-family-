@@ -50,7 +50,14 @@ export class Game {
     // Releasing the mouse pauses — unless we let it go on purpose to show the
     // journal or a conversation.
     this.input.onLockChange = (locked) => {
+      if (this.input.fallback) return;
       if (!locked && this.state === 'play' && !this.dialogue && !this.journalOpen) this.pause(true);
+    };
+    // Some browsers — and any sandboxed frame — refuse to capture the mouse.
+    // The game stays playable: hold the left button to look around.
+    this.input.onFallback = () => {
+      this.ui.toast('Hold the left mouse button to look', 'This browser will not capture the mouse here');
+      this.ui.setPrompt(null, null);
     };
     addEventListener('keydown', (e) => {
       if (e.code !== 'Escape') return;

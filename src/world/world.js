@@ -7,17 +7,6 @@ import * as THREE from 'three';
 import { Octree } from 'three/addons/math/Octree.js';
 import { Batcher } from './build.js';
 
-export const LEVEL = {
-  BASEMENT: -6.0,
-  GROUND: 0,
-  SECOND: 4.2,
-  THIRD: 8.4,
-  ROOF: 12.6,
-};
-export const CEIL = 3.8;         // interior clear height (upper floors)
-export const CEIL_BASE = 5.4;    // basement clear height
-export const SLAB = 0.4;
-
 export class World {
   constructor(scene, mats) {
     this.scene = scene;

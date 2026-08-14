@@ -31,6 +31,8 @@ export class Input {
     this.mouse = { dx: 0, dy: 0, left: false, right: false, leftPressed: false, rightPressed: false, wheel: 0 };
     this.locked = false;
     this.enabled = true;
+    this.fallback = false;   // true once pointer lock has been refused
+    this.dragging = false;
 
     this._map = new Map();
     for (const [action, codes] of BINDINGS) for (const c of codes) this._map.set(c, action);
@@ -49,36 +51,79 @@ export class Input {
     addEventListener('blur', () => { this.keys.clear(); this.mouse.left = this.mouse.right = false; });
 
     dom.addEventListener('mousedown', (e) => {
-      if (!this.locked) return;
+      if (!this.locked) {
+        // drag-to-look fallback (sandboxed frames, browsers that refuse the lock)
+        if (this.fallback && e.button === 0) {
+          this.dragging = true;
+          this._dragX = e.clientX; this._dragY = e.clientY;
+          this._dragMoved = 0; this._dragStart = performance.now();
+        }
+        if (this.fallback && e.button === 2) { this.mouse.right = true; this.mouse.rightPressed = true; }
+        return;
+      }
       if (e.button === 0) { this.mouse.left = true; this.mouse.leftPressed = true; }
       if (e.button === 2) { this.mouse.right = true; this.mouse.rightPressed = true; }
     });
     addEventListener('mouseup', (e) => {
-      if (e.button === 0) this.mouse.left = false;
+      if (e.button === 0) {
+        if (this.dragging) {
+          // a press that barely moved is a click, not a look
+          if (this._dragMoved < 6 && performance.now() - this._dragStart < 350) {
+            this.mouse.leftPressed = true;
+          }
+          this.dragging = false;
+        }
+        this.mouse.left = false;
+      }
       if (e.button === 2) this.mouse.right = false;
     });
     dom.addEventListener('contextmenu', (e) => e.preventDefault());
-    addEventListener('wheel', (e) => { if (this.locked) { this.mouse.wheel += Math.sign(e.deltaY); e.preventDefault(); } }, { passive: false });
+    addEventListener('wheel', (e) => { if (this.locked || this.fallback) { this.mouse.wheel += Math.sign(e.deltaY); e.preventDefault(); } }, { passive: false });
 
     addEventListener('mousemove', (e) => {
-      if (!this.locked || !this.enabled) return;
+      if (!this.enabled) return;
       const s = this.settings.sensitivity * 0.0016;
-      this.mouse.dx += e.movementX * s;
-      this.mouse.dy += e.movementY * s * (this.settings.invertY ? -1 : 1);
+      if (this.locked) {
+        this.mouse.dx += e.movementX * s;
+        this.mouse.dy += e.movementY * s * (this.settings.invertY ? -1 : 1);
+      } else if (this.dragging) {
+        const dx = e.clientX - this._dragX, dy = e.clientY - this._dragY;
+        this._dragX = e.clientX; this._dragY = e.clientY;
+        this._dragMoved += Math.abs(dx) + Math.abs(dy);
+        this.mouse.dx += dx * s * 1.5;
+        this.mouse.dy += dy * s * 1.5 * (this.settings.invertY ? -1 : 1);
+      }
     });
 
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === this.dom;
       this.onLockChange?.(this.locked);
     });
-    document.addEventListener('pointerlockerror', () => { this.onLockChange?.(false); });
+    document.addEventListener('pointerlockerror', () => this.useFallback());
+  }
+
+  /** Pointer lock is unavailable — switch to hold-and-drag looking. */
+  useFallback() {
+    if (this.fallback) return;
+    this.fallback = true;
+    this.dragging = false;
+    this.onFallback?.();
   }
 
   requestLock() {
-    const p = this.dom.requestPointerLock?.({ unadjustedMovement: true });
-    if (p && p.catch) p.catch(() => this.dom.requestPointerLock());
+    if (this.fallback) return;
+    try {
+      const p = this.dom.requestPointerLock?.({ unadjustedMovement: true });
+      if (p && p.catch) {
+        p.catch(() => {
+          try { this.dom.requestPointerLock(); } catch (_) { this.useFallback(); }
+        });
+      }
+    } catch (_) {
+      this.useFallback();
+    }
   }
-  exitLock() { document.exitPointerLock?.(); }
+  exitLock() { if (!this.fallback) document.exitPointerLock?.(); }
 
   down(a) { return this.enabled && this.keys.has(a); }
   hit(a) { return this.enabled && this.pressed.has(a); }

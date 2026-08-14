@@ -171,12 +171,4 @@ export function railing(batch, matPost, matRail, cx, y, cz, len, rotY = 0, h = 1
   batch.box(len, 0.05, 0.05, matRail, cx, y + h * 0.45, cz, { rotY, tile: 1 });
 }
 
-/** Crown moulding / baseboard around a rectangular room. */
-export function trimRect(batch, mat, x, z, w, d, y, h = 0.12, t = 0.03) {
-  batch.box(w, h, t, mat, x, y + h / 2, z - d / 2 + t / 2, { tile: 1 });
-  batch.box(w, h, t, mat, x, y + h / 2, z + d / 2 - t / 2, { tile: 1 });
-  batch.box(t, h, d, mat, x - w / 2 + t / 2, y + h / 2, z, { tile: 1 });
-  batch.box(t, h, d, mat, x + w / 2 - t / 2, y + h / 2, z, { tile: 1 });
-}
-
 export const deg = (d) => (d * Math.PI) / 180;
