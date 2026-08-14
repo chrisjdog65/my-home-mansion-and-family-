@@ -1,0 +1,327 @@
+// ───────────────────────────────────────────────────────────────────────────
+// First person movement: capsule vs. octree, stair stepping, crouch, sprint,
+// swimming, sitting, head bob and camera lean.
+// ───────────────────────────────────────────────────────────────────────────
+import * as THREE from 'three';
+import { Capsule } from 'three/addons/math/Capsule.js';
+import { clamp, damp, lerp } from '../core/rng.js';
+
+const STAND_H = 1.78, CROUCH_H = 1.12, RADIUS = 0.32;
+const EYE_OFFSET = -0.14;                 // eye sits just below the capsule top
+const GRAVITY = 26;
+
+export class Player {
+  constructor(world, camera, input, settings) {
+    this.world = world;
+    this.camera = camera;
+    this.input = input;
+    this.settings = settings;
+
+    this.capsule = new Capsule(
+      new THREE.Vector3(0, RADIUS, 0),
+      new THREE.Vector3(0, STAND_H - RADIUS, 0),
+      RADIUS,
+    );
+    this.velocity = new THREE.Vector3();
+    this.yaw = 0;
+    this.pitch = 0;
+    this.height = STAND_H;
+    this.onGround = false;
+    this.crouching = false;
+    this.sprinting = false;
+    this.inWater = null;
+    this.submerged = 0;
+    this.bob = 0;
+    this.bobAmount = 0;
+    this.lean = 0;
+    this.stepDistance = 0;
+    this.lastStep = 0;
+    this.mode = 'walk';       // walk | sit | drive
+    this.seat = null;
+    this.vehicle = null;
+    this.landImpact = 0;
+    this.fallSpeed = 0;
+    this._v = new THREE.Vector3();
+    this._fwd = new THREE.Vector3();
+    this._right = new THREE.Vector3();
+    this._box = new THREE.Box3();
+  }
+
+  teleport(x, y, z, yaw = 0) {
+    this.capsule.start.set(x, y + RADIUS, z);
+    this.capsule.end.set(x, y + this.height - RADIUS, z);
+    this.velocity.set(0, 0, 0);
+    this.yaw = yaw;
+  }
+
+  get position() { return this.capsule.start; }
+  feet(out = new THREE.Vector3()) {
+    return out.copy(this.capsule.start).setY(this.capsule.start.y - RADIUS);
+  }
+  eye(out = new THREE.Vector3()) {
+    return out.copy(this.capsule.end).setY(this.capsule.end.y + RADIUS + EYE_OFFSET);
+  }
+
+  look(dt) {
+    const m = this.input.mouse;
+    this.yaw -= m.dx;
+    this.pitch -= m.dy;
+    const gp = this.input.gamepad();
+    if (gp) {
+      const dz = (v) => (Math.abs(v) < 0.2 ? 0 : v);
+      const s = this.settings.sensitivity * 2.6 * dt;
+      this.yaw -= dz(gp.axes[2]) * s;
+      this.pitch -= dz(gp.axes[3]) * s * (this.settings.invertY ? -1 : 1);
+    }
+    this.pitch = clamp(this.pitch, -Math.PI / 2 + 0.02, Math.PI / 2 - 0.02);
+  }
+
+  update(dt, interaction) {
+    this.look(dt);
+    if (this.mode === 'sit') return this.updateSeated(dt);
+    if (this.mode === 'drive') return this.updateDriving(dt);
+    this.updateWalk(dt);
+  }
+
+  // ── walking / swimming ──────────────────────────────────────────────────
+  updateWalk(dt) {
+    const inp = this.input;
+    const water = this.world.inWater(this.capsule.start);
+    this.inWater = water;
+    const eyeY = this.capsule.end.y + RADIUS + EYE_OFFSET;
+    this.submerged = water ? clamp((water.surfaceY - eyeY) * 3 + 0.5, 0, 1) : 0;
+
+    // crouch
+    const wantCrouch = inp.down('crouch') && !water;
+    if (wantCrouch !== this.crouching) {
+      if (!wantCrouch && !this.headroom()) {
+        // blocked — stay crouched
+      } else this.crouching = wantCrouch;
+    }
+    const targetH = this.crouching ? CROUCH_H : STAND_H;
+    this.height = damp(this.height, targetH, 12, dt);
+    this.capsule.end.y = this.capsule.start.y - RADIUS + this.height - RADIUS;
+
+    // wish direction
+    const ax = inp.axes();
+    this._fwd.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+    this._right.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
+    const wish = this._v.set(0, 0, 0)
+      .addScaledVector(this._fwd, ax.y)
+      .addScaledVector(this._right, ax.x);
+    const moving = wish.lengthSq() > 0.0001;
+    if (moving) wish.normalize();
+
+    this.sprinting = inp.down('sprint') && ax.y > 0.1 && !this.crouching;
+
+    if (water) {
+      // swimming: move where you look, float towards the surface
+      const speed = this.sprinting ? 4.6 : 3.0;
+      const dir = this._v.set(0, 0, 0);
+      if (moving) {
+        const pitchDir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ'));
+        dir.addScaledVector(pitchDir, ax.y).addScaledVector(this._right, ax.x);
+        if (dir.lengthSq() > 0) dir.normalize();
+      }
+      if (inp.down('jump')) dir.y += 1;
+      if (inp.down('crouch')) dir.y -= 1;
+      this.velocity.lerp(dir.multiplyScalar(speed), clamp(dt * 4.5, 0, 1));
+      // buoyancy holds you at the surface
+      const depth = water.surfaceY - (this.capsule.start.y - RADIUS + this.height * 0.72);
+      this.velocity.y += clamp(depth, -0.6, 1.2) * 5.5 * dt;
+      this.velocity.multiplyScalar(Math.max(0, 1 - 1.6 * dt));
+      this.onGround = false;
+    } else {
+      const base = this.crouching ? 2.0 : this.sprinting ? 6.4 : 3.6;
+      const accel = this.onGround ? 42 : 9;
+      const target = this._v.copy(wish).multiplyScalar(base);
+      this.velocity.x = damp(this.velocity.x, target.x, accel / 6, dt);
+      this.velocity.z = damp(this.velocity.z, target.z, accel / 6, dt);
+      if (this.onGround && !moving) {
+        this.velocity.x = damp(this.velocity.x, 0, 14, dt);
+        this.velocity.z = damp(this.velocity.z, 0, 14, dt);
+      }
+      this.velocity.y -= GRAVITY * dt;
+      if (this.onGround && inp.hit('jump')) {
+        this.velocity.y = 7.4;
+        this.onGround = false;
+      }
+    }
+
+    // integrate (sub-stepped so fast movement can't tunnel)
+    const steps = Math.min(5, Math.ceil((this.velocity.length() * dt) / 0.28) || 1);
+    const h = dt / steps;
+    for (let i = 0; i < steps; i++) {
+      this._v.copy(this.velocity).multiplyScalar(h);
+      this.capsule.translate(this._v);
+      this.collide();
+    }
+
+    // footsteps + head bob
+    const speedXZ = Math.hypot(this.velocity.x, this.velocity.z);
+    this.stepDistance += speedXZ * dt;
+    this.bobAmount = damp(this.bobAmount, this.onGround ? clamp(speedXZ / 6, 0, 1) : 0, 8, dt);
+    this.bob += dt * speedXZ * 1.9;
+  }
+
+  headroom() {
+    const c = this.capsule.clone();
+    c.end.y = c.start.y - RADIUS + STAND_H - RADIUS;
+    return !this.world.octree.capsuleIntersect(c);
+  }
+
+  collide() {
+    const oct = this.world.octree;
+    let grounded = false;
+    for (let i = 0; i < 3; i++) {
+      const hit = oct.capsuleIntersect(this.capsule);
+      if (!hit) break;
+      if (hit.normal.y > 0.42) {
+        grounded = true;
+        this.velocity.addScaledVector(hit.normal, -hit.normal.dot(this.velocity));
+      } else {
+        const d = hit.normal.dot(this.velocity);
+        if (d < 0) this.velocity.addScaledVector(hit.normal, -d);
+      }
+      this.capsule.translate(this._v.copy(hit.normal).multiplyScalar(hit.depth + 0.0008));
+    }
+    // dynamic blockers (closed doors, parked cars)
+    for (const b of this.world.blockers) {
+      if (b.active === false) continue;
+      this.resolveBox(b);
+    }
+    if (grounded && !this.onGround) {
+      this.landImpact = clamp(this.fallSpeed / 14, 0, 1);
+    }
+    this.fallSpeed = grounded ? 0 : Math.max(this.fallSpeed, -this.velocity.y);
+    this.onGround = grounded;
+  }
+
+  /** Capsule vs. rotated box (used for door leaves and vehicle bodies). */
+  resolveBox(b) {
+    const c = Math.cos(-b.rotY), s = Math.sin(-b.rotY);
+    for (const p of [this.capsule.start, this.capsule.end]) {
+      const dx = p.x - b.pos.x, dz = p.z - b.pos.z;
+      const lx = dx * c - dz * s;
+      const lz = dx * s + dz * c;
+      const ly = p.y - b.pos.y;
+      const px = clamp(lx, -b.halfW, b.halfW);
+      const py = clamp(ly, -b.halfH, b.halfH);
+      const pz = clamp(lz, -b.halfD, b.halfD);
+      const ox = lx - px, oy = ly - py, oz = lz - pz;
+      const d2 = ox * ox + oy * oy + oz * oz;
+      if (d2 > this.capsule.radius * this.capsule.radius) continue;
+      let nx, ny, nz, depth;
+      if (d2 > 1e-8) {
+        const d = Math.sqrt(d2);
+        nx = ox / d; ny = oy / d; nz = oz / d;
+        depth = this.capsule.radius - d;
+      } else {
+        // centre inside the box — push out along the shallowest axis
+        const ex = b.halfW - Math.abs(lx), ey = b.halfH - Math.abs(ly), ez = b.halfD - Math.abs(lz);
+        if (ex < ey && ex < ez) { nx = Math.sign(lx) || 1; ny = 0; nz = 0; depth = ex + this.capsule.radius; }
+        else if (ez < ey) { nx = 0; ny = 0; nz = Math.sign(lz) || 1; depth = ez + this.capsule.radius; }
+        else { nx = 0; ny = Math.sign(ly) || 1; nz = 0; depth = ey + this.capsule.radius; }
+      }
+      // back to world space
+      const wc = Math.cos(b.rotY), ws = Math.sin(b.rotY);
+      const wx = nx * wc - nz * ws;
+      const wz = nx * ws + nz * wc;
+      this._v.set(wx * depth, ny * depth, wz * depth);
+      this.capsule.translate(this._v);
+      const vn = this.velocity.x * wx + this.velocity.y * ny + this.velocity.z * wz;
+      if (vn < 0) {
+        this.velocity.x -= wx * vn; this.velocity.y -= ny * vn; this.velocity.z -= wz * vn;
+      }
+    }
+  }
+
+  // ── sitting ─────────────────────────────────────────────────────────────
+  sit(seat) {
+    this.seat = seat;
+    this.mode = 'sit';
+    this.velocity.set(0, 0, 0);
+    this.seatYaw = seat.rotY !== undefined ? seat.rotY + Math.PI : this.yaw;
+  }
+  stand() {
+    if (this.mode === 'sit' && this.seat) {
+      const back = 0.9;
+      this.teleport(
+        this.seat.x - Math.sin(this.seatYaw) * back,
+        this.seat.y - 0.1,
+        this.seat.z - Math.cos(this.seatYaw) * back,
+        this.yaw,
+      );
+    }
+    this.mode = 'walk';
+    this.seat = null;
+    this.vehicle = null;
+  }
+  updateSeated(dt) {
+    const s = this.seat;
+    this.capsule.start.set(s.x, s.y + RADIUS, s.z);
+    this.capsule.end.set(s.x, s.y + 0.72, s.z);
+    this.height = 0.9;
+    this.bobAmount = damp(this.bobAmount, 0, 10, dt);
+  }
+
+  // ── driving ─────────────────────────────────────────────────────────────
+  drive(v) {
+    this.vehicle = v;
+    this.mode = 'drive';
+    v.occupied = true;
+    this.yaw = v.heading + Math.PI;
+    this.velocity.set(0, 0, 0);
+  }
+  exitVehicle() {
+    const v = this.vehicle;
+    if (!v) return;
+    v.occupied = false;
+    const side = new THREE.Vector3(Math.cos(v.heading), 0, -Math.sin(v.heading)).multiplyScalar(-2.3);
+    this.teleport(v.pos.x + side.x, v.pos.y + 0.6, v.pos.z + side.z, this.yaw);
+    this.mode = 'walk';
+    this.vehicle = null;
+  }
+  updateDriving(dt) {
+    const v = this.vehicle;
+    if (!v) { this.mode = 'walk'; return; }
+    const seat = v.seat.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), v.heading).add(v.pos);
+    this.capsule.start.copy(seat);
+    this.capsule.end.copy(seat).setY(seat.y + 0.4);
+    this.bobAmount = 0;
+  }
+
+  vehicleControls() {
+    const inp = this.input;
+    const ax = inp.axes();
+    return { throttle: ax.y, steer: ax.x, brake: inp.down('jump') };
+  }
+
+  // ── camera ──────────────────────────────────────────────────────────────
+  syncCamera(dt) {
+    const cam = this.camera;
+    if (this.mode === 'drive' && this.vehicle) {
+      const v = this.vehicle;
+      const seat = v.seat.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), v.heading).add(v.pos);
+      cam.position.lerp(seat, clamp(dt * 22, 0, 1));
+      cam.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
+      return;
+    }
+
+    const eye = this.eye(this._v);
+    if (this.mode === 'sit') {
+      eye.set(this.seat.x, this.seat.y + 0.68, this.seat.z);
+    }
+    // head bob + landing dip
+    const b = this.settings.headBob ? this.bobAmount : 0;
+    const bobY = Math.sin(this.bob * 2) * 0.035 * b;
+    const bobX = Math.cos(this.bob) * 0.028 * b;
+    this.landImpact = damp(this.landImpact, 0, 7, dt);
+    eye.y += bobY - this.landImpact * 0.28;
+
+    cam.position.lerp(eye, clamp(dt * 30, 0, 1));
+    const strafeLean = clamp((this.velocity.x * Math.cos(this.yaw) - this.velocity.z * Math.sin(this.yaw)) * 0.012, -0.05, 0.05);
+    this.lean = damp(this.lean, strafeLean + bobX * 0.3, 8, dt);
+    cam.rotation.set(this.pitch, this.yaw, this.lean, 'YXZ');
+  }
+}

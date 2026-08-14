@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+<title>Home — A First Person Life at the Mansion</title>
+<link rel="stylesheet" href="./styles/ui.css" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🏡</text></svg>" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/build/three.module.js",
+    "three/addons/": "./vendor/three/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<canvas id="viewport"></canvas>
+
+<!-- ─────────────────────────  LOADING  ───────────────────────── -->
+<div id="loader" class="screen">
+  <div class="loader-inner">
+    <div class="brand">
+      <div class="brand-mark">🏡</div>
+      <h1>HOME</h1>
+      <p class="tagline">A first person life at the mansion</p>
+    </div>
+    <div class="bar"><div id="loadbar"></div></div>
+    <div id="loadtext">Waking up the house…</div>
+  </div>
+</div>
+
+<!-- ─────────────────────────  MAIN MENU  ───────────────────────── -->
+<div id="menu" class="screen hidden">
+  <div class="menu-panel">
+    <div class="menu-side">
+      <div class="brand-mark big">🏡</div>
+      <h1>HOME</h1>
+      <p class="tagline">Mansion &amp; Family</p>
+      <div class="family-strip">
+        <span class="chip">You</span><span class="chip k">Kaelie</span>
+        <span class="chip j">James</span><span class="chip c">Chloie</span>
+      </div>
+    </div>
+    <div class="menu-main">
+      <div class="menu-tabs">
+        <button class="tab active" data-tab="play">Play</button>
+        <button class="tab" data-tab="controls">Controls</button>
+        <button class="tab" data-tab="settings">Settings</button>
+        <button class="tab" data-tab="about">The House</button>
+      </div>
+
+      <section class="tabpage active" data-page="play">
+        <button id="btn-play" class="primary">Enter the House</button>
+        <p class="hint">Click to lock the mouse. <b>Esc</b> releases it at any time.</p>
+        <ul class="highlights">
+          <li>4 levels · 22 bedrooms · 9 bathrooms</li>
+          <li>Theater · bowling alley · basketball court · pool &amp; hot tub</li>
+          <li>Backyard pond, waterfall, skate park &amp; mountain views</li>
+          <li>Drive the truck or the Lamborghini</li>
+        </ul>
+      </section>
+
+      <section class="tabpage" data-page="controls">
+        <div class="keys" id="keylist"></div>
+      </section>
+
+      <section class="tabpage" data-page="settings">
+        <div class="settings" id="settingslist"></div>
+      </section>
+
+      <section class="tabpage" data-page="about">
+        <div class="about">
+          <h3>The Property</h3>
+          <p>A four-level mountain-view estate. The ground floor holds the great room with its
+          double-height stone fireplace, chef's kitchen, dining hall, library, two family rooms and
+          the indoor pool wing with a hot tub. Upstairs are twenty-two bedrooms including the master
+          suite, James's and Chloie's rooms, and two dedicated gaming rooms with high-end PCs. The
+          basement hides the movie theater auditorium, a two-lane bowling alley, a full basketball
+          court, the gym, the laundry and the workshop.</p>
+          <h3>The Grounds</h3>
+          <p>Terraced lawn, a stone-edged pond fed by a running waterfall, a covered picnic area,
+          a concrete skate bowl with a quarter pipe and rails, a fully stocked shed, and a driveway
+          with a supercharged Ford pickup and a Lamborghini.</p>
+          <h3>The Family</h3>
+          <p><b>Kaelie</b> — your wife. <b>James</b> — your son, 11. <b>Chloie</b> — your daughter, 8.
+          They move around the house on their own schedule. Walk up and press <b>E</b> to talk.</p>
+        </div>
+      </section>
+    </div>
+  </div>
+  <div class="menu-foot">WASD move · Shift sprint · Space jump · E interact · Tab journal</div>
+</div>
+
+<!-- ─────────────────────────  HUD  ───────────────────────── -->
+<div id="hud" class="hidden">
+  <div id="crosshair"><span class="ch-dot"></span><i class="ch t"></i><i class="ch r"></i><i class="ch b"></i><i class="ch l"></i></div>
+
+  <div id="prompt" class="hidden"><span class="key">E</span><span id="prompt-text"></span></div>
+  <div id="subprompt" class="hidden"></div>
+
+  <div id="topleft">
+    <div id="clock">7:30 AM</div>
+    <div id="place">Front Drive</div>
+  </div>
+
+  <div id="compass"><div id="compass-strip"></div><div class="compass-needle"></div></div>
+
+  <canvas id="minimap" width="260" height="260"></canvas>
+
+  <div id="objectives">
+    <h4>Today</h4>
+    <ul id="objective-list"></ul>
+  </div>
+
+  <div id="toasts"></div>
+
+  <div id="dialogue" class="hidden">
+    <canvas class="portrait" id="portrait" width="128" height="128"></canvas>
+    <div class="d-body">
+      <div class="d-name" id="d-name">Kaelie</div>
+      <div class="d-text" id="d-text"></div>
+      <div class="d-options" id="d-options"></div>
+    </div>
+  </div>
+
+  <div id="vehicle-hud" class="hidden">
+    <div class="speedo"><span id="speed">0</span><small>MPH</small></div>
+    <div class="gear" id="gear">D</div>
+    <div class="v-name" id="v-name">Ford F-350 Super Duty</div>
+    <div class="v-hint"><span class="key">F</span> exit · <span class="key">W/S</span> throttle · <span class="key">A/D</span> steer · <span class="key">Space</span> brake</div>
+  </div>
+
+  <div id="held" class="hidden"><span id="held-name"></span><span class="sub">LMB throw · G drop</span></div>
+</div>
+
+<!-- ─────────────────────────  JOURNAL  ───────────────────────── -->
+<div id="journal" class="screen hidden">
+  <div class="journal-panel">
+    <h2>Journal</h2>
+    <div class="journal-cols">
+      <div><h3>Family</h3><div id="j-family"></div></div>
+      <div><h3>Discovered</h3><div id="j-rooms"></div></div>
+      <div><h3>Today</h3><div id="j-obj"></div></div>
+    </div>
+    <p class="hint">Tab to close</p>
+  </div>
+</div>
+
+<!-- ─────────────────────────  PAUSE  ───────────────────────── -->
+<div id="pause" class="screen hidden">
+  <div class="pause-panel">
+    <h2>Paused</h2>
+    <div class="settings" id="pause-settings"></div>
+    <div class="pause-buttons">
+      <button id="btn-resume" class="primary">Resume</button>
+      <button id="btn-quit">Main Menu</button>
+    </div>
+  </div>
+</div>
+
+<div id="fps"></div>
+
+<script type="module" src="./src/main.js"></script>
+<noscript><p style="color:#fff;font:16px sans-serif">This game needs JavaScript and WebGL2.</p></noscript>
+</body>
+</html>
