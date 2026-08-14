@@ -20,19 +20,47 @@ function basin(x, z, cx, cz, rx, rz, depth) {
   return depth * (1 - smoothstep(0.5, 1, t));
 }
 
-export function groundHeight(x, z) {
-  let h = 0;
+function rawHeight(x, z) {
   // distance outside the flat pad, 0 → 1 over 46 m
   const dx = Math.max(0, Math.max(PAD.x0 - x, x - PAD.x1));
   const dz = Math.max(0, Math.max(PAD.z0 - z, z - PAD.z1));
   const out = Math.hypot(dx, dz);
   const k = smoothstep(0, 46, out);
-  if (k > 0) {
-    const rolling = fbm(noise, x * 0.004, z * 0.004, 4) * 9;
-    const fine = fbm(noise, x * 0.02, z * 0.02, 3) * 1.4;
-    // the ground climbs towards the mountains in the south
-    const rise = smoothstep(60, 260, z) * 42;
-    h = (rolling + fine + rise) * k;
+  if (k <= 0) return 0;
+  const rolling = fbm(noise, x * 0.004, z * 0.004, 4) * 9;
+  const fine = fbm(noise, x * 0.02, z * 0.02, 3) * 1.4;
+  // the ground climbs towards the mountains in the south
+  const rise = smoothstep(60, 260, z) * 42;
+  return (rolling + fine + rise) * k;
+}
+
+/**
+ * Anything with a poured slab on it — the skate park, the picnic terrace, the
+ * shed — sits on level ground. Without this the collision mesh's coarse grid
+ * pokes up through the slab and you walk up bumps you cannot see.
+ */
+const LEVELLED = [
+  { x0: 7, x1: 45, z0: 48, z1: 77, rx: 26, rz: 62 },      // skate park
+  { x0: 12, x1: 32, z0: 30, z1: 46, rx: 22, rz: 40 },     // picnic area
+  { x0: -45, x1: -31, z0: 18, z1: 34, rx: -38, rz: 26 },  // shed
+];
+const FEATHER = 5;
+const levelY = LEVELLED.map(() => null);
+
+function levelness(x, z, r) {
+  const dx = Math.max(0, Math.max(r.x0 - x, x - r.x1));
+  const dz = Math.max(0, Math.max(r.z0 - z, z - r.z1));
+  return 1 - smoothstep(0, FEATHER, Math.hypot(dx, dz));
+}
+
+export function groundHeight(x, z) {
+  let h = rawHeight(x, z);
+  for (let i = 0; i < LEVELLED.length; i++) {
+    const r = LEVELLED[i];
+    const k = levelness(x, z, r);
+    if (k <= 0) continue;
+    if (levelY[i] === null) levelY[i] = rawHeight(r.rx, r.rz);
+    h += (levelY[i] - h) * k;
   }
   // hollows so the grass doesn't cap the water
   h -= basin(x, z, 0, 23, 11.5, 8.5, 3.6);      // swimming pool

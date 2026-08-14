@@ -17,8 +17,8 @@ async function boot() {
   // Probe on a throwaway canvas: calling getContext on the real one would
   // lock in default attributes that WebGLRenderer could not then change.
   const probe = document.createElement('canvas');
-  if (!probe.getContext('webgl2') && !probe.getContext('webgl')) {
-    fatal(new Error('This browser has no WebGL — try Chrome, Edge, Firefox or Safari.'));
+  if (!probe.getContext('webgl2')) {
+    fatal(new Error('This game needs WebGL2 — try a current Chrome, Edge, Firefox or Safari.'));
     return;
   }
 

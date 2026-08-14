@@ -27477,7 +27477,7 @@ function bedroom(k, R, rng) {
     if (R.w > 7) nightstand(k, bx + 1.5, R.y, bz - inward * 0.4, { rotY: north ? 0 : Math.PI, lamp: false });
   }
   rug(k, R.x, R.y, R.z + inward * -0.4, Math.min(4.2, R.w - 2), Math.min(3.4, R.d - 3), pal.rug);
-  const oz = wallZ - inward * (R.d - 0.9);
+  const oz = wallZ + inward * (R.d - 0.9);
   dresser(k, R.x - 1.2, R.y, oz, { rotY: north ? Math.PI : 0, w: Math.min(2.2, R.w * 0.3) });
   tv(k, R.x - 1.2, R.y, oz + inward * 0.35, { rotY: north ? Math.PI : 0, w: 1.5, h: 1.55, wall: true });
   wardrobe(k, R.x + R.w / 2 - 1.1, R.y, oz + inward * 0.1, { rotY: north ? Math.PI : 0 });
@@ -27912,17 +27912,40 @@ function basin(x, z, cx2, cz2, rx, rz, depth) {
   if (t >= 1) return 0;
   return depth * (1 - smoothstep2(0.5, 1, t));
 }
-function groundHeight(x, z) {
-  let h = 0;
+function rawHeight(x, z) {
   const dx = Math.max(0, Math.max(PAD.x0 - x, x - PAD.x1));
   const dz = Math.max(0, Math.max(PAD.z0 - z, z - PAD.z1));
   const out = Math.hypot(dx, dz);
   const k = smoothstep2(0, 46, out);
-  if (k > 0) {
-    const rolling = fbm(noise2, x * 4e-3, z * 4e-3, 4) * 9;
-    const fine = fbm(noise2, x * 0.02, z * 0.02, 3) * 1.4;
-    const rise = smoothstep2(60, 260, z) * 42;
-    h = (rolling + fine + rise) * k;
+  if (k <= 0) return 0;
+  const rolling = fbm(noise2, x * 4e-3, z * 4e-3, 4) * 9;
+  const fine = fbm(noise2, x * 0.02, z * 0.02, 3) * 1.4;
+  const rise = smoothstep2(60, 260, z) * 42;
+  return (rolling + fine + rise) * k;
+}
+var LEVELLED = [
+  { x0: 7, x1: 45, z0: 48, z1: 77, rx: 26, rz: 62 },
+  // skate park
+  { x0: 12, x1: 32, z0: 30, z1: 46, rx: 22, rz: 40 },
+  // picnic area
+  { x0: -45, x1: -31, z0: 18, z1: 34, rx: -38, rz: 26 }
+  // shed
+];
+var FEATHER = 5;
+var levelY = LEVELLED.map(() => null);
+function levelness(x, z, r) {
+  const dx = Math.max(0, Math.max(r.x0 - x, x - r.x1));
+  const dz = Math.max(0, Math.max(r.z0 - z, z - r.z1));
+  return 1 - smoothstep2(0, FEATHER, Math.hypot(dx, dz));
+}
+function groundHeight(x, z) {
+  let h = rawHeight(x, z);
+  for (let i = 0; i < LEVELLED.length; i++) {
+    const r = LEVELLED[i];
+    const k = levelness(x, z, r);
+    if (k <= 0) continue;
+    if (levelY[i] === null) levelY[i] = rawHeight(r.rx, r.rz);
+    h += (levelY[i] - h) * k;
   }
   h -= basin(x, z, 0, 23, 11.5, 8.5, 3.6);
   h -= basin(x, z, 13.5, 22, 4.4, 4.4, 1.6);
@@ -31493,8 +31516,8 @@ function fatal(err) {
 }
 async function boot() {
   const probe = document.createElement("canvas");
-  if (!probe.getContext("webgl2") && !probe.getContext("webgl")) {
-    fatal(new Error("This browser has no WebGL \u2014 try Chrome, Edge, Firefox or Safari."));
+  if (!probe.getContext("webgl2")) {
+    fatal(new Error("This game needs WebGL2 \u2014 try a current Chrome, Edge, Firefox or Safari."));
     return;
   }
   let game;

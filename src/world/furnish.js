@@ -82,8 +82,10 @@ function bedroom(k, R, rng) {
   }
   rug(k, R.x, R.y, R.z + inward * -0.4, Math.min(4.2, R.w - 2), Math.min(3.4, R.d - 3), pal.rug);
 
-  // opposite wall: dresser + TV, wardrobe
-  const oz = wallZ - inward * (R.d - 0.9);
+  // opposite wall: dresser + TV, wardrobe. `inward` points from the window
+  // wall into the room, so the far wall is +inward, not -inward — getting this
+  // backwards parked every bedroom's furniture outside the house.
+  const oz = wallZ + inward * (R.d - 0.9);
   dresser(k, R.x - 1.2, R.y, oz, { rotY: north ? Math.PI : 0, w: Math.min(2.2, R.w * 0.3) });
   tv(k, R.x - 1.2, R.y, oz + inward * 0.35, { rotY: north ? Math.PI : 0, w: 1.5, h: 1.55, wall: true });
   wardrobe(k, R.x + R.w / 2 - 1.1, R.y, oz + inward * 0.1, { rotY: north ? Math.PI : 0 });
