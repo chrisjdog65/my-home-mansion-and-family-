@@ -29,11 +29,13 @@ export class Props {
     p.restY = p.home.y;
     this.world.addProp(p.mesh);
     this.list.push(p);
-    this.world.addInteract({
-      pos: p.pos, radius: 2.0, dynamic: true,
-      label: () => `Pick up ${p.name}`,
-      kind: 'prop', data: p,
-    });
+    if (p.canGrab) {
+      this.world.addInteract({
+        pos: p.pos, radius: 2.0, dynamic: true,
+        label: () => `Pick up the ${p.name}`,
+        kind: 'prop', data: p,
+      });
+    }
     return p;
   }
 

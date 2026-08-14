@@ -61,7 +61,7 @@ export function buildTerrain(world) {
   far.rotateX(-Math.PI / 2);
   const fp = far.attributes.position;
   const colors = new Float32Array(fp.count * 3);
-  const cRock = new THREE.Color(0x6d6a63), cGrass = new THREE.Color(0x4a6b3c), cSnow = new THREE.Color(0xf2f6fa);
+  const cRock = new THREE.Color(0x5e5b55), cGrass = new THREE.Color(0x47643b), cSnow = new THREE.Color(0xe4ecf3);
   const tmp = new THREE.Color();
   for (let i = 0; i < fp.count; i++) {
     const x = fp.getX(i), z = fp.getZ(i);
@@ -76,8 +76,8 @@ export function buildTerrain(world) {
       h += (ridge * 300 + ridge2 * 90) * t * southBias;
     }
     fp.setY(i, h);
-    const snow = smoothstep(150, 250, h);
-    const rock = smoothstep(28, 110, h);
+    const snow = smoothstep(195, 330, h);
+    const rock = smoothstep(30, 120, h);
     tmp.copy(cGrass).lerp(cRock, rock).lerp(cSnow, snow);
     colors[i * 3] = tmp.r; colors[i * 3 + 1] = tmp.g; colors[i * 3 + 2] = tmp.b;
   }
@@ -192,13 +192,11 @@ export class SkySystem {
   }
 
   sunDirection(hour) {
-    // simple but convincing arc: rises ENE, sets WNW, high at noon
+    // rises in the east, crosses the southern sky, sets in the west
     const t = ((hour - 6) / 12) * Math.PI;         // 0 at sunrise, π at sunset
-    const elev = Math.sin(t) * 1.15;
-    const az = Math.PI * 0.5 + Math.cos(t) * 1.15;
-    const y = Math.sin(elev);
-    const r = Math.cos(elev);
-    return new THREE.Vector3(Math.cos(az) * r, y, Math.sin(az) * r).normalize();
+    const elev = Math.sin(t) * 1.05;
+    const c = Math.cos(elev);
+    return new THREE.Vector3(Math.cos(t) * c, Math.sin(elev), Math.sin(t) * c).normalize();
   }
 
   setTime(hour) {
@@ -221,7 +219,7 @@ export class SkySystem {
 
     // Sky fill is kept deliberately low: without it every interior washes out,
     // and the house is meant to be lit by its own fixtures.
-    this.hemi.intensity = 0.05 + 0.17 * day;
+    this.hemi.intensity = 0.07 + 0.24 * day;
     this.hemi.color.setHex(day > 0.3 ? 0xa8c6e8 : 0x2c3a56);
     this.hemi.groundColor.setHex(0x4a4238);
     this.ambient.intensity = 0.015 + 0.045 * day;
@@ -258,7 +256,7 @@ export class SkySystem {
     if (this.envRT) this.envRT.dispose();
     this.envRT = rt;
     this.engine.scene.environment = rt.texture;
-    this.engine.scene.environmentIntensity = 0.10 + clamp(this.dir.y, 0, 1) * 0.26;
+    this.engine.scene.environmentIntensity = 0.12 + clamp(this.dir.y, 0, 1) * 0.30;
   }
 
   update(dt, playerPos, timeScale = 1) {

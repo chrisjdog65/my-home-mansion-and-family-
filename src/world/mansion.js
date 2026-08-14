@@ -125,11 +125,11 @@ export function buildMansion(world) {
       const n = Math.max(1, Math.min(6, Math.round((w * d) / 34)));
       for (let i = 0; i < n; i++) {
         const lx = n === 1 ? x : R.x0 + ((i + 0.5) / n) * w;
-        const ly = y + (isTall ? F.ceil + 2.6 : F.ceil) - 0.28;
+        const ly = y + (isTall ? F.ceil + 2.6 : F.ceil) - 0.85;
         world.addLight({
           pos: new THREE.Vector3(lx, ly, z),
-          color: lightColor(R.type), intensity: lightPower(R.type),
-          distance: Math.max(9, Math.min(20, Math.hypot(w, d) * 0.8)),
+          color: lightColor(R.type), intensity: lightPower(R.type), decay: 1.85,
+          distance: Math.max(9, Math.min(22, Math.hypot(w, d) * 0.85)),
           room: R.name, floor: F.key,
         });
         // the fixture itself
@@ -142,8 +142,8 @@ export function buildMansion(world) {
       for (let lx = HOUSE.x0 + 5; lx <= HOUSE.x1 - 5; lx += 9) {
         if (holes.some((h) => lx > h.x0 && lx < h.x1)) continue;
         world.addLight({
-          pos: new THREE.Vector3(lx, y + F.ceil - 0.3, 0), color: 0xffdcb4,
-          intensity: 16, distance: 13, room: 'Gallery', floor: F.key,
+          pos: new THREE.Vector3(lx, y + F.ceil - 0.8, 0), color: 0xffdcb4,
+          intensity: 11, decay: 1.85, distance: 14, room: 'Gallery', floor: F.key,
         });
         addFixture(world, 'corridor', lx, y + F.ceil - 0.3, 0);
       }
@@ -177,13 +177,13 @@ function lightColor(type) {
 }
 function lightPower(type) {
   switch (type) {
-    case 'theater': return 11;
-    case 'court': return 46;
-    case 'bowling': return 26;
-    case 'great': return 34;
-    case 'garage': case 'workshop': case 'storage': return 26;
-    case 'gaming': return 10;
-    default: return 20;
+    case 'theater': return 7;
+    case 'court': return 34;
+    case 'bowling': return 18;
+    case 'great': return 24;
+    case 'garage': case 'workshop': case 'storage': return 18;
+    case 'gaming': return 7;
+    default: return 14;
   }
 }
 
@@ -192,15 +192,15 @@ function addFixture(world, type, x, y, z) {
   const M = world.mats, B = world.static;
   if (type === 'court' || type === 'garage' || type === 'workshop' || type === 'storage' || type === 'gym') {
     B.box(2.4, 0.09, 0.34, M.get('steel'), x, y + 0.1, z, { tile: 1 });
-    B.box(2.3, 0.06, 0.28, M.emissive(0xf4f8ff, 2.6), x, y + 0.03, z, { tile: 1 });
+    B.box(2.3, 0.06, 0.28, M.emissive(0xf4f8ff, 1.9), x, y + 0.03, z, { tile: 1 });
   } else if (type === 'corridor') {
     B.box(0.3, 0.06, 0.3, M.get('gold'), x, y + 0.16, z, { tile: 1 });
-    B.box(0.24, 0.16, 0.24, M.emissive(0xffd9a8, 2.2), x, y + 0.02, z, { tile: 1 });
+    B.box(0.24, 0.16, 0.24, M.emissive(0xffd9a8, 1.6), x, y + 0.02, z, { tile: 1 });
   } else if (type === 'theater') {
     B.box(0.22, 0.1, 0.22, M.emissive(0xff8a5c, 1.4), x, y, z, { tile: 1 });
   } else {
     B.box(0.55, 0.05, 0.55, M.get('chrome'), x, y + 0.14, z, { tile: 1 });
-    B.box(0.46, 0.14, 0.46, M.emissive(0xfff0d8, 2.0), x, y + 0.02, z, { tile: 1 });
+    B.box(0.46, 0.14, 0.46, M.emissive(0xfff0d8, 1.5), x, y + 0.02, z, { tile: 1 });
   }
 }
 
@@ -547,7 +547,7 @@ function buildFoyerFeature(world) {
   }
   g.traverse((o) => { o.castShadow = false; });
   world.addProp(g);
-  world.addLight({ pos: new THREE.Vector3(0, 6.6, -8), color: 0xffdcb0, intensity: 70, distance: 30, room: 'Grand Foyer', floor: 'ground' });
+  world.addLight({ pos: new THREE.Vector3(0, 6.6, -8), color: 0xffdcb0, intensity: 42, decay: 1.8, distance: 34, room: 'Grand Foyer', floor: 'ground' });
 
   world.spot('frontDoor', 0, 0, -12.0);
   world.spot('foyer', 0, 0, -7.0);

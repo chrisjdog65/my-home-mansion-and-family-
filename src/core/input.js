@@ -124,7 +124,6 @@ const DEFAULTS = {
   headBob: true,
   shadows: 2,          // 0 off, 1 low, 2 high
   bloom: true,
-  ssao: true,
   renderScale: 1.0,
   quality: 2,          // 0 low, 1 med, 2 high
   volume: 0.7,

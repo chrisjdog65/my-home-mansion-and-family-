@@ -13,7 +13,6 @@ const SETTING_DEFS = [
   { key: 'quality', label: 'Detail', type: 'select', options: [[0, 'Low'], [1, 'Medium'], [2, 'High']] },
   { key: 'shadows', label: 'Shadows', type: 'select', options: [[0, 'Off'], [1, 'Soft'], [2, 'High']] },
   { key: 'bloom', label: 'Bloom', type: 'bool' },
-  { key: 'ssao', label: 'Ambient occlusion', type: 'bool' },
   { key: 'renderScale', label: 'Render scale', type: 'range', min: 0.5, max: 1.4, step: 0.05, fmt: (v) => `${Math.round(v * 100)}%` },
   { key: 'volume', label: 'Volume', type: 'range', min: 0, max: 1, step: 0.05, fmt: (v) => `${Math.round(v * 100)}%` },
   { key: 'timeScale', label: 'Time of day speed', type: 'range', min: 0, max: 6, step: 0.25, fmt: (v) => (v ? `${v}×` : 'frozen') },

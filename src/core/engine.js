@@ -7,7 +7,6 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
-import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 // A tiny grade/vignette/sharpen pass — this is what gives the image its final
@@ -92,15 +91,6 @@ export class Engine {
     this.renderPass = new RenderPass(this.scene, this.camera);
     this.composer.addPass(this.renderPass);
 
-    // Ambient occlusion renders the scene itself, so it stands in for the
-    // render pass rather than sitting on top of it.
-    this.ssao = new SSAOPass(this.scene, this.camera, 1, 1);
-    this.ssao.kernelRadius = 0.42;
-    this.ssao.minDistance = 0.0008;
-    this.ssao.maxDistance = 0.10;
-    this.ssao.enabled = false;
-    this.composer.addPass(this.ssao);
-
     this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.34, 0.72, 0.86);
     this.composer.addPass(this.bloom);
 
@@ -131,7 +121,6 @@ export class Engine {
     const dpr = this.renderer.getPixelRatio();
     this.grade.uniforms.resolution.value.set(w * dpr, h * dpr);
     this.bloom.setSize(w * dpr * 0.5, h * dpr * 0.5);
-    this.ssao?.setSize(w * dpr, h * dpr);
   }
 
   applySettings() {
@@ -140,9 +129,6 @@ export class Engine {
     this.camera.updateProjectionMatrix();
     this.bloom.enabled = !!s.bloom;
     this.smaa.enabled = s.quality > 0;
-    const wantAO = !!s.ssao && s.quality > 0;
-    this.ssao.enabled = wantAO;
-    this.renderPass.enabled = !wantAO;
     this.renderer.shadowMap.enabled = s.shadows > 0;
     this.renderer.shadowMap.needsUpdate = true;
     this.grade.uniforms.sharpness.value = s.quality === 0 ? 0.18 : 0.35;
