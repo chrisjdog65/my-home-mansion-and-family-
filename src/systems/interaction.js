@@ -85,6 +85,9 @@ export class Interaction {
         game.audio.startEngine();
         return 'engine';
       }
+      case 'bed':
+        game.sleepIn(i.seat || i.pos);
+        return null;
       case 'family':
         game.startDialogue(i.data);
         return null;

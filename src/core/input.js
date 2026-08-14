@@ -280,6 +280,7 @@ const DEFAULTS = {
   sharpness: 0.35,     // unsharp mask strength in the grade pass
   grass: 1.0,          // fraction of the grass tufts drawn
   volume: 0.7,
+  music: 0.5,
   showFps: false,
   timeScale: 1.0,      // day/night speed multiplier
 };

@@ -17,6 +17,7 @@ const SETTING_DEFS = [
   { key: 'renderScale', label: 'Render scale', type: 'range', min: 0.5, max: 1.6, step: 0.05, fmt: (v) => `${Math.round(v * 100)}%` },
   { key: 'grass', label: 'Grass density', type: 'range', min: 0, max: 1, step: 0.05, fmt: (v) => `${Math.round(v * 100)}%` },
   { key: 'volume', label: 'Volume', type: 'range', min: 0, max: 1, step: 0.05, fmt: (v) => `${Math.round(v * 100)}%` },
+  { key: 'music', label: 'Music', type: 'range', min: 0, max: 1, step: 0.05, fmt: (v) => (v ? `${Math.round(v * 100)}%` : 'off') },
   { key: 'timeScale', label: 'Time of day speed', type: 'range', min: 0, max: 6, step: 0.25, fmt: (v) => (v ? `${v}×` : 'frozen') },
   { key: 'showFps', label: 'Performance readout', type: 'bool' },
 ];
@@ -264,12 +265,51 @@ export class UI {
     this.el.compass.innerHTML = html;
     this._compassWidth = 40 * 16;
   }
-  setHeading(yaw) {
+  setHeading(yaw, tracked = null, from = null) {
     // yaw is unbounded — double-wrap so JS's signed % can't walk the strip
     // off its three-repetition band after a few full turns
     const deg = ((((-yaw * 180) / Math.PI) % 360) + 360) % 360;
     const px = (deg / 360) * this._compassWidth;
     this.el.compass.style.transform = `translateX(${-px - this._compassWidth + 140}px)`;
+
+    // a pip on the compass for whatever you still have to do
+    if (!this._pip) {
+      this._pip = document.createElement('div');
+      this._pip.id = 'obj-pip';
+      this.el.compass.parentElement.appendChild(this._pip);
+    }
+    if (!tracked || !tracked.where || !from) { this._pip.style.display = 'none'; this.setTrack(null); return; }
+    const bearing = Math.atan2(tracked.where.x - from.x, -(tracked.where.z - from.z));
+    let rel = ((bearing - yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+    const half = 1.15;                      // how much of the strip is on screen
+    if (Math.abs(rel) > half) { this._pip.style.display = 'none'; }
+    else {
+      this._pip.style.display = 'block';
+      this._pip.style.left = `calc(50% + ${(rel / half) * 140}px)`;
+    }
+    this.setTrack(tracked, Math.round(from.distanceTo(tracked.where)));
+  }
+
+  setTrack(o, dist) {
+    if (!this._track) {
+      this._track = document.createElement('div');
+      this._track.id = 'tracker';
+      this.el.hud.appendChild(this._track);
+    }
+    this._track.classList.toggle('hidden', !o);
+    if (o) this._track.innerHTML = `<b>${o.text}</b><small>${dist} m${o.hint ? ` · ${o.hint}` : ''}</small>`;
+  }
+
+  /** Full-screen fade, used when you turn in for the night. */
+  fade(to, ms) {
+    if (!this._fade) {
+      this._fade = document.createElement('div');
+      this._fade.id = 'fadeout';
+      document.body.appendChild(this._fade);
+    }
+    this._fade.style.transition = `opacity ${ms}ms ease`;
+    this._fade.style.opacity = String(to);
+    this._fade.style.pointerEvents = to > 0.5 ? 'auto' : 'none';
   }
 
   toast(title, sub) {

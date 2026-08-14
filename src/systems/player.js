@@ -214,7 +214,10 @@ export class Player {
       const gotX = this.capsule.start.x - bx, gotZ = this.capsule.start.z - bz;
       const want = Math.hypot(wantX, wantZ);
       if (want > 1e-4 && Math.hypot(gotX, gotZ) < want * 0.55 && (this.onGround || this.coyote > 0 || water)) {
-        this.tryStepUp(wantX - gotX, wantZ - gotZ);
+        // pass the *direction* we wanted to go, not what is left of it:
+        // collide() has already cancelled the velocity into the obstacle, so
+        // the leftover is a few millimetres and stepping it gets nowhere
+        this.tryStepUp(wantX / want, wantZ / want);
       }
     }
     // walking down stairs: glue to the treads instead of skipping airborne
@@ -233,29 +236,39 @@ export class Player {
 
   /**
    * Lift → move → drop. Capsule-vs-triangle collision alone treats a 20 cm kerb
-   * as a wall, so stairs, thresholds and pool coping need an explicit step.
+   * as a wall, so stairs, thresholds, slab edges and pool coping need an
+   * explicit step. `dirX/dirZ` is a unit direction: the reach has to be long
+   * enough to actually clear the obstruction's footprint, and it only commits
+   * when the player genuinely ends up higher, so this can never be used to
+   * skate along flat ground.
    */
-  tryStepUp(dx, dz) {
-    const STEP = 0.52;
+  tryStepUp(dirX, dirZ) {
+    const STEP = 0.55, REACH = 0.36;
+    const len = Math.hypot(dirX, dirZ);
+    if (len < 1e-6) return false;
+    const mx = (dirX / len) * REACH * 0.5, mz = (dirZ / len) * REACH * 0.5;
     const oct = this.world.octree;
     const s0 = this.capsule.start.clone(), e0 = this.capsule.end.clone();
     const restore = () => { this.capsule.start.copy(s0); this.capsule.end.copy(e0); };
 
     this.capsule.translate(this._v.set(0, STEP, 0));
     if (oct.capsuleIntersect(this.capsule)) { restore(); return false; }
-    this.capsule.translate(this._v.set(dx, 0, dz));
-    if (oct.capsuleIntersect(this.capsule)) { restore(); return false; }
+    // two half-steps, so a long reach can't skip through a thin wall
+    for (let i = 0; i < 2; i++) {
+      this.capsule.translate(this._v.set(mx, 0, mz));
+      if (oct.capsuleIntersect(this.capsule)) { restore(); return false; }
+    }
 
     for (let drop = 0; drop <= STEP + 0.05; drop += 0.045) {
       this.capsule.translate(this._v.set(0, -0.045, 0));
       const hit = oct.capsuleIntersect(this.capsule);
-      if (hit) {
-        if (hit.normal.y < 0.42) { restore(); return false; }   // landed on a wall, not a step
-        this.capsule.translate(this._v.copy(hit.normal).multiplyScalar(hit.depth + 0.001));
-        this.onGround = true;
-        if (this.velocity.y < 0) this.velocity.y = 0;
-        return true;
-      }
+      if (!hit) continue;
+      if (hit.normal.y < 0.42) { restore(); return false; }    // a wall, not a step
+      this.capsule.translate(this._v.copy(hit.normal).multiplyScalar(hit.depth + 0.001));
+      if (this.capsule.start.y < s0.y + 0.02) { restore(); return false; }
+      this.onGround = true;
+      if (this.velocity.y < 0) this.velocity.y = 0;
+      return true;
     }
     restore();
     return false;

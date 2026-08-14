@@ -28,7 +28,11 @@ export class Audio {
     this.noiseBuf = this.makeNoise(2.0);
     this.ready = true;
     this.ambience();
-    this.settings.onChange((k, v) => { if (k === 'volume') this.master.gain.value = v; });
+    this.startMusic();
+    this.settings.onChange((k, v) => {
+      if (k === 'volume') this.master.gain.value = v;
+      if (k === 'music' && this.musicGain) this.musicGain.gain.value = v * 0.5;
+    });
   }
 
   resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); }
@@ -180,6 +184,97 @@ export class Audio {
           this.blip({ freq: base * (1 + Math.random() * 0.4), type: 'sine', dur: 0.07, gain: 0.022, sweep: 400, at: i * 0.09 });
         }
       }
+    }
+  }
+
+  // ── music ───────────────────────────────────────────────────────────────
+  // A slow ambient score, synthesised like everything else here. Four chords
+  // in A major drifting round on a long loop, a soft pad underneath and a
+  // sparse pentatonic melody over the top — nothing insistent, nothing that
+  // repeats tightly enough to notice.
+  startMusic() {
+    if (!this.ready || this.musicGain) return;
+    const ctx = this.ctx;
+    this.musicGain = ctx.createGain();
+    this.musicGain.gain.value = (this.settings.music ?? 0.5) * 0.5;
+
+    // a little air around the notes
+    const wet = ctx.createGain(); wet.gain.value = 0.34;
+    const delay = ctx.createDelay(2.0); delay.delayTime.value = 0.42;
+    const fb = ctx.createGain(); fb.gain.value = 0.34;
+    const tone = ctx.createBiquadFilter();
+    tone.type = 'lowpass'; tone.frequency.value = 1900;
+    delay.connect(fb).connect(delay);
+    delay.connect(wet).connect(tone);
+    this.musicGain.connect(tone);
+    this.musicGain.connect(delay);
+    tone.connect(this.master);
+    this.musicDelay = delay;
+
+    // A major: A — F#m — D — E, as semitone offsets from A2 (110 Hz)
+    this.chords = [[0, 4, 7, 11], [-3, 0, 4, 9], [-7, -3, 0, 5], [-5, 0, 4, 7]];
+    this.scale = [0, 2, 4, 7, 9];         // major pentatonic, for the melody
+    this.musicStep = 0;
+    this.musicTimer = 0;
+    this.melodyTimer = 2.5;
+  }
+
+  /** One sustained voice with a long, soft attack. */
+  padNote(freq, dur, gain, type = 'sine', detune = 0) {
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    o.type = type;
+    o.frequency.value = freq;
+    o.detune.value = detune;
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(600, t);
+    f.frequency.linearRampToValueAtTime(1500, t + dur * 0.4);
+    f.frequency.linearRampToValueAtTime(700, t + dur);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(gain, t + dur * 0.35);      // slow swell
+    g.gain.setValueAtTime(gain, t + dur * 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(f).connect(g).connect(this.musicGain);
+    o.start(t); o.stop(t + dur + 0.1);
+  }
+
+  /** A single struck note — bell-ish, decays on its own. */
+  melodyNote(freq, gain) {
+    const t = this.ctx.currentTime;
+    for (const [mul, g2, ty] of [[1, 1, 'sine'], [2.01, 0.28, 'sine'], [3, 0.1, 'triangle']]) {
+      const o = this.ctx.createOscillator();
+      o.type = ty; o.frequency.value = freq * mul;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(gain * g2, t + 0.04);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 3.4);
+      o.connect(g).connect(this.musicGain);
+      o.start(t); o.stop(t + 3.5);
+    }
+  }
+
+  updateMusic(dt) {
+    if (!this.musicGain) return;
+    const hz = (semi) => 110 * Math.pow(2, semi / 12);
+    this.musicTimer -= dt;
+    if (this.musicTimer <= 0) {
+      this.musicTimer = 11.5;                      // a chord roughly every 11 s
+      const chord = this.chords[this.musicStep % this.chords.length];
+      this.musicStep++;
+      chord.forEach((semi, i) => {
+        this.padNote(hz(semi), 12.5, i === 0 ? 0.052 : 0.03, 'sine', (i - 1.5) * 4);
+        if (i === 0) this.padNote(hz(semi - 12), 12.5, 0.038, 'triangle');
+      });
+    }
+    this.melodyTimer -= dt;
+    if (this.melodyTimer <= 0) {
+      this.melodyTimer = 3.6 + Math.random() * 5.5;
+      const chord = this.chords[(this.musicStep - 1 + this.chords.length) % this.chords.length];
+      const semi = this.scale[Math.floor(Math.random() * this.scale.length)]
+        + (chord[0] > -5 ? 12 : 24) + (Math.random() < 0.3 ? 12 : 0);
+      this.melodyNote(hz(semi), 0.03 + Math.random() * 0.018);
     }
   }
 

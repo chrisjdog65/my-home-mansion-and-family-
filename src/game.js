@@ -349,6 +349,20 @@ export class Game {
       o('bowl', 'Drop into the skate bowl', 'Far end of the back yard'),
       o('drive', 'Take the Lamborghini down the drive', 'Press F next to it'),
     ];
+    // where each objective actually is, so the HUD can point you at it
+    const W = this.world;
+    const at = (o, v) => { const ob = this.objectives.find((x) => x.id === o); if (ob && v) ob.where = v.pos || v; };
+    at('fire', W.spots.fireplaceSeat);
+    at('pc', W.rooms.find((r) => r.type === 'gaming')?.center);
+    at('movie', W.spots.theaterSeat);
+    at('hoop', W.hoops[0]?.center);
+    at('strike', W.spots.bowlingAlley);
+    at('swim', W.spots.poolWater || W.spots.poolEdge);
+    at('bowl', W.spots.skateBowl);
+    at('drive', this.lambo?.pos);
+    at('greet', W.spots.kitchen);
+    at('kids', W.rooms.find((r) => r.type === 'gaming')?.center);
+
     // progress survives a reload — including where you left off standing
     const save = this.loadSave();
     for (const id of save.done || []) {
@@ -484,6 +498,35 @@ export class Game {
     this.player.dialogue = false;
     this.ui.hideDialogue();
     if (this.state === 'play') this.input.requestLock();
+  }
+
+  /** Turn in for the night: fade out, run the clock round to morning. */
+  sleepIn() {
+    if (this._sleeping) return;
+    this._sleeping = true;
+    const wake = this.sky.time < 4 || this.sky.time > 12 ? 7.4 : 20.5;
+    this.ui.fade(1, 900);
+    this.audio.play('chime');
+    setTimeout(() => {
+      this.sky.setTime(wake);
+      this.sky.updateEnv(true);
+      this.ui.fade(0, 1400);
+      this.ui.toast(wake < 12 ? 'Morning' : 'Evening',
+        wake < 12 ? 'The house is quiet — the kettle is on' : 'The light has gone off the mountains');
+      this._sleeping = false;
+      this.persist();
+    }, 1000);
+  }
+
+  /** The nearest thing still to do, for the HUD's tracker. */
+  trackedObjective() {
+    let best = null, bd = Infinity;
+    for (const o of this.objectives) {
+      if (o.done || !o.where) continue;
+      const d = this.player.position.distanceToSquared(o.where);
+      if (d < bd) { bd = d; best = o; }
+    }
+    return best || this.objectives.find((o) => !o.done) || null;
   }
 
   playPiano() {
@@ -704,18 +747,26 @@ export class Game {
     // ── HUD ──
     const room = W.roomAt(P.position);
     const place = room ? room.name : this.placeOutside(P.position);
+
+    // Eyes adjust when you step indoors. The sky sets the exposure for the
+    // outdoors every frame, so lift it here — without this the interiors read
+    // flat and dim next to a sunlit yard.
+    const wantIndoor = room ? (room.y < -1 ? 1 : 0.72) : 0;
+    this._indoor = damp(this._indoor ?? wantIndoor, wantIndoor, 1.3, dt);
+    this.engine.renderer.toneMappingExposure *= 1 + this._indoor * 0.3;
     if (room && !this.discovered.has(room.name)) {
       this.discovered.add(room.name);
       this.ui.toast(room.name, room.floorName || 'Discovered');
       this.persist();
     }
     this.ui.setClock(this.sky.clockString(), place);
-    this.ui.setHeading(P.yaw);
+    this.ui.setHeading(P.yaw, this.trackedObjective(), P.position);
     // 30 Hz is plenty for a minimap
     this._mapT = (this._mapT || 0) - dt;
     if (this._mapT <= 0) { this._mapT = 0.033; this.ui.drawMinimap(W, P, this.family); }
 
     // ── audio bed ──
+    this.audio.updateMusic(dt);
     const wf = W.spots.waterfall;
     this.audio.update(dt, {
       outside: !room,

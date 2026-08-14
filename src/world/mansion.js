@@ -781,8 +781,10 @@ function buildStairs(world) {
     railing(world, post, rail, -24.75, 0, -1.95, 6.3, 0, 1.0);
     railing(world, post, rail, -24.75, 0, 1.95, 6.3, 0, 1.0);
     railing(world, post, rail, -27.95, 0, 0, 3.9, Math.PI / 2, 1.0);
-    railing(world, post, rail, -21.55, 0, 0.85, 2.1, Math.PI / 2, 1.0);    // drop over flight B
-    railing(world, post, rail, -21.55, 0, -1.75, 0.3, Math.PI / 2, 1.0);   // sliver north of the mouth
+    // The mouth is left wide enough that walking straight in through the
+    // hall's archway puts you on flight A — the old 1.4 m slot sat off the
+    // arch's centreline, so the way down read as walled off.
+    railing(world, post, rail, -21.55, 0, 1.125, 1.55, Math.PI / 2, 1.0);  // drop over flight B
     world.spot('basementStairTop', -20.6, 0, -0.9);
     world.spot('basementStairBottom', -22.2, -6.0, 0.9);
     world.stairLinks.push({ a: new THREE.Vector3(-20.8, 0, -0.9), b: new THREE.Vector3(-22.2, -6.0, 0.9), via: new THREE.Vector3(-26.8, -3.4, 0) });

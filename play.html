@@ -154,6 +154,20 @@ button.primary:active{transform:translateY(1px)}
 #loadtip{margin-top:14px; max-width:460px; color:var(--dim); font-size:12.5px; line-height:1.5; opacity:.85}
 #loadtip b{color:var(--gold); font-weight:600}
 
+/* ── objective tracker ───────────────────────────────────────── */
+#obj-pip{position:absolute; top:2px; width:0; height:0; margin-left:-6px;
+  border-left:6px solid transparent; border-right:6px solid transparent; border-top:8px solid var(--gold);
+  filter:drop-shadow(0 1px 2px rgba(0,0,0,.7)); pointer-events:none}
+#tracker{position:fixed; top:62px; left:50%; transform:translateX(-50%); text-align:center;
+  pointer-events:none; text-shadow:0 1px 3px rgba(0,0,0,.85); line-height:1.35}
+#tracker b{display:block; font-weight:400; font-size:13px; color:var(--ink); letter-spacing:.02em}
+#tracker small{display:block; font-size:11px; color:var(--gold); opacity:.9;
+  font-variant-numeric:tabular-nums; letter-spacing:.03em}
+#tracker.hidden{display:none}
+
+/* ── sleep fade ──────────────────────────────────────────────── */
+#fadeout{position:fixed; inset:0; z-index:70; background:#05070a; opacity:0; pointer-events:none}
+
 /* ── first-run hint card ─────────────────────────────────────── */
 #hint{position:fixed; inset:0; z-index:60; display:flex; flex-direction:column; align-items:center;
   justify-content:center; gap:16px; background:rgba(8,10,14,.62); backdrop-filter:blur(3px);
@@ -25310,6 +25324,7 @@ var DEFAULTS = {
   grass: 1,
   // fraction of the grass tufts drawn
   volume: 0.7,
+  music: 0.5,
   showFps: false,
   timeScale: 1
   // day/night speed multiplier
@@ -27838,8 +27853,7 @@ function buildStairs(world) {
     railing(world, post, rail, -24.75, 0, -1.95, 6.3, 0, 1);
     railing(world, post, rail, -24.75, 0, 1.95, 6.3, 0, 1);
     railing(world, post, rail, -27.95, 0, 0, 3.9, Math.PI / 2, 1);
-    railing(world, post, rail, -21.55, 0, 0.85, 2.1, Math.PI / 2, 1);
-    railing(world, post, rail, -21.55, 0, -1.75, 0.3, Math.PI / 2, 1);
+    railing(world, post, rail, -21.55, 0, 1.125, 1.55, Math.PI / 2, 1);
     world.spot("basementStairTop", -20.6, 0, -0.9);
     world.spot("basementStairBottom", -22.2, -6, 0.9);
     world.stairLinks.push({ a: new Vector3(-20.8, 0, -0.9), b: new Vector3(-22.2, -6, 0.9), via: new Vector3(-26.8, -3.4, 0) });
@@ -30536,13 +30550,30 @@ function buildTerrain(world) {
   ground.receiveShadow = true;
   ground.name = "lawn";
   scene.add(ground);
-  const cg = new PlaneGeometry(NEAR * 2, NEAR * 2, 44, 44);
-  cg.rotateX(-Math.PI / 2);
-  const cp = cg.attributes.position;
-  for (let i = 0; i < cp.count; i++) cp.setY(i, groundHeight(cp.getX(i), cp.getZ(i)) - 0.06);
-  cg.computeVertexNormals();
-  const cm = new Mesh(cg, world.colliderMat);
-  world.colliderRoot.add(cm);
+  const cutGrid = (size, segs, dropTri) => {
+    const cg = new PlaneGeometry(size, size, segs, segs);
+    cg.rotateX(-Math.PI / 2);
+    const cp = cg.attributes.position;
+    for (let i = 0; i < cp.count; i++) cp.setY(i, groundHeight(cp.getX(i), cp.getZ(i)) - 0.06);
+    const idx = cg.index.array;
+    const keep = [];
+    const xs = [0, 0, 0], zs = [0, 0, 0];
+    for (let i = 0; i < idx.length; i += 3) {
+      for (let k = 0; k < 3; k++) {
+        xs[k] = cp.getX(idx[i + k]);
+        zs[k] = cp.getZ(idx[i + k]);
+      }
+      if (dropTri(xs, zs)) continue;
+      keep.push(idx[i], idx[i + 1], idx[i + 2]);
+    }
+    cg.setIndex(keep);
+    cg.computeVertexNormals();
+    world.colliderRoot.add(new Mesh(cg, world.colliderMat));
+  };
+  const NEARC = 60;
+  const inHouse = (x, z) => x >= HOUSE.x0 && x <= HOUSE.x1 && z >= HOUSE.z0 && z <= HOUSE.z1;
+  cutGrid(NEARC * 2, 80, (xs, zs) => inHouse(xs[0], zs[0]) && inHouse(xs[1], zs[1]) && inHouse(xs[2], zs[2]));
+  cutGrid(NEAR * 2, 44, (xs, zs) => xs.every((x, k) => Math.abs(x) < NEARC && Math.abs(zs[k]) < NEARC));
   const far = new PlaneGeometry(2400, 2400, 120, 120);
   far.rotateX(-Math.PI / 2);
   const fp = far.attributes.position;
@@ -32378,7 +32409,7 @@ var Player = class {
       const gotX = this.capsule.start.x - bx, gotZ = this.capsule.start.z - bz;
       const want = Math.hypot(wantX, wantZ);
       if (want > 1e-4 && Math.hypot(gotX, gotZ) < want * 0.55 && (this.onGround || this.coyote > 0 || water)) {
-        this.tryStepUp(wantX - gotX, wantZ - gotZ);
+        this.tryStepUp(wantX / want, wantZ / want);
       }
     }
     if (wasGrounded && !this.onGround && !this._jumped && !water && this.velocity.y <= 0.01) {
@@ -32392,10 +32423,17 @@ var Player = class {
   }
   /**
    * Lift → move → drop. Capsule-vs-triangle collision alone treats a 20 cm kerb
-   * as a wall, so stairs, thresholds and pool coping need an explicit step.
+   * as a wall, so stairs, thresholds, slab edges and pool coping need an
+   * explicit step. `dirX/dirZ` is a unit direction: the reach has to be long
+   * enough to actually clear the obstruction's footprint, and it only commits
+   * when the player genuinely ends up higher, so this can never be used to
+   * skate along flat ground.
    */
-  tryStepUp(dx, dz) {
-    const STEP = 0.52;
+  tryStepUp(dirX, dirZ) {
+    const STEP = 0.55, REACH = 0.36;
+    const len = Math.hypot(dirX, dirZ);
+    if (len < 1e-6) return false;
+    const mx = dirX / len * REACH * 0.5, mz = dirZ / len * REACH * 0.5;
     const oct = this.world.octree;
     const s0 = this.capsule.start.clone(), e0 = this.capsule.end.clone();
     const restore = () => {
@@ -32407,24 +32445,29 @@ var Player = class {
       restore();
       return false;
     }
-    this.capsule.translate(this._v.set(dx, 0, dz));
-    if (oct.capsuleIntersect(this.capsule)) {
-      restore();
-      return false;
+    for (let i = 0; i < 2; i++) {
+      this.capsule.translate(this._v.set(mx, 0, mz));
+      if (oct.capsuleIntersect(this.capsule)) {
+        restore();
+        return false;
+      }
     }
     for (let drop = 0; drop <= STEP + 0.05; drop += 0.045) {
       this.capsule.translate(this._v.set(0, -0.045, 0));
       const hit = oct.capsuleIntersect(this.capsule);
-      if (hit) {
-        if (hit.normal.y < 0.42) {
-          restore();
-          return false;
-        }
-        this.capsule.translate(this._v.copy(hit.normal).multiplyScalar(hit.depth + 1e-3));
-        this.onGround = true;
-        if (this.velocity.y < 0) this.velocity.y = 0;
-        return true;
+      if (!hit) continue;
+      if (hit.normal.y < 0.42) {
+        restore();
+        return false;
       }
+      this.capsule.translate(this._v.copy(hit.normal).multiplyScalar(hit.depth + 1e-3));
+      if (this.capsule.start.y < s0.y + 0.02) {
+        restore();
+        return false;
+      }
+      this.onGround = true;
+      if (this.velocity.y < 0) this.velocity.y = 0;
+      return true;
     }
     restore();
     return false;
@@ -33028,6 +33071,9 @@ var Interaction = class {
         game.audio.startEngine();
         return "engine";
       }
+      case "bed":
+        game.sleepIn(i.seat || i.pos);
+        return null;
       case "family":
         game.startDialogue(i.data);
         return null;
@@ -33063,8 +33109,10 @@ var Audio = class {
     this.noiseBuf = this.makeNoise(2);
     this.ready = true;
     this.ambience();
+    this.startMusic();
     this.settings.onChange((k, v) => {
       if (k === "volume") this.master.gain.value = v;
+      if (k === "music" && this.musicGain) this.musicGain.gain.value = v * 0.5;
     });
   }
   resume() {
@@ -33245,6 +33293,95 @@ var Audio = class {
           this.blip({ freq: base * (1 + Math.random() * 0.4), type: "sine", dur: 0.07, gain: 0.022, sweep: 400, at: i * 0.09 });
         }
       }
+    }
+  }
+  // ── music ───────────────────────────────────────────────────────────────
+  // A slow ambient score, synthesised like everything else here. Four chords
+  // in A major drifting round on a long loop, a soft pad underneath and a
+  // sparse pentatonic melody over the top — nothing insistent, nothing that
+  // repeats tightly enough to notice.
+  startMusic() {
+    if (!this.ready || this.musicGain) return;
+    const ctx = this.ctx;
+    this.musicGain = ctx.createGain();
+    this.musicGain.gain.value = (this.settings.music ?? 0.5) * 0.5;
+    const wet = ctx.createGain();
+    wet.gain.value = 0.34;
+    const delay = ctx.createDelay(2);
+    delay.delayTime.value = 0.42;
+    const fb2 = ctx.createGain();
+    fb2.gain.value = 0.34;
+    const tone = ctx.createBiquadFilter();
+    tone.type = "lowpass";
+    tone.frequency.value = 1900;
+    delay.connect(fb2).connect(delay);
+    delay.connect(wet).connect(tone);
+    this.musicGain.connect(tone);
+    this.musicGain.connect(delay);
+    tone.connect(this.master);
+    this.musicDelay = delay;
+    this.chords = [[0, 4, 7, 11], [-3, 0, 4, 9], [-7, -3, 0, 5], [-5, 0, 4, 7]];
+    this.scale = [0, 2, 4, 7, 9];
+    this.musicStep = 0;
+    this.musicTimer = 0;
+    this.melodyTimer = 2.5;
+  }
+  /** One sustained voice with a long, soft attack. */
+  padNote(freq, dur, gain, type = "sine", detune = 0) {
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    o.type = type;
+    o.frequency.value = freq;
+    o.detune.value = detune;
+    const f = this.ctx.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.setValueAtTime(600, t);
+    f.frequency.linearRampToValueAtTime(1500, t + dur * 0.4);
+    f.frequency.linearRampToValueAtTime(700, t + dur);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(1e-4, t);
+    g.gain.linearRampToValueAtTime(gain, t + dur * 0.35);
+    g.gain.setValueAtTime(gain, t + dur * 0.6);
+    g.gain.exponentialRampToValueAtTime(1e-4, t + dur);
+    o.connect(f).connect(g).connect(this.musicGain);
+    o.start(t);
+    o.stop(t + dur + 0.1);
+  }
+  /** A single struck note — bell-ish, decays on its own. */
+  melodyNote(freq, gain) {
+    const t = this.ctx.currentTime;
+    for (const [mul, g2, ty] of [[1, 1, "sine"], [2.01, 0.28, "sine"], [3, 0.1, "triangle"]]) {
+      const o = this.ctx.createOscillator();
+      o.type = ty;
+      o.frequency.value = freq * mul;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(1e-4, t);
+      g.gain.exponentialRampToValueAtTime(gain * g2, t + 0.04);
+      g.gain.exponentialRampToValueAtTime(1e-4, t + 3.4);
+      o.connect(g).connect(this.musicGain);
+      o.start(t);
+      o.stop(t + 3.5);
+    }
+  }
+  updateMusic(dt) {
+    if (!this.musicGain) return;
+    const hz = (semi) => 110 * Math.pow(2, semi / 12);
+    this.musicTimer -= dt;
+    if (this.musicTimer <= 0) {
+      this.musicTimer = 11.5;
+      const chord = this.chords[this.musicStep % this.chords.length];
+      this.musicStep++;
+      chord.forEach((semi, i) => {
+        this.padNote(hz(semi), 12.5, i === 0 ? 0.052 : 0.03, "sine", (i - 1.5) * 4);
+        if (i === 0) this.padNote(hz(semi - 12), 12.5, 0.038, "triangle");
+      });
+    }
+    this.melodyTimer -= dt;
+    if (this.melodyTimer <= 0) {
+      this.melodyTimer = 3.6 + Math.random() * 5.5;
+      const chord = this.chords[(this.musicStep - 1 + this.chords.length) % this.chords.length];
+      const semi = this.scale[Math.floor(Math.random() * this.scale.length)] + (chord[0] > -5 ? 12 : 24) + (Math.random() < 0.3 ? 12 : 0);
+      this.melodyNote(hz(semi), 0.03 + Math.random() * 0.018);
     }
   }
   startEngine() {
@@ -33740,6 +33877,7 @@ var SETTING_DEFS = [
   { key: "renderScale", label: "Render scale", type: "range", min: 0.5, max: 1.6, step: 0.05, fmt: (v) => `${Math.round(v * 100)}%` },
   { key: "grass", label: "Grass density", type: "range", min: 0, max: 1, step: 0.05, fmt: (v) => `${Math.round(v * 100)}%` },
   { key: "volume", label: "Volume", type: "range", min: 0, max: 1, step: 0.05, fmt: (v) => `${Math.round(v * 100)}%` },
+  { key: "music", label: "Music", type: "range", min: 0, max: 1, step: 0.05, fmt: (v) => v ? `${Math.round(v * 100)}%` : "off" },
   { key: "timeScale", label: "Time of day speed", type: "range", min: 0, max: 6, step: 0.25, fmt: (v) => v ? `${v}\xD7` : "frozen" },
   { key: "showFps", label: "Performance readout", type: "bool" }
 ];
@@ -34022,10 +34160,50 @@ var UI = class {
     this.el.compass.innerHTML = html;
     this._compassWidth = 40 * 16;
   }
-  setHeading(yaw) {
+  setHeading(yaw, tracked = null, from = null) {
     const deg = (-yaw * 180 / Math.PI % 360 + 360) % 360;
     const px3 = deg / 360 * this._compassWidth;
     this.el.compass.style.transform = `translateX(${-px3 - this._compassWidth + 140}px)`;
+    if (!this._pip) {
+      this._pip = document.createElement("div");
+      this._pip.id = "obj-pip";
+      this.el.compass.parentElement.appendChild(this._pip);
+    }
+    if (!tracked || !tracked.where || !from) {
+      this._pip.style.display = "none";
+      this.setTrack(null);
+      return;
+    }
+    const bearing = Math.atan2(tracked.where.x - from.x, -(tracked.where.z - from.z));
+    let rel = ((bearing - yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+    const half = 1.15;
+    if (Math.abs(rel) > half) {
+      this._pip.style.display = "none";
+    } else {
+      this._pip.style.display = "block";
+      this._pip.style.left = `calc(50% + ${rel / half * 140}px)`;
+    }
+    this.setTrack(tracked, Math.round(from.distanceTo(tracked.where)));
+  }
+  setTrack(o, dist) {
+    if (!this._track) {
+      this._track = document.createElement("div");
+      this._track.id = "tracker";
+      this.el.hud.appendChild(this._track);
+    }
+    this._track.classList.toggle("hidden", !o);
+    if (o) this._track.innerHTML = `<b>${o.text}</b><small>${dist} m${o.hint ? ` \xB7 ${o.hint}` : ""}</small>`;
+  }
+  /** Full-screen fade, used when you turn in for the night. */
+  fade(to, ms) {
+    if (!this._fade) {
+      this._fade = document.createElement("div");
+      this._fade.id = "fadeout";
+      document.body.appendChild(this._fade);
+    }
+    this._fade.style.transition = `opacity ${ms}ms ease`;
+    this._fade.style.opacity = String(to);
+    this._fade.style.pointerEvents = to > 0.5 ? "auto" : "none";
   }
   toast(title, sub) {
     const el = document.createElement("div");
@@ -34624,6 +34802,21 @@ var Game = class {
       o("bowl", "Drop into the skate bowl", "Far end of the back yard"),
       o("drive", "Take the Lamborghini down the drive", "Press F next to it")
     ];
+    const W = this.world;
+    const at = (o2, v) => {
+      const ob = this.objectives.find((x) => x.id === o2);
+      if (ob && v) ob.where = v.pos || v;
+    };
+    at("fire", W.spots.fireplaceSeat);
+    at("pc", W.rooms.find((r) => r.type === "gaming")?.center);
+    at("movie", W.spots.theaterSeat);
+    at("hoop", W.hoops[0]?.center);
+    at("strike", W.spots.bowlingAlley);
+    at("swim", W.spots.poolWater || W.spots.poolEdge);
+    at("bowl", W.spots.skateBowl);
+    at("drive", this.lambo?.pos);
+    at("greet", W.spots.kitchen);
+    at("kids", W.rooms.find((r) => r.type === "gaming")?.center);
     const save = this.loadSave();
     for (const id of save.done || []) {
       const ob = this.objectives.find((x) => x.id === id);
@@ -34762,6 +34955,38 @@ var Game = class {
     this.player.dialogue = false;
     this.ui.hideDialogue();
     if (this.state === "play") this.input.requestLock();
+  }
+  /** Turn in for the night: fade out, run the clock round to morning. */
+  sleepIn() {
+    if (this._sleeping) return;
+    this._sleeping = true;
+    const wake = this.sky.time < 4 || this.sky.time > 12 ? 7.4 : 20.5;
+    this.ui.fade(1, 900);
+    this.audio.play("chime");
+    setTimeout(() => {
+      this.sky.setTime(wake);
+      this.sky.updateEnv(true);
+      this.ui.fade(0, 1400);
+      this.ui.toast(
+        wake < 12 ? "Morning" : "Evening",
+        wake < 12 ? "The house is quiet \u2014 the kettle is on" : "The light has gone off the mountains"
+      );
+      this._sleeping = false;
+      this.persist();
+    }, 1e3);
+  }
+  /** The nearest thing still to do, for the HUD's tracker. */
+  trackedObjective() {
+    let best = null, bd = Infinity;
+    for (const o of this.objectives) {
+      if (o.done || !o.where) continue;
+      const d2 = this.player.position.distanceToSquared(o.where);
+      if (d2 < bd) {
+        bd = d2;
+        best = o;
+      }
+    }
+    return best || this.objectives.find((o) => !o.done) || null;
   }
   playPiano() {
     const notes = [523.25, 587.33, 659.25, 783.99, 880, 659.25, 587.33, 523.25];
@@ -34968,12 +35193,13 @@ ${info.calls} calls \xB7 ${(info.triangles / 1e3).toFixed(0)}k tris`);
       this.persist();
     }
     this.ui.setClock(this.sky.clockString(), place);
-    this.ui.setHeading(P.yaw);
+    this.ui.setHeading(P.yaw, this.trackedObjective(), P.position);
     this._mapT = (this._mapT || 0) - dt;
     if (this._mapT <= 0) {
       this._mapT = 0.033;
       this.ui.drawMinimap(W, P, this.family);
     }
+    this.audio.updateMusic(dt);
     const wf = W.spots.waterfall;
     this.audio.update(dt, {
       outside: !room,

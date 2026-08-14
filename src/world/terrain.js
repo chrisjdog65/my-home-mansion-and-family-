@@ -9,6 +9,7 @@ import { makeRng } from '../core/rng.js';
 import { planarUV } from './build.js';
 import { Atmosphere } from './atmosphere.js';
 import { plantGrass } from './vegetation.js';
+import { HOUSE } from './plan.js';
 
 const noise = makeNoise2D(31415);
 
@@ -105,14 +106,37 @@ export function buildTerrain(world) {
   ground.name = 'lawn';
   scene.add(ground);
 
-  // coarse collision copy
-  const cg = new THREE.PlaneGeometry(NEAR * 2, NEAR * 2, 44, 44);
-  cg.rotateX(-Math.PI / 2);
-  const cp = cg.attributes.position;
-  for (let i = 0; i < cp.count; i++) cp.setY(i, groundHeight(cp.getX(i), cp.getZ(i)) - 0.06);
-  cg.computeVertexNormals();
-  const cm = new THREE.Mesh(cg, world.colliderMat);
-  world.colliderRoot.add(cm);
+  // ── collision surface ───────────────────────────────────────────────────
+  // Two grids. The near one is fine enough to cut the house's footprint out
+  // cleanly: the lawn's collider used to run straight under the mansion, so
+  // the basement stairwell was floored at ground level — you walked out over
+  // the void and could never get downstairs. Inside the walls the house's own
+  // slabs carry you, and its stair holes are finally open.
+  const cutGrid = (size, segs, dropTri) => {
+    const cg = new THREE.PlaneGeometry(size, size, segs, segs);
+    cg.rotateX(-Math.PI / 2);
+    const cp = cg.attributes.position;
+    for (let i = 0; i < cp.count; i++) cp.setY(i, groundHeight(cp.getX(i), cp.getZ(i)) - 0.06);
+    const idx = cg.index.array;
+    const keep = [];
+    const xs = [0, 0, 0], zs = [0, 0, 0];
+    for (let i = 0; i < idx.length; i += 3) {
+      for (let k = 0; k < 3; k++) { xs[k] = cp.getX(idx[i + k]); zs[k] = cp.getZ(idx[i + k]); }
+      if (dropTri(xs, zs)) continue;
+      keep.push(idx[i], idx[i + 1], idx[i + 2]);
+    }
+    cg.setIndex(keep);
+    cg.computeVertexNormals();
+    world.colliderRoot.add(new THREE.Mesh(cg, world.colliderMat));
+  };
+
+  const NEARC = 60;    // half-extent of the fine grid, in metres
+  const inHouse = (x, z) => x >= HOUSE.x0 && x <= HOUSE.x1 && z >= HOUSE.z0 && z <= HOUSE.z1;
+  // A triangle is dropped only when all three corners are inside the house,
+  // so the ground is never missing on the outside of a wall.
+  cutGrid(NEARC * 2, 80, (xs, zs) => inHouse(xs[0], zs[0]) && inHouse(xs[1], zs[1]) && inHouse(xs[2], zs[2]));
+  // the far ring keeps whatever the fine grid does not already cover
+  cutGrid(NEAR * 2, 44, (xs, zs) => xs.every((x, k) => Math.abs(x) < NEARC && Math.abs(zs[k]) < NEARC));
 
   // ── distant terrain ring ────────────────────────────────────────────────
   const far = new THREE.PlaneGeometry(2400, 2400, 120, 120);
