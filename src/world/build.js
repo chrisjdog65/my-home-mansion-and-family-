@@ -159,8 +159,13 @@ export function stairs(batch, mat, x, y, z, width, steps, rise, run, rotY = 0, t
   return { top: y + steps * rise, length: steps * run };
 }
 
-/** Railing: posts + top rail along X. */
-export function railing(batch, matPost, matRail, cx, y, cz, len, rotY = 0, h = 1.05, spacing = 0.9) {
+/**
+ * Railing: posts + top rail along X. Takes the world rather than a batch so it
+ * can register collision — a guard rail you can walk through is worse than no
+ * rail at all.
+ */
+export function railing(world, matPost, matRail, cx, y, cz, len, rotY = 0, h = 1.05, spacing = 0.9) {
+  const batch = world.static;
   const n = Math.max(2, Math.round(len / spacing));
   for (let i = 0; i <= n; i++) {
     const lx = -len / 2 + (i / n) * len;
@@ -169,6 +174,7 @@ export function railing(batch, matPost, matRail, cx, y, cz, len, rotY = 0, h = 1
   }
   batch.box(len, 0.07, 0.11, matRail, cx, y + h, cz, { rotY, tile: 1 });
   batch.box(len, 0.05, 0.05, matRail, cx, y + h * 0.45, cz, { rotY, tile: 1 });
+  world.collider(len, h, 0.14, cx, y + h / 2, cz, rotY);
 }
 
 export const deg = (d) => (d * Math.PI) / 180;

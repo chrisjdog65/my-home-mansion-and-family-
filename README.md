@@ -48,7 +48,7 @@ three stone chimneys.
 | **Lower level** | Movie theater with a 3.6 m screen, tiered recliners and a projector beam · two-lane bowling alley with real pins · full basketball court with glass backboards and bleachers · gym · laundry & utility · workshop · storage · bathroom |
 | **Main floor** | Double-height great room with a stone fireplace and a glass wall onto the terrace · second family room with its own fireplace · chef's kitchen with island and pendants · dining hall · library & study · grand foyer with chandelier and a 24-step staircase · powder room · mud room · butler's pantry · three-car garage · laundry · sunroom |
 | **Second floor** | Master suite with ensuite bath · James's room · Chloie's room · Jack & Jill bath · gaming room · six more bedrooms · gallery overlooking the great room and foyer |
-| **Third floor** | Twelve bedrooms including a bunk room, a loft gaming room and three baths |
+| **Third floor** | Thirteen bedrooms including a bunk room, a loft gaming room and three baths |
 
 ## The grounds
 

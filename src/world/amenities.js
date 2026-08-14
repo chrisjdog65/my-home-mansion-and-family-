@@ -160,7 +160,7 @@ export function bowling(k, R) {
     });
   }
   // seating along the back wall
-  for (let i = 0; i < 4; i++) barstool(k, foulX + 3.2, R.z - 5.1 + i * 3.4, y, { rotY: -Math.PI / 2 });
+  for (let i = 0; i < 4; i++) barstool(k, foulX + 3.2, R.z - 5.1 + i * 3.4, y, { rotY: Math.PI / 2 });
   // neon
   B.box(0.1, 0.2, R.d - 2, M.emissive(0xff3f8a, 2.4), R.x - R.w / 2 + 0.3, y + 3.6, R.z, { tile: 0.5 });
   B.box(0.1, 0.2, R.d - 2, M.emissive(0x3fd0ff, 2.4), R.x + R.w / 2 - 0.3, y + 3.6, R.z, { tile: 0.5 });
@@ -210,7 +210,7 @@ function ringLine(k, x, y, z, r, mat) {
   const n = 34;
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2;
-    k.B.box(0.3, 0.006, 0.08, mat, x + Math.cos(a) * r, y, z + Math.sin(a) * r, { rotY: -a, tile: 0.3 });
+    k.B.box(0.3, 0.006, 0.08, mat, x + Math.cos(a) * r, y, z + Math.sin(a) * r, { rotY: Math.PI / 2 - a, tile: 0.3 });
   }
 }
 

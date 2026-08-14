@@ -42,7 +42,7 @@ export const GROUND_ROOMS = [
   { name: "Butler's Pantry", ...N(17, 21), floor: 'tile', wall: 0xdad2c3, doors: [d('s', 0, 1.0)], type: 'pantry' },
   { name: 'Garage', ...N(21, 30), floor: 'polishedConcrete', wall: 0xbfc4c8, doors: [d('s', 0, 1.1), d('w', 0, 1.1)], type: 'garage', garageDoors: true },
 
-  { name: 'Great Room', ...S(-30, -18), floor: 'oakFloor', wall: 0xe6ded0, doors: [d('n', 0, 3.2)], type: 'great', tall: true, glassSouth: true },
+  { name: 'Great Room', ...S(-30, -18), floor: 'oakFloor', wall: 0xe6ded0, doors: [d('n', 4.4, 2.6)], type: 'great', tall: true, glassSouth: true },
   { name: 'Family Room', ...S(-18, -8), floor: 'oakFloor', wall: 0xd8cfc0, doors: [d('n', 0, 2.6), d('w', 0, 2.4)], type: 'family' },
   { name: 'Kitchen', ...S(-8, 4), floor: 'tile', wall: 0xe8e6e0, doors: [d('n', 0, 2.6), d('w', 0, 2.2)], type: 'kitchen' },
   { name: 'Breakfast Sunroom', ...S(4, 12), floor: 'tile', wall: 0xf0ece1, doors: [d('n', 0, 1.6), d('w', 0, 2.2)], type: 'sunroom', glassSouth: true },
@@ -87,7 +87,7 @@ export const THIRD_ROOMS = [
   { name: 'Loft Gaming Room', ...S(-1, 9), floor: 'carpet', wall: 0x151a24, doors: [d('n', 0, 1.4)], type: 'gaming' },
   { name: 'Bath — Loft', ...S(9, 13.5), floor: 'tile', wall: 0xd8e2e6, doors: [d('n', 0, 0.9)], type: 'bath' },
   { name: 'Bunk Room', ...S(13.5, 21), floor: 'carpet', wall: 0xbfd0d8, doors: [d('n', -2.5, 1.0)], type: 'bedroom' },
-  { name: 'Bedroom — Skyline', ...S(21, 25.5), floor: 'carpet', wall: 0xcbc5b8, doors: [d('n', 0, 1.0)], type: 'bedroom' },
+  { name: 'Bedroom — Skyline', ...S(21, 25.5), floor: 'carpet', wall: 0xcbc5b8, doors: [d('n', 0.75, 1.0)], type: 'bedroom' },
   { name: 'Bedroom — Lantern', ...S(25.5, 30), floor: 'carpet', wall: 0xc6bfae, doors: [d('n', 0, 1.0)], type: 'bedroom' },
 ];
 
@@ -117,14 +117,14 @@ export const FLOOR_ROOMS = {
 export const SLAB_HOLES = {
   basement: [],
   ground: [
-    { x0: -28.2, x1: -21.2, z0: -1.9, z1: 1.9 },        // stair down to the lower level
+    { x0: -27.9, x1: -21.6, z0: -1.9, z1: 1.9 },        // flush with the first tread
   ],
   second: [
     { x0: -6, x1: 6, z0: HOUSE.z0, z1: -2.4 },          // foyer void + grand stair
     { x0: -30, x1: -18, z0: SOUTH.z0, z1: HOUSE.z1 },   // great room double height
   ],
   third: [
-    { x0: 15.4, x1: 23.4, z0: 0.35, z1: CORR.z1 },      // stairwell up from the second floor
+    { x0: 15.4, x1: 23.16, z0: 0.35, z1: 1.85 },        // flush with the service stair
   ],
 };
 

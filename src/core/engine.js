@@ -141,15 +141,32 @@ export class Engine {
     this.renderer.info.reset();
     this.grade.uniforms.time.value += dt;
     this.composer.render(dt);
+    // The drawing buffer is thrown away once this task yields, so a screenshot
+    // has to be taken here rather than whenever the key was pressed.
+    if (this._pendingShot) {
+      const { name, done } = this._pendingShot;
+      this._pendingShot = null;
+      this.renderer.domElement.toBlob((blob) => {
+        if (!blob) { done?.(false); return; }
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        done?.(true);
+      });
+    }
   }
 
-  screenshot(name = 'home.png') {
-    this.renderer.domElement.toBlob((blob) => {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = name;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-    });
+  /**
+   * Saves the frame. Embedded viewers sandbox downloads, so say so rather than
+   * having the key quietly do nothing.
+   * @returns {boolean} whether the save was actually attempted
+   */
+  screenshot(name = 'home.png', done = null) {
+    const framed = (() => { try { return window.self !== window.top; } catch (_) { return true; } })();
+    if (framed) return false;                    // embedded viewers sandbox downloads
+    this._pendingShot = { name, done };
+    return true;
   }
 }

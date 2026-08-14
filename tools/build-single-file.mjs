@@ -95,7 +95,7 @@ if (process.argv.includes('--embed')) {
   const EMBED = join(root, 'build/play-embed.html');
   const head = body.slice(body.indexOf('<title>'), body.indexOf('</head>'));
   const inner = body.slice(body.indexOf('<body>') + 6, body.lastIndexOf('</body>'));
-  const embed = `${head.replace(/<link rel="icon"[^>]*>/, '')}\n${inner}`;
+  const embed = `${head.replace(/<link rel="icon"[^>]*>/, '').replace(/<title>[^<]*<\/title>/, '<title>Mansion &amp; Family</title>')}\n${inner}`;
   if (/<\/?(html|head|body)\b/i.test(embed)) throw new Error('embed variant still has document tags');
   writeFileSync(EMBED, embed);
   console.log(`build/play-embed.html written — ${(statSync(EMBED).size / 1024).toFixed(0)} KB`);

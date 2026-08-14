@@ -14,14 +14,18 @@ function fatal(err) {
 }
 
 async function boot() {
-  if (!canvas.getContext('webgl2') && !canvas.getContext('webgl')) {
+  // Probe on a throwaway canvas: calling getContext on the real one would
+  // lock in default attributes that WebGLRenderer could not then change.
+  const probe = document.createElement('canvas');
+  if (!probe.getContext('webgl2') && !probe.getContext('webgl')) {
     fatal(new Error('This browser has no WebGL — try Chrome, Edge, Firefox or Safari.'));
     return;
   }
-  const game = new Game(canvas);
-  window.game = game;               // handy from the console
 
+  let game;
   try {
+    game = new Game(canvas);
+    window.game = game;             // handy from the console
     await game.load();
   } catch (e) {
     fatal(e);

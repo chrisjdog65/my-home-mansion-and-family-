@@ -285,17 +285,23 @@ export class Player {
   }
   stand() {
     if (this.mode === 'sit' && this.seat) {
-      const back = 0.9;
-      this.teleport(
-        this.seat.x - Math.sin(this.seatYaw) * back,
-        this.seat.y - 0.1,
-        this.seat.z - Math.cos(this.seatYaw) * back,
-        this.yaw,
-      );
+      // Step out behind the seat, fanning outwards until somewhere is clear —
+      // bar stools face a counter, and a blind step would land inside it.
+      const s = this.seat;
+      const spots = [];
+      for (let i = 0; i < 8; i++) {
+        const a = this.seatYaw + Math.PI + ((i % 2 ? 1 : -1) * Math.ceil(i / 2) * Math.PI) / 4;
+        spots.push([s.x + Math.sin(a) * 0.95, s.z + Math.cos(a) * 0.95]);
+      }
+      spots.push([s.x, s.z]);
+      for (const [x, z] of spots) {
+        this.teleport(x, s.y - 0.1, z, this.yaw);
+        if (!this.world.octree.capsuleIntersect(this.capsule)) break;
+      }
     }
     this.mode = 'walk';
     this.seat = null;
-    this.vehicle = null;
+    if (this.vehicle) { this.vehicle.occupied = false; this.vehicle = null; }
   }
   updateSeated(dt) {
     const s = this.seat;
@@ -307,6 +313,7 @@ export class Player {
 
   // ── driving ─────────────────────────────────────────────────────────────
   drive(v) {
+    if (this.vehicle && this.vehicle !== v) this.vehicle.occupied = false;
     this.vehicle = v;
     this.mode = 'drive';
     v.occupied = true;

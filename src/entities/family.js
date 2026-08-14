@@ -102,6 +102,7 @@ export class FamilyMember {
     this.speed = 0;
     this.wantSpeed = spec.id === 'kaelie' ? 1.35 : 1.6;
     this.talking = false;
+    this.wasTalking = false;
     this.lastLine = -1;
     this.idleTimer = 0;
     this.stuck = 0;
@@ -128,6 +129,10 @@ export class FamilyMember {
 
   update(dt, t, hour, playerPos) {
     const c = this.char;
+    // A conversation parks them where they stand; when it ends they need a
+    // fresh route, or they would walk to the goal in a straight line.
+    const justFinishedTalking = !this.talking && this.wasTalking;
+    this.wasTalking = this.talking;
 
     if (!this.talking) {
       const [, goal, activity] = this.goalForTime(hour);
@@ -135,6 +140,8 @@ export class FamilyMember {
       if (goal !== this.currentGoal) {
         this.currentGoal = goal;
         this.setDestination(goal);
+      } else if (justFinishedTalking) {
+        this.setDestination(this.currentGoal);
       } else if (!this.path.length) {
         // wander a little around the destination
         this.idleTimer -= dt;
@@ -150,7 +157,7 @@ export class FamilyMember {
         }
       }
     } else {
-      this.path.length = 0;
+      this.path.length = 0;      // hold position while talking
     }
 
     // follow the path

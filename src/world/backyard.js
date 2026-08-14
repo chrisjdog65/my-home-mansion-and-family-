@@ -154,16 +154,16 @@ function hotTub(world, k, M, B) {
   // shell
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2;
-    B.box(1.3, 1.0, 0.3, M.get('stone'), cxp + Math.cos(a) * 2.2, 0.2, czp + Math.sin(a) * 2.2, { rotY: -a, tile: 0.7 });
-    world.collider(1.4, 1.0, 0.36, cxp + Math.cos(a) * 2.2, 0.2, czp + Math.sin(a) * 2.2, -a);
+    B.box(1.3, 1.0, 0.3, M.get('stone'), cxp + Math.cos(a) * 2.2, 0.2, czp + Math.sin(a) * 2.2, { rotY: Math.PI / 2 - a, tile: 0.7 });
+    world.collider(1.4, 1.0, 0.36, cxp + Math.cos(a) * 2.2, 0.2, czp + Math.sin(a) * 2.2, Math.PI / 2 - a);
   }
   B.box(4.6, 0.3, 4.6, M.get('poolTile'), cxp, -0.9, czp, { tile: 0.8 });
   world.collider(4.6, 0.3, 4.6, cxp, -0.9, czp);
   // bench seat inside
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2;
-    B.box(1.2, 0.3, 0.5, M.get('poolTile'), cxp + Math.cos(a) * 1.65, -0.55, czp + Math.sin(a) * 1.65, { rotY: -a, tile: 0.5 });
-    world.collider(1.2, 0.3, 0.5, cxp + Math.cos(a) * 1.65, -0.55, czp + Math.sin(a) * 1.65, -a);
+    B.box(1.2, 0.3, 0.5, M.get('poolTile'), cxp + Math.cos(a) * 1.65, -0.55, czp + Math.sin(a) * 1.65, { rotY: Math.PI / 2 - a, tile: 0.5 });
+    world.collider(1.2, 0.3, 0.5, cxp + Math.cos(a) * 1.65, -0.55, czp + Math.sin(a) * 1.65, Math.PI / 2 - a);
   }
 
   const surf = makeWater(world, 4.2, 4.2, cxp, 0.32, czp, 0x2ea3b8, 0.8);
@@ -301,8 +301,8 @@ function pondAndFalls(world, k, M, B, rng) {
     B.box(1.6, 0.12, 0.4, M.get('walnut'), bx, 0.7 + Math.sin((i / 8) * Math.PI) * 0.5, czp - 5 + i * 1.2, { tile: 0.6 });
     world.collider(1.6, 0.2, 0.45, bx, 0.7 + Math.sin((i / 8) * Math.PI) * 0.5, czp - 5 + i * 1.2);
   }
-  railing(B, M.get('walnut'), M.get('walnut'), bx - 0.85, 0.9, czp - 0.2, 9.6, Math.PI / 2, 0.9, 1.2);
-  railing(B, M.get('walnut'), M.get('walnut'), bx + 0.85, 0.9, czp - 0.2, 9.6, Math.PI / 2, 0.9, 1.2);
+  railing(world, M.get('walnut'), M.get('walnut'), bx - 0.85, 0.9, czp - 0.2, 9.6, Math.PI / 2, 0.9, 1.2);
+  railing(world, M.get('walnut'), M.get('walnut'), bx + 0.85, 0.9, czp - 0.2, 9.6, Math.PI / 2, 0.9, 1.2);
 
   world.spot('pond', cxp + 2, 0, czp - rz - 3);
   world.spot('waterfall', wx, 0, wz - 5);
@@ -340,8 +340,8 @@ function picnicArea(world, k, M, B) {
   // fire pit
   for (let i = 0; i < 12; i++) {
     const a = (i / 12) * Math.PI * 2;
-    B.box(0.7, 0.44, 0.4, M.get('stone'), cxp + Math.cos(a) * 1.5, gy + 0.22, czp + 5.5 + Math.sin(a) * 1.5, { rotY: -a, tile: 0.6 });
-    world.collider(0.7, 0.44, 0.4, cxp + Math.cos(a) * 1.5, gy + 0.22, czp + 5.5 + Math.sin(a) * 1.5, -a);
+    B.box(0.7, 0.44, 0.4, M.get('stone'), cxp + Math.cos(a) * 1.5, gy + 0.22, czp + 5.5 + Math.sin(a) * 1.5, { rotY: Math.PI / 2 - a, tile: 0.6 });
+    world.collider(0.7, 0.44, 0.4, cxp + Math.cos(a) * 1.5, gy + 0.22, czp + 5.5 + Math.sin(a) * 1.5, Math.PI / 2 - a);
   }
   const logs = new THREE.Group();
   logs.position.set(cxp, gy + 0.1, czp + 5.5);
@@ -394,24 +394,32 @@ function skatePark(world, k, M, B) {
   const conc = M.get('polishedConcrete');
   const gy = groundHeight(cxp, czp);
 
-  // pad
-  B.box(34, 0.4, 26, conc, cxp, gy + 0.1, czp, { tile: 2.4 });
-  world.collider(34, 0.4, 26, cxp, gy + 0.1, czp);
   const top = gy + 0.3;
+  const bx = cxp - 8, bz = czp + 4, R = 6.4;      // the bowl
 
-  // ── the bowl: a real dished surface, generated as a ring mesh ──
-  const bowl = bowlGeometry(6.4, 2.6, 40, 10);
-  const bowlMesh = new THREE.Mesh(bowl, conc);
-  bowlMesh.position.set(cxp - 8, top, czp + 4);
+  // Pad, with the bowl's footprint cut out of it — a solid slab here would
+  // fill the dish in and there would be nothing to drop into.
+  for (const r of rectSubtract(
+    { x0: cxp - 17, x1: cxp + 17, z0: czp - 13, z1: czp + 13 },
+    [{ x0: bx - R, x1: bx + R, z0: bz - R, z1: bz + R }],
+  )) {
+    const w = r.x1 - r.x0, d = r.z1 - r.z0;
+    B.box(w, 0.4, d, conc, (r.x0 + r.x1) / 2, gy + 0.1, (r.z0 + r.z1) / 2, { tile: 2.4 });
+    world.collider(w, 0.4, d, (r.x0 + r.x1) / 2, gy + 0.1, (r.z0 + r.z1) / 2);
+  }
+
+  // ── the bowl: a square dish, so its rim meets the cut-out exactly ──
+  const bowlMesh = new THREE.Mesh(bowlGeometry(R, 2.6, 24), conc);
+  bowlMesh.position.set(bx, top, bz);
   bowlMesh.receiveShadow = true;
   world.staticRoot.add(bowlMesh);
-  const bowlCol = new THREE.Mesh(bowlGeometry(6.4, 2.6, 26, 8), world.colliderMat);
+  const bowlCol = new THREE.Mesh(bowlGeometry(R, 2.6, 14), world.colliderMat);
   bowlCol.position.copy(bowlMesh.position);
   world.colliderRoot.add(bowlCol);
-  // coping ring
-  for (let i = 0; i < 40; i++) {
-    const a = (i / 40) * Math.PI * 2;
-    B.box(1.05, 0.1, 0.16, M.get('chrome'), cxp - 8 + Math.cos(a) * 6.4, top + 0.03, czp + 4 + Math.sin(a) * 6.4, { rotY: -a, tile: 0.3 });
+  // coping along all four lips
+  for (const s of [-1, 1]) {
+    B.box(R * 2 + 0.16, 0.1, 0.16, M.get('chrome'), bx, top + 0.03, bz + s * R, { tile: 0.3 });
+    B.box(0.16, 0.1, R * 2 + 0.16, M.get('chrome'), bx + s * R, top + 0.03, bz, { tile: 0.3 });
   }
 
   // ── quarter pipe ──
@@ -462,22 +470,25 @@ function skatePark(world, k, M, B) {
   world.propSpawns.push({ kind: 'skateboard', x: cxp - 2, y: top + 0.3, z: czp - 4 });
 }
 
-/** Concave dish: r from 0 → radius, y dropping like a cosine bowl. */
-function bowlGeometry(radius, depth, seg = 40, rings = 10) {
+/**
+ * A square dish — flat in the middle, curving up to a square rim at y = 0, so
+ * it drops straight into a rectangular hole cut in the pad. `n` is the number
+ * of quads per side.
+ */
+function bowlGeometry(half, depth, n = 24) {
   const pos = [], idx = [], uv = [];
-  for (let i = 0; i <= rings; i++) {
-    const t = i / rings;                      // 0 centre → 1 rim
-    const r = radius * t;
-    const y = -depth * Math.cos((t * Math.PI) / 2);
-    for (let j = 0; j <= seg; j++) {
-      const a = (j / seg) * Math.PI * 2;
-      pos.push(Math.cos(a) * r, y + depth * 0, Math.sin(a) * r);
-      uv.push(j / seg, t);
+  for (let i = 0; i <= n; i++) {
+    for (let j = 0; j <= n; j++) {
+      const x = -half + (i / n) * half * 2;
+      const z = -half + (j / n) * half * 2;
+      const t = Math.max(Math.abs(x), Math.abs(z)) / half;   // 0 centre → 1 rim
+      pos.push(x, -depth * Math.cos((t * Math.PI) / 2), z);
+      uv.push(x / 2, z / 2);
     }
   }
-  for (let i = 0; i < rings; i++) {
-    for (let j = 0; j < seg; j++) {
-      const a = i * (seg + 1) + j, b = a + seg + 1;
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const a = i * (n + 1) + j, b = a + n + 1;
       idx.push(a, b, a + 1, b, b + 1, a + 1);
     }
   }
@@ -595,7 +606,7 @@ function driveway(world, k, M, B) {
   world.collider(7.2, 0.4, 7.2, -8, 0.12, -26);
   for (let i = 0; i < 12; i++) {
     const a = (i / 12) * Math.PI * 2;
-    B.box(0.7, 0.7, 0.4, M.get('stone'), -8 + Math.cos(a) * 1.9, 0.55, -26 + Math.sin(a) * 1.9, { rotY: -a, tile: 0.5 });
+    B.box(0.7, 0.7, 0.4, M.get('stone'), -8 + Math.cos(a) * 1.9, 0.55, -26 + Math.sin(a) * 1.9, { rotY: Math.PI / 2 - a, tile: 0.5 });
   }
   B.box(0.5, 1.6, 0.5, M.get('stone'), -8, 1.1, -26, { tile: 0.5 });
   B.box(1.5, 0.16, 1.5, M.get('stone'), -8, 1.9, -26, { tile: 0.5 });

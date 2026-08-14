@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { clamp } from '../core/rng.js';
 
-const GRAVITY = 26;
+const GRAVITY = 18;   // heavier than life, but a thrown ball still arcs
 
 export class Props {
   constructor(world) {

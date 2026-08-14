@@ -24120,15 +24120,39 @@ var Engine = class {
     this.renderer.info.reset();
     this.grade.uniforms.time.value += dt;
     this.composer.render(dt);
+    if (this._pendingShot) {
+      const { name, done } = this._pendingShot;
+      this._pendingShot = null;
+      this.renderer.domElement.toBlob((blob) => {
+        if (!blob) {
+          done?.(false);
+          return;
+        }
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 4e3);
+        done?.(true);
+      });
+    }
   }
-  screenshot(name = "home.png") {
-    this.renderer.domElement.toBlob((blob) => {
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = name;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 4e3);
-    });
+  /**
+   * Saves the frame. Embedded viewers sandbox downloads, so say so rather than
+   * having the key quietly do nothing.
+   * @returns {boolean} whether the save was actually attempted
+   */
+  screenshot(name = "home.png", done = null) {
+    const framed = (() => {
+      try {
+        return window.self !== window.top;
+      } catch (_) {
+        return true;
+      }
+    })();
+    if (framed) return false;
+    this._pendingShot = { name, done };
+    return true;
   }
 };
 
@@ -25665,7 +25689,8 @@ function wallWithOpenings(batch, mat, cx2, cz2, len, height, thick, openings = [
   }
   if (cursor < half) put(cursor, half, 0, height);
 }
-function railing(batch, matPost, matRail, cx2, y, cz2, len, rotY = 0, h = 1.05, spacing = 0.9) {
+function railing(world, matPost, matRail, cx2, y, cz2, len, rotY = 0, h = 1.05, spacing = 0.9) {
+  const batch = world.static;
   const n = Math.max(2, Math.round(len / spacing));
   for (let i = 0; i <= n; i++) {
     const lx = -len / 2 + i / n * len;
@@ -25682,6 +25707,7 @@ function railing(batch, matPost, matRail, cx2, y, cz2, len, rotY = 0, h = 1.05, 
   }
   batch.box(len, 0.07, 0.11, matRail, cx2, y + h, cz2, { rotY, tile: 1 });
   batch.box(len, 0.05, 0.05, matRail, cx2, y + h * 0.45, cz2, { rotY, tile: 1 });
+  world.collider(len, h, 0.14, cx2, y + h / 2, cz2, rotY);
 }
 
 // src/world/world.js
@@ -25859,7 +25885,7 @@ var GROUND_ROOMS = [
   { name: "Dining Hall", ...N(6, 17), floor: "walnutFloor", wall: 5982799, doors: [d("s", 0, 2.6), d("w", 0, 1.6)], type: "dining" },
   { name: "Butler's Pantry", ...N(17, 21), floor: "tile", wall: 14340803, doors: [d("s", 0, 1)], type: "pantry" },
   { name: "Garage", ...N(21, 30), floor: "polishedConcrete", wall: 12567752, doors: [d("s", 0, 1.1), d("w", 0, 1.1)], type: "garage", garageDoors: true },
-  { name: "Great Room", ...S(-30, -18), floor: "oakFloor", wall: 15130320, doors: [d("n", 0, 3.2)], type: "great", tall: true, glassSouth: true },
+  { name: "Great Room", ...S(-30, -18), floor: "oakFloor", wall: 15130320, doors: [d("n", 4.4, 2.6)], type: "great", tall: true, glassSouth: true },
   { name: "Family Room", ...S(-18, -8), floor: "oakFloor", wall: 14208960, doors: [d("n", 0, 2.6), d("w", 0, 2.4)], type: "family" },
   { name: "Kitchen", ...S(-8, 4), floor: "tile", wall: 15263456, doors: [d("n", 0, 2.6), d("w", 0, 2.2)], type: "kitchen" },
   { name: "Breakfast Sunroom", ...S(4, 12), floor: "tile", wall: 15789281, doors: [d("n", 0, 1.6), d("w", 0, 2.2)], type: "sunroom", glassSouth: true },
@@ -25898,7 +25924,7 @@ var THIRD_ROOMS = [
   { name: "Loft Gaming Room", ...S(-1, 9), floor: "carpet", wall: 1382948, doors: [d("n", 0, 1.4)], type: "gaming" },
   { name: "Bath \u2014 Loft", ...S(9, 13.5), floor: "tile", wall: 14213862, doors: [d("n", 0, 0.9)], type: "bath" },
   { name: "Bunk Room", ...S(13.5, 21), floor: "carpet", wall: 12570840, doors: [d("n", -2.5, 1)], type: "bedroom" },
-  { name: "Bedroom \u2014 Skyline", ...S(21, 25.5), floor: "carpet", wall: 13354424, doors: [d("n", 0, 1)], type: "bedroom" },
+  { name: "Bedroom \u2014 Skyline", ...S(21, 25.5), floor: "carpet", wall: 13354424, doors: [d("n", 0.75, 1)], type: "bedroom" },
   { name: "Bedroom \u2014 Lantern", ...S(25.5, 30), floor: "carpet", wall: 13025198, doors: [d("n", 0, 1)], type: "bedroom" }
 ];
 var BN = (x0, x1) => ({ x0, x1, z0: -13, z1: -1.6 });
@@ -25922,8 +25948,8 @@ var FLOOR_ROOMS = {
 var SLAB_HOLES = {
   basement: [],
   ground: [
-    { x0: -28.2, x1: -21.2, z0: -1.9, z1: 1.9 }
-    // stair down to the lower level
+    { x0: -27.9, x1: -21.6, z0: -1.9, z1: 1.9 }
+    // flush with the first tread
   ],
   second: [
     { x0: -6, x1: 6, z0: HOUSE.z0, z1: -2.4 },
@@ -25932,8 +25958,8 @@ var SLAB_HOLES = {
     // great room double height
   ],
   third: [
-    { x0: 15.4, x1: 23.4, z0: 0.35, z1: CORR.z1 }
-    // stairwell up from the second floor
+    { x0: 15.4, x1: 23.16, z0: 0.35, z1: 1.85 }
+    // flush with the service stair
   ]
 };
 var GLASS_SPANS = {
@@ -26210,7 +26236,7 @@ function buildRoomWalls(world, R, F, wallCol, matTrim, cuts) {
   }
 }
 function wallColliders(world, px3, pz2, len, h, t, openings, rotY, baseY) {
-  const cuts = openings.map((o) => ({ a: o.x - o.w / 2, b: o.x + o.w / 2, y1: o.y1 })).sort((p, q) => p.a - q.a);
+  const cuts = openings.map((o) => ({ a: o.x - o.w / 2, b: o.x + o.w / 2, y0: o.y0 ?? 0, y1: o.y1 })).sort((p, q) => p.a - q.a);
   const half = len / 2;
   const put = (x0, x1, y0, y1) => {
     if (x1 - x0 < 0.02 || y1 - y0 < 0.02) return;
@@ -26221,6 +26247,7 @@ function wallColliders(world, px3, pz2, len, h, t, openings, rotY, baseY) {
   for (const c of cuts) {
     const a = Math.max(-half, c.a), b = Math.min(half, c.b);
     if (a > cursor) put(cursor, a, 0, h);
+    put(a, b, 0, Math.min(c.y0, h));
     put(a, b, Math.min(c.y1, h), h);
     cursor = Math.max(cursor, b);
   }
@@ -26376,8 +26403,8 @@ function buildStairs(world) {
       const len = Math.hypot(24 * run, 4.2);
       B2.box(0.09, 0.09, len, rail, s * (W / 2 - 0.06), 2.1 + 1, (z0 + topZ) / 2, { rotX: -Math.atan2(4.2, 24 * run), tile: 0.5 });
     }
-    railing(B2, post, rail, 0, 4.2, -2.5, 12, 0, 1.05);
-    for (const s of [-1, 1]) railing(B2, post, rail, s * 5.9, 4.2, -7.6, 10.4, Math.PI / 2, 1.05);
+    railing(world, post, rail, 0, 4.2, -2.35, 12, 0, 1.05);
+    for (const s of [-1, 1]) railing(world, post, rail, s * 5.85, 4.2, -7.6, 10.4, Math.PI / 2, 1.05);
     world.spot("grandStairBottom", 0, 0, -10.6);
     world.spot("grandStairTop", 0, 4.2, -1.4);
     world.stairLinks = world.stairLinks || [];
@@ -26390,8 +26417,8 @@ function buildStairs(world) {
       B2.box(run, h, W, tread, x0 + (i + 0.5) * run, 4.2 + h / 2, zc, { tile: 1.2 });
       world.collider(run, h, W, x0 + (i + 0.5) * run, 4.2 + h / 2, zc);
     }
-    railing(B2, post, rail, x0 + 3.5, 4.2, zc - 0.8, 7.2, 0, 1);
-    railing(B2, post, rail, 19.4, 8.4, 0.3, 8, 0, 1.05);
+    railing(world, post, rail, x0 + 3.5, 4.2, zc - 0.8, 7.2, 0, 1);
+    railing(world, post, rail, 19.4, 8.4, 0.3, 8, 0, 1.05);
     world.spot("thirdStairBottom", 15.4, 4.2, zc);
     world.spot("thirdStairTop", 23.6, 8.4, zc);
     world.stairLinks.push({ a: new Vector3(15.6, 4.2, zc), b: new Vector3(23.6, 8.4, zc) });
@@ -26401,22 +26428,22 @@ function buildStairs(world) {
     for (let i = 0; i < 17; i++) {
       const yTop = -rise * (i + 1);
       B2.box(run, 0.24, W, tread, -21.6 - (i + 0.5) * run, yTop + 0.12, -0.9, { tile: 1.1 });
-      world.collider(run, 0.6, W, -21.6 - (i + 0.5) * run, yTop - 0.18, -0.9);
+      world.collider(run, 0.24, W, -21.6 - (i + 0.5) * run, yTop + 0.12, -0.9);
     }
     const landY = -rise * 17;
     B2.box(1.7, 0.24, 3.6, tread, -26.8, landY + 0.12, 0, { tile: 1.2 });
-    world.collider(1.7, 0.6, 3.6, -26.8, landY - 0.18, 0);
+    world.collider(1.7, 0.24, 3.6, -26.8, landY + 0.12, 0);
     for (let i = 0; i < 13; i++) {
       const yTop = landY - rise * (i + 1);
       B2.box(run, 0.24, W, tread, -25.9 + (i + 0.5) * run, yTop + 0.12, 0.9, { tile: 1.1 });
-      world.collider(run, 0.6, W, -25.9 + (i + 0.5) * run, yTop - 0.18, 0.9);
+      world.collider(run, 0.24, W, -25.9 + (i + 0.5) * run, yTop + 0.12, 0.9);
     }
-    railing(B2, post, rail, -24.6, 0, -0.05, 6.2, 0, 1);
+    railing(world, post, rail, -24.6, 0, -0.05, 6.2, 0, 1);
     world.spot("basementStairTop", -20.6, 0, -0.9);
     world.spot("basementStairBottom", -22.2, -6, 0.9);
     world.stairLinks.push({ a: new Vector3(-20.8, 0, -0.9), b: new Vector3(-22.2, -6, 0.9), via: new Vector3(-26.8, -3.4, 0) });
   }
-  railing(B2, post, rail, -24, 4.2, 2.6, 11.6, 0, 1.05);
+  railing(world, post, rail, -24, 4.2, 2.15, 11.6, 0, 1.05);
 }
 function buildRoof(world) {
   const M = world.mats, B2 = world.static;
@@ -26814,7 +26841,7 @@ function fireplace(k, x, y, z, o = {}) {
   light.position.set(0, 0.6, 0.2);
   grp.add(light);
   k.world.addProp(grp);
-  const fire = { on: o.lit !== false, grp, flames, light };
+  const fire = { on: o.lit === true, grp, flames, light };
   grp.visible = fire.on;
   k.world.onUpdate((dt, t) => {
     if (!fire.on) return;
@@ -26870,7 +26897,7 @@ function island(k, x, y, z, o = {}) {
   k.p(b, 0, 1.1, -0.32, 0.05, 0.34, 0.05, M.get("chrome"), 0.2);
   k.p(b, 0, 1.26, -0.24, 0.05, 0.04, 0.2, M.get("chrome"), 0.2);
   k.pc(b, 0, 0.46, 0, w + 0.24, 0.98, d2 + 0.24);
-  for (let i = 0; i < 3; i++) barstool(k, ...k.L(-w / 3 + i * (w / 3), d2 / 2 + 0.55, x, z, b.r), y, { rotY: b.r + Math.PI });
+  for (let i = 0; i < 3; i++) barstool(k, ...k.L(-w / 3 + i * (w / 3), d2 / 2 + 0.55, x, z, b.r), y, { rotY: b.r });
   for (let i = 0; i < 3; i++) {
     const [px3, pz2] = k.L(-w / 3 + i * (w / 3), 0, x, z, b.r);
     k.box(0.02, 1, 0.02, M.get("blackMetal"), px3, y + 3.1, pz2, { tile: 0.2 });
@@ -27107,7 +27134,7 @@ function bowling(k, R) {
       color: [1122874, 5902384, 998190, 3811845][i]
     });
   }
-  for (let i = 0; i < 4; i++) barstool(k, foulX + 3.2, R.z - 5.1 + i * 3.4, y, { rotY: -Math.PI / 2 });
+  for (let i = 0; i < 4; i++) barstool(k, foulX + 3.2, R.z - 5.1 + i * 3.4, y, { rotY: Math.PI / 2 });
   B2.box(0.1, 0.2, R.d - 2, M.emissive(16727946, 2.4), R.x - R.w / 2 + 0.3, y + 3.6, R.z, { tile: 0.5 });
   B2.box(0.1, 0.2, R.d - 2, M.emissive(4182271, 2.4), R.x + R.w / 2 - 0.3, y + 3.6, R.z, { tile: 0.5 });
   world.spot("bowlingAlley", foulX + 1.4, y, R.z);
@@ -27145,7 +27172,7 @@ function ringLine(k, x, y, z, r, mat) {
   const n = 34;
   for (let i = 0; i < n; i++) {
     const a = i / n * Math.PI * 2;
-    k.B.box(0.3, 6e-3, 0.08, mat, x + Math.cos(a) * r, y, z + Math.sin(a) * r, { rotY: -a, tile: 0.3 });
+    k.B.box(0.3, 6e-3, 0.08, mat, x + Math.cos(a) * r, y, z + Math.sin(a) * r, { rotY: Math.PI / 2 - a, tile: 0.3 });
   }
 }
 function hoop(k, x, y, z, s) {
@@ -27900,6 +27927,7 @@ function groundHeight(x, z) {
   h -= basin(x, z, 0, 23, 11.5, 8.5, 3.6);
   h -= basin(x, z, 13.5, 22, 4.4, 4.4, 1.6);
   h -= basin(x, z, -22, 48, 13, 10, 1.5);
+  h -= basin(x, z, 18, 66, 8.4, 8.4, 3.4);
   return h;
 }
 function buildTerrain(world) {
@@ -27966,7 +27994,7 @@ function plantTrees(world) {
   const B2 = world.static;
   const M = world.mats;
   const bark = M.get("bark"), leaf = M.get("foliage");
-  const keepOut = (x, z) => x > -44 && x < 44 && z > -80 && z < 66;
+  const keepOut = (x, z) => x > -44 && x < 44 && z > -80 && z < 80;
   for (let i = 0; i < 420; i++) {
     const a = rng() * Math.PI * 2;
     const r = 52 + rng() ** 0.6 * 150;
@@ -28236,15 +28264,15 @@ function hotTub(world, k, M, B2) {
   const cxp = 13.5, czp = 22;
   for (let i = 0; i < 8; i++) {
     const a = i / 8 * Math.PI * 2;
-    B2.box(1.3, 1, 0.3, M.get("stone"), cxp + Math.cos(a) * 2.2, 0.2, czp + Math.sin(a) * 2.2, { rotY: -a, tile: 0.7 });
-    world.collider(1.4, 1, 0.36, cxp + Math.cos(a) * 2.2, 0.2, czp + Math.sin(a) * 2.2, -a);
+    B2.box(1.3, 1, 0.3, M.get("stone"), cxp + Math.cos(a) * 2.2, 0.2, czp + Math.sin(a) * 2.2, { rotY: Math.PI / 2 - a, tile: 0.7 });
+    world.collider(1.4, 1, 0.36, cxp + Math.cos(a) * 2.2, 0.2, czp + Math.sin(a) * 2.2, Math.PI / 2 - a);
   }
   B2.box(4.6, 0.3, 4.6, M.get("poolTile"), cxp, -0.9, czp, { tile: 0.8 });
   world.collider(4.6, 0.3, 4.6, cxp, -0.9, czp);
   for (let i = 0; i < 8; i++) {
     const a = i / 8 * Math.PI * 2;
-    B2.box(1.2, 0.3, 0.5, M.get("poolTile"), cxp + Math.cos(a) * 1.65, -0.55, czp + Math.sin(a) * 1.65, { rotY: -a, tile: 0.5 });
-    world.collider(1.2, 0.3, 0.5, cxp + Math.cos(a) * 1.65, -0.55, czp + Math.sin(a) * 1.65, -a);
+    B2.box(1.2, 0.3, 0.5, M.get("poolTile"), cxp + Math.cos(a) * 1.65, -0.55, czp + Math.sin(a) * 1.65, { rotY: Math.PI / 2 - a, tile: 0.5 });
+    world.collider(1.2, 0.3, 0.5, cxp + Math.cos(a) * 1.65, -0.55, czp + Math.sin(a) * 1.65, Math.PI / 2 - a);
   }
   const surf = makeWater(world, 4.2, 4.2, cxp, 0.32, czp, 3056568, 0.8);
   world.water(V2(cxp - 2.1, -0.8, czp - 2.1), V2(cxp + 2.1, 1, czp + 2.1), 0.32, "hottub");
@@ -28375,8 +28403,8 @@ function pondAndFalls(world, k, M, B2, rng) {
     B2.box(1.6, 0.12, 0.4, M.get("walnut"), bx, 0.7 + Math.sin(i / 8 * Math.PI) * 0.5, czp - 5 + i * 1.2, { tile: 0.6 });
     world.collider(1.6, 0.2, 0.45, bx, 0.7 + Math.sin(i / 8 * Math.PI) * 0.5, czp - 5 + i * 1.2);
   }
-  railing(B2, M.get("walnut"), M.get("walnut"), bx - 0.85, 0.9, czp - 0.2, 9.6, Math.PI / 2, 0.9, 1.2);
-  railing(B2, M.get("walnut"), M.get("walnut"), bx + 0.85, 0.9, czp - 0.2, 9.6, Math.PI / 2, 0.9, 1.2);
+  railing(world, M.get("walnut"), M.get("walnut"), bx - 0.85, 0.9, czp - 0.2, 9.6, Math.PI / 2, 0.9, 1.2);
+  railing(world, M.get("walnut"), M.get("walnut"), bx + 0.85, 0.9, czp - 0.2, 9.6, Math.PI / 2, 0.9, 1.2);
   world.spot("pond", cxp + 2, 0, czp - rz - 3);
   world.spot("waterfall", wx, 0, wz - 5);
   world.addLight({ pos: V2(wx, 1.2, wz - 3), color: 7330024, intensity: 12, distance: 15, outdoor: true, pool: true });
@@ -28404,8 +28432,8 @@ function picnicArea(world, k, M, B2) {
   world.collider(1.4, 1, 0.8, cxp + 5.6, gy + 0.5, czp - 2);
   for (let i = 0; i < 12; i++) {
     const a = i / 12 * Math.PI * 2;
-    B2.box(0.7, 0.44, 0.4, M.get("stone"), cxp + Math.cos(a) * 1.5, gy + 0.22, czp + 5.5 + Math.sin(a) * 1.5, { rotY: -a, tile: 0.6 });
-    world.collider(0.7, 0.44, 0.4, cxp + Math.cos(a) * 1.5, gy + 0.22, czp + 5.5 + Math.sin(a) * 1.5, -a);
+    B2.box(0.7, 0.44, 0.4, M.get("stone"), cxp + Math.cos(a) * 1.5, gy + 0.22, czp + 5.5 + Math.sin(a) * 1.5, { rotY: Math.PI / 2 - a, tile: 0.6 });
+    world.collider(0.7, 0.44, 0.4, cxp + Math.cos(a) * 1.5, gy + 0.22, czp + 5.5 + Math.sin(a) * 1.5, Math.PI / 2 - a);
   }
   const logs = new Group();
   logs.position.set(cxp, gy + 0.1, czp + 5.5);
@@ -28466,20 +28494,26 @@ function skatePark(world, k, M, B2) {
   const cxp = 26, czp = 62;
   const conc = M.get("polishedConcrete");
   const gy = groundHeight(cxp, czp);
-  B2.box(34, 0.4, 26, conc, cxp, gy + 0.1, czp, { tile: 2.4 });
-  world.collider(34, 0.4, 26, cxp, gy + 0.1, czp);
   const top = gy + 0.3;
-  const bowl = bowlGeometry(6.4, 2.6, 40, 10);
-  const bowlMesh = new Mesh(bowl, conc);
-  bowlMesh.position.set(cxp - 8, top, czp + 4);
+  const bx = cxp - 8, bz = czp + 4, R = 6.4;
+  for (const r of rectSubtract(
+    { x0: cxp - 17, x1: cxp + 17, z0: czp - 13, z1: czp + 13 },
+    [{ x0: bx - R, x1: bx + R, z0: bz - R, z1: bz + R }]
+  )) {
+    const w = r.x1 - r.x0, d2 = r.z1 - r.z0;
+    B2.box(w, 0.4, d2, conc, (r.x0 + r.x1) / 2, gy + 0.1, (r.z0 + r.z1) / 2, { tile: 2.4 });
+    world.collider(w, 0.4, d2, (r.x0 + r.x1) / 2, gy + 0.1, (r.z0 + r.z1) / 2);
+  }
+  const bowlMesh = new Mesh(bowlGeometry(R, 2.6, 24), conc);
+  bowlMesh.position.set(bx, top, bz);
   bowlMesh.receiveShadow = true;
   world.staticRoot.add(bowlMesh);
-  const bowlCol = new Mesh(bowlGeometry(6.4, 2.6, 26, 8), world.colliderMat);
+  const bowlCol = new Mesh(bowlGeometry(R, 2.6, 14), world.colliderMat);
   bowlCol.position.copy(bowlMesh.position);
   world.colliderRoot.add(bowlCol);
-  for (let i = 0; i < 40; i++) {
-    const a = i / 40 * Math.PI * 2;
-    B2.box(1.05, 0.1, 0.16, M.get("chrome"), cxp - 8 + Math.cos(a) * 6.4, top + 0.03, czp + 4 + Math.sin(a) * 6.4, { rotY: -a, tile: 0.3 });
+  for (const s of [-1, 1]) {
+    B2.box(R * 2 + 0.16, 0.1, 0.16, M.get("chrome"), bx, top + 0.03, bz + s * R, { tile: 0.3 });
+    B2.box(0.16, 0.1, R * 2 + 0.16, M.get("chrome"), bx + s * R, top + 0.03, bz, { tile: 0.3 });
   }
   quarterPipe(world, k, conc, cxp + 11, top, czp - 6, 8, 2.4, Math.PI);
   quarterPipe(world, k, conc, cxp + 11, top, czp + 6, 8, 2.4, 0);
@@ -28517,21 +28551,20 @@ function skatePark(world, k, M, B2) {
   world.spot("skateBowl", cxp - 8, top, czp + 4);
   world.propSpawns.push({ kind: "skateboard", x: cxp - 2, y: top + 0.3, z: czp - 4 });
 }
-function bowlGeometry(radius, depth, seg = 40, rings = 10) {
+function bowlGeometry(half, depth, n = 24) {
   const pos = [], idx = [], uv = [];
-  for (let i = 0; i <= rings; i++) {
-    const t = i / rings;
-    const r = radius * t;
-    const y = -depth * Math.cos(t * Math.PI / 2);
-    for (let j = 0; j <= seg; j++) {
-      const a = j / seg * Math.PI * 2;
-      pos.push(Math.cos(a) * r, y + depth * 0, Math.sin(a) * r);
-      uv.push(j / seg, t);
+  for (let i = 0; i <= n; i++) {
+    for (let j = 0; j <= n; j++) {
+      const x = -half + i / n * half * 2;
+      const z = -half + j / n * half * 2;
+      const t = Math.max(Math.abs(x), Math.abs(z)) / half;
+      pos.push(x, -depth * Math.cos(t * Math.PI / 2), z);
+      uv.push(x / 2, z / 2);
     }
   }
-  for (let i = 0; i < rings; i++) {
-    for (let j = 0; j < seg; j++) {
-      const a = i * (seg + 1) + j, b = a + seg + 1;
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const a = i * (n + 1) + j, b = a + n + 1;
       idx.push(a, b, a + 1, b, b + 1, a + 1);
     }
   }
@@ -28630,7 +28663,7 @@ function driveway(world, k, M, B2) {
   world.collider(7.2, 0.4, 7.2, -8, 0.12, -26);
   for (let i = 0; i < 12; i++) {
     const a = i / 12 * Math.PI * 2;
-    B2.box(0.7, 0.7, 0.4, M.get("stone"), -8 + Math.cos(a) * 1.9, 0.55, -26 + Math.sin(a) * 1.9, { rotY: -a, tile: 0.5 });
+    B2.box(0.7, 0.7, 0.4, M.get("stone"), -8 + Math.cos(a) * 1.9, 0.55, -26 + Math.sin(a) * 1.9, { rotY: Math.PI / 2 - a, tile: 0.5 });
   }
   B2.box(0.5, 1.6, 0.5, M.get("stone"), -8, 1.1, -26, { tile: 0.5 });
   B2.box(1.5, 0.16, 1.5, M.get("stone"), -8, 1.9, -26, { tile: 0.5 });
@@ -29369,17 +29402,24 @@ var Player = class {
   }
   stand() {
     if (this.mode === "sit" && this.seat) {
-      const back = 0.9;
-      this.teleport(
-        this.seat.x - Math.sin(this.seatYaw) * back,
-        this.seat.y - 0.1,
-        this.seat.z - Math.cos(this.seatYaw) * back,
-        this.yaw
-      );
+      const s = this.seat;
+      const spots = [];
+      for (let i = 0; i < 8; i++) {
+        const a = this.seatYaw + Math.PI + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * Math.PI / 4;
+        spots.push([s.x + Math.sin(a) * 0.95, s.z + Math.cos(a) * 0.95]);
+      }
+      spots.push([s.x, s.z]);
+      for (const [x, z] of spots) {
+        this.teleport(x, s.y - 0.1, z, this.yaw);
+        if (!this.world.octree.capsuleIntersect(this.capsule)) break;
+      }
     }
     this.mode = "walk";
     this.seat = null;
-    this.vehicle = null;
+    if (this.vehicle) {
+      this.vehicle.occupied = false;
+      this.vehicle = null;
+    }
   }
   updateSeated(dt) {
     const s = this.seat;
@@ -29390,6 +29430,7 @@ var Player = class {
   }
   // ── driving ─────────────────────────────────────────────────────────────
   drive(v) {
+    if (this.vehicle && this.vehicle !== v) this.vehicle.occupied = false;
     this.vehicle = v;
     this.mode = "drive";
     v.occupied = true;
@@ -29448,7 +29489,7 @@ var Player = class {
 };
 
 // src/systems/props.js
-var GRAVITY2 = 26;
+var GRAVITY2 = 18;
 var Props = class {
   constructor(world) {
     this.world = world;
@@ -30307,6 +30348,7 @@ var FamilyMember = class {
     this.speed = 0;
     this.wantSpeed = spec.id === "kaelie" ? 1.35 : 1.6;
     this.talking = false;
+    this.wasTalking = false;
     this.lastLine = -1;
     this.idleTimer = 0;
     this.stuck = 0;
@@ -30329,12 +30371,16 @@ var FamilyMember = class {
   }
   update(dt, t, hour, playerPos) {
     const c = this.char;
+    const justFinishedTalking = !this.talking && this.wasTalking;
+    this.wasTalking = this.talking;
     if (!this.talking) {
       const [, goal, activity] = this.goalForTime(hour);
       this.activity = activity;
       if (goal !== this.currentGoal) {
         this.currentGoal = goal;
         this.setDestination(goal);
+      } else if (justFinishedTalking) {
+        this.setDestination(this.currentGoal);
       } else if (!this.path.length) {
         this.idleTimer -= dt;
         if (this.idleTimer <= 0) {
@@ -30937,14 +30983,19 @@ var Game = class {
       this.ui.setPrompt(null, null);
     };
     addEventListener("keydown", (e) => {
-      if (e.code !== "Escape") return;
-      if (this.dialogue) {
-        this.endDialogue();
+      if (e.code === "Escape") {
+        if (this.dialogue) {
+          this.endDialogue();
+          e.preventDefault();
+        } else if (this.journalOpen) {
+          this.toggleJournal(false);
+          this.input.pressed.delete("pause");
+          e.preventDefault();
+        }
+      } else if (e.code === "Tab" && this.journalOpen) {
+        this.toggleJournal(false);
+        this.input.pressed.delete("journal");
         e.preventDefault();
-      } else if (this.journalOpen) {
-        this.journalOpen = false;
-        this.ui.showJournal(false);
-        this.input.requestLock();
       }
     });
     this.settings.onChange((k) => {
@@ -31135,6 +31186,16 @@ var Game = class {
       this.audio.resume();
     }
   }
+  toggleJournal(open) {
+    this.journalOpen = open;
+    this.ui.showJournal(open);
+    if (open) {
+      this.ui.updateJournal(this.family, this.world, this.objectives, this.discovered);
+      this.input.exitLock();
+    } else {
+      this.input.requestLock();
+    }
+  }
   // ── dialogue ────────────────────────────────────────────────────────────
   startDialogue(member) {
     this.dialogue = member;
@@ -31198,7 +31259,7 @@ var Game = class {
   frame(dt) {
     this.time += dt;
     const playing = this.state === "play";
-    this.input.enabled = playing && !this.dialogue;
+    this.input.enabled = playing && !this.dialogue && !this.journalOpen;
     if (playing) this.update(dt);
     else if (this.state === "menu") this.updateMenuCamera(dt);
     for (const fn of this.world.updaters) fn(dt, this.time);
@@ -31228,21 +31289,22 @@ ${info.calls} calls \xB7 ${(info.triangles / 1e3).toFixed(0)}k tris`);
     if (inp.hit("pause")) {
       this.dialogue ? this.endDialogue() : this.pause(true);
     }
-    if (inp.hit("journal")) {
-      this.journalOpen = !this.journalOpen;
-      this.ui.showJournal(this.journalOpen);
-      if (this.journalOpen) {
-        this.ui.updateJournal(this.family, W, this.objectives, this.discovered);
-        this.input.exitLock();
-      } else this.input.requestLock();
-    }
+    if (inp.hit("journal")) this.toggleJournal(true);
     if (inp.hit("photo")) this.ui.toggleHudVisibility();
-    if (inp.hit("screenshot")) this.engine.screenshot(`home-${Date.now()}.png`);
+    if (inp.hit("screenshot")) {
+      const started = this.engine.screenshot(
+        `home-${Date.now()}.png`,
+        (ok) => this.ui.toast(ok ? "Screenshot saved" : "Could not save the screenshot", ok ? "Check your downloads" : null)
+      );
+      if (!started) this.ui.toast("Saving is blocked here", "Open play.html on its own to save shots \xB7 H hides the HUD");
+    }
     if (inp.mouse.wheel) this.sky.setTime(this.sky.time + inp.mouse.wheel * 0.5);
+    let interactUsed = false;
     P.update(dt);
     if (P.mode === "drive" && P.vehicle) {
       updateVehicle(P.vehicle, W, dt, P.vehicleControls());
       const v = P.vehicle;
+      this._wasDriving = true;
       this.audio.engine(v.engine.base + Math.abs(v.speed) * v.engine.rev * 6, clamp2(Math.abs(v.speed) / v.maxSpeed, 0, 1));
       this.ui.setVehicle(v);
       if (inp.hit("vehicle")) {
@@ -31252,8 +31314,15 @@ ${info.calls} calls \xB7 ${(info.triangles / 1e3).toFixed(0)}k tris`);
       }
       if (v === this.lambo && v.pos.distanceTo(v.home) > 45) this.complete("drive", "You took the Lambo out");
     } else {
+      if (this._wasDriving) {
+        this.audio.stopEngine();
+        this._wasDriving = false;
+      }
       this.ui.setVehicle(null);
-      if (P.mode === "sit" && (inp.hit("interact") || inp.hit("jump"))) P.stand();
+      if (P.mode === "sit" && (inp.hit("interact") || inp.hit("jump"))) {
+        P.stand();
+        interactUsed = true;
+      }
     }
     P.syncCamera(dt);
     W.cameraPos = this.engine.camera.position;
@@ -31278,11 +31347,11 @@ ${info.calls} calls \xB7 ${(info.triangles / 1e3).toFixed(0)}k tris`);
     if (this.props.held) sub = "Left click to throw \xB7 G to drop";
     else if (P.mode === "sit") sub = "E or Space to stand up";
     this.ui.setPrompt(this.dialogue ? null : label, this.dialogue ? null : sub);
-    if (inp.hit("interact") && target && P.mode !== "sit") {
+    if (inp.hit("interact") && target && P.mode === "walk" && !interactUsed) {
       const sound = this.interaction.use(target, this);
       if (sound) this.audio.play(sound);
-      if (target.kind === "theater") this.complete("movie");
-      if (target.kind === "pc") this.complete("pc");
+      if (target.kind === "theater" && target.data?.on) this.complete("movie");
+      if (target.kind === "pc" && target.data?.on) this.complete("pc");
       if (target.kind === "fire" && target.data?.on) this.complete("fire");
     }
     if (inp.hit("vehicle") && target?.kind === "vehicle" && P.mode === "walk") {
@@ -31293,8 +31362,8 @@ ${info.calls} calls \xB7 ${(info.triangles / 1e3).toFixed(0)}k tris`);
       this.props.updateHeld(this.engine.camera, dt);
       if (inp.mouse.leftPressed) {
         const dir = this._tmp.set(0, 0, -1).applyQuaternion(this.engine.camera.quaternion);
-        const power = this.props.held.tag === "ball" ? 15 : this.props.held.tag === "basketball" ? 10.5 : 9;
-        const p = this.props.drop(dir.multiplyScalar(power).add(this._tmp2.set(0, 1.6, 0)));
+        const power = this.props.held.tag === "ball" ? 15 : this.props.held.tag === "basketball" ? 15.5 : 9;
+        const p = this.props.drop(dir.multiplyScalar(power).add(this._tmp2.set(0, this.props.held.tag === "basketball" ? 3.8 : 1.6, 0)));
         this.ui.setHeld(null);
         this.audio.play(p.tag === "ball" ? "roll" : "swish");
         this.thrown = p;
@@ -31423,13 +31492,15 @@ function fatal(err) {
   }
 }
 async function boot() {
-  if (!canvas.getContext("webgl2") && !canvas.getContext("webgl")) {
+  const probe = document.createElement("canvas");
+  if (!probe.getContext("webgl2") && !probe.getContext("webgl")) {
     fatal(new Error("This browser has no WebGL \u2014 try Chrome, Edge, Firefox or Safari."));
     return;
   }
-  const game = new Game(canvas);
-  window.game = game;
+  let game;
   try {
+    game = new Game(canvas);
+    window.game = game;
     await game.load();
   } catch (e) {
     fatal(e);

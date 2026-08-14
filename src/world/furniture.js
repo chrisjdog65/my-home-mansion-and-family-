@@ -310,7 +310,7 @@ export function fireplace(k, x, y, z, o = {}) {
   grp.add(light);
   k.world.addProp(grp);
 
-  const fire = { on: o.lit !== false, grp, flames, light };
+  const fire = { on: o.lit === true, grp, flames, light };
   grp.visible = fire.on;
   k.world.onUpdate((dt, t) => {
     if (!fire.on) return;
@@ -362,7 +362,7 @@ export function island(k, x, y, z, o = {}) {
   k.p(b, 0, 1.1, -0.32, 0.05, 0.34, 0.05, M.get('chrome'), 0.2);         // tap
   k.p(b, 0, 1.26, -0.24, 0.05, 0.04, 0.2, M.get('chrome'), 0.2);
   k.pc(b, 0, 0.46, 0, w + 0.24, 0.98, d + 0.24);
-  for (let i = 0; i < 3; i++) barstool(k, ...k.L(-w / 3 + i * (w / 3), d / 2 + 0.55, x, z, b.r), y, { rotY: b.r + Math.PI });
+  for (let i = 0; i < 3; i++) barstool(k, ...k.L(-w / 3 + i * (w / 3), d / 2 + 0.55, x, z, b.r), y, { rotY: b.r });
   // pendant lights
   for (let i = 0; i < 3; i++) {
     const [px, pz] = k.L(-w / 3 + i * (w / 3), 0, x, z, b.r);

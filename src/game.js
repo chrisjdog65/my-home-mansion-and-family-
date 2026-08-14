@@ -60,9 +60,15 @@ export class Game {
       this.ui.setPrompt(null, null);
     };
     addEventListener('keydown', (e) => {
-      if (e.code !== 'Escape') return;
-      if (this.dialogue) { this.endDialogue(); e.preventDefault(); }
-      else if (this.journalOpen) { this.journalOpen = false; this.ui.showJournal(false); this.input.requestLock(); }
+      if (e.code === 'Escape') {
+        if (this.dialogue) { this.endDialogue(); e.preventDefault(); }
+        else if (this.journalOpen) { this.toggleJournal(false); this.input.pressed.delete('pause'); e.preventDefault(); }
+      } else if (e.code === 'Tab' && this.journalOpen) {
+        // gameplay input is off while the journal is up, so close it from here
+        this.toggleJournal(false);
+        this.input.pressed.delete('journal');   // don't let update() reopen it
+        e.preventDefault();
+      }
     });
     this.settings.onChange((k) => {
       if (k === 'quality') this.mats?.setQuality(this.settings.quality);
@@ -259,6 +265,17 @@ export class Game {
     }
   }
 
+  toggleJournal(open) {
+    this.journalOpen = open;
+    this.ui.showJournal(open);
+    if (open) {
+      this.ui.updateJournal(this.family, this.world, this.objectives, this.discovered);
+      this.input.exitLock();
+    } else {
+      this.input.requestLock();
+    }
+  }
+
   // ── dialogue ────────────────────────────────────────────────────────────
   startDialogue(member) {
     this.dialogue = member;
@@ -319,7 +336,7 @@ export class Game {
   frame(dt) {
     this.time += dt;
     const playing = this.state === 'play';
-    this.input.enabled = playing && !this.dialogue;
+    this.input.enabled = playing && !this.dialogue && !this.journalOpen;
 
     if (playing) this.update(dt);
     else if (this.state === 'menu') this.updateMenuCamera(dt);
@@ -353,30 +370,30 @@ export class Game {
 
     // global keys
     if (inp.hit('pause')) { this.dialogue ? this.endDialogue() : this.pause(true); }
-    if (inp.hit('journal')) {
-      this.journalOpen = !this.journalOpen;
-      this.ui.showJournal(this.journalOpen);
-      if (this.journalOpen) {
-        this.ui.updateJournal(this.family, W, this.objectives, this.discovered);
-        this.input.exitLock();
-      } else this.input.requestLock();
-    }
+    if (inp.hit('journal')) this.toggleJournal(true);
     if (inp.hit('photo')) this.ui.toggleHudVisibility();
-    if (inp.hit('screenshot')) this.engine.screenshot(`home-${Date.now()}.png`);
+    if (inp.hit('screenshot')) {
+      const started = this.engine.screenshot(`home-${Date.now()}.png`,
+        (ok) => this.ui.toast(ok ? 'Screenshot saved' : 'Could not save the screenshot', ok ? 'Check your downloads' : null));
+      if (!started) this.ui.toast('Saving is blocked here', 'Open play.html on its own to save shots · H hides the HUD');
+    }
     if (inp.mouse.wheel) this.sky.setTime(this.sky.time + inp.mouse.wheel * 0.5);
 
     // ── player ──
+    let interactUsed = false;
     P.update(dt);
     if (P.mode === 'drive' && P.vehicle) {
       updateVehicle(P.vehicle, W, dt, P.vehicleControls());
       const v = P.vehicle;
+      this._wasDriving = true;
       this.audio.engine(v.engine.base + Math.abs(v.speed) * v.engine.rev * 6, clamp(Math.abs(v.speed) / v.maxSpeed, 0, 1));
       this.ui.setVehicle(v);
       if (inp.hit('vehicle')) { P.exitVehicle(); this.audio.stopEngine(); this.ui.setVehicle(null); }
       if (v === this.lambo && v.pos.distanceTo(v.home) > 45) this.complete('drive', 'You took the Lambo out');
     } else {
+      if (this._wasDriving) { this.audio.stopEngine(); this._wasDriving = false; }
       this.ui.setVehicle(null);
-      if (P.mode === 'sit' && (inp.hit('interact') || inp.hit('jump'))) P.stand();
+      if (P.mode === 'sit' && (inp.hit('interact') || inp.hit('jump'))) { P.stand(); interactUsed = true; }
     }
     P.syncCamera(dt);
     W.cameraPos = this.engine.camera.position;
@@ -405,11 +422,11 @@ export class Game {
     else if (P.mode === 'sit') sub = 'E or Space to stand up';
     this.ui.setPrompt(this.dialogue ? null : label, this.dialogue ? null : sub);
 
-    if (inp.hit('interact') && target && P.mode !== 'sit') {
+    if (inp.hit('interact') && target && P.mode === 'walk' && !interactUsed) {
       const sound = this.interaction.use(target, this);
       if (sound) this.audio.play(sound);
-      if (target.kind === 'theater') this.complete('movie');
-      if (target.kind === 'pc') this.complete('pc');
+      if (target.kind === 'theater' && target.data?.on) this.complete('movie');
+      if (target.kind === 'pc' && target.data?.on) this.complete('pc');
       if (target.kind === 'fire' && target.data?.on) this.complete('fire');
     }
     if (inp.hit('vehicle') && target?.kind === 'vehicle' && P.mode === 'walk') {
@@ -422,8 +439,8 @@ export class Game {
       this.props.updateHeld(this.engine.camera, dt);
       if (inp.mouse.leftPressed) {
         const dir = this._tmp.set(0, 0, -1).applyQuaternion(this.engine.camera.quaternion);
-        const power = this.props.held.tag === 'ball' ? 15 : this.props.held.tag === 'basketball' ? 10.5 : 9;
-        const p = this.props.drop(dir.multiplyScalar(power).add(this._tmp2.set(0, 1.6, 0)));
+        const power = this.props.held.tag === 'ball' ? 15 : this.props.held.tag === 'basketball' ? 15.5 : 9;
+        const p = this.props.drop(dir.multiplyScalar(power).add(this._tmp2.set(0, this.props.held.tag === 'basketball' ? 3.8 : 1.6, 0)));
         this.ui.setHeld(null);
         this.audio.play(p.tag === 'ball' ? 'roll' : 'swish');
         this.thrown = p;

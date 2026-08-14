@@ -38,6 +38,7 @@ export function groundHeight(x, z) {
   h -= basin(x, z, 0, 23, 11.5, 8.5, 3.6);      // swimming pool
   h -= basin(x, z, 13.5, 22, 4.4, 4.4, 1.6);    // hot tub
   h -= basin(x, z, -22, 48, 13, 10, 1.5);       // pond
+  h -= basin(x, z, 18, 66, 8.4, 8.4, 3.4);      // skate bowl
   return h;
 }
 
@@ -115,7 +116,7 @@ function plantTrees(world) {
   const M = world.mats;
   const bark = M.get('bark'), leaf = M.get('foliage');
   const keepOut = (x, z) =>
-    (x > -44 && x < 44 && z > -80 && z < 66);   // house, drive, yard
+    (x > -44 && x < 44 && z > -80 && z < 80);   // house, drive, yard, skate park
 
   for (let i = 0; i < 420; i++) {
     const a = rng() * Math.PI * 2;

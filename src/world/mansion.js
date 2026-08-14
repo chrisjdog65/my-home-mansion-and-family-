@@ -247,7 +247,9 @@ function buildRoomWalls(world, R, F, wallCol, matTrim, cuts) {
 }
 
 function wallColliders(world, px, pz, len, h, t, openings, rotY, baseY) {
-  const cuts = openings.map((o) => ({ a: o.x - o.w / 2, b: o.x + o.w / 2, y1: o.y1 })).sort((p, q) => p.a - q.a);
+  const cuts = openings
+    .map((o) => ({ a: o.x - o.w / 2, b: o.x + o.w / 2, y0: o.y0 ?? 0, y1: o.y1 }))
+    .sort((p, q) => p.a - q.a);
   const half = len / 2;
   const put = (x0, x1, y0, y1) => {
     if (x1 - x0 < 0.02 || y1 - y0 < 0.02) return;
@@ -258,7 +260,8 @@ function wallColliders(world, px, pz, len, h, t, openings, rotY, baseY) {
   for (const c of cuts) {
     const a = Math.max(-half, c.a), b = Math.min(half, c.b);
     if (a > cursor) put(cursor, a, 0, h);
-    put(a, b, Math.min(c.y1, h), h);
+    put(a, b, 0, Math.min(c.y0, h));            // spandrel below a window
+    put(a, b, Math.min(c.y1, h), h);            // header above the opening
     cursor = Math.max(cursor, b);
   }
   if (cursor < half) put(cursor, half, 0, h);
@@ -429,8 +432,8 @@ function buildStairs(world) {
       B.box(0.09, 0.09, len, rail, s * (W / 2 - 0.06), 2.1 + 1.0, (z0 + topZ) / 2, { rotX: -Math.atan2(4.2, 24 * run), tile: 0.5 });
     }
     // upper gallery railings around the void
-    railing(B, post, rail, 0, 4.2, -2.5, 12.0, 0, 1.05);
-    for (const s of [-1, 1]) railing(B, post, rail, s * 5.9, 4.2, -7.6, 10.4, Math.PI / 2, 1.05);
+    railing(world, post, rail, 0, 4.2, -2.35, 12.0, 0, 1.05);
+    for (const s of [-1, 1]) railing(world, post, rail, s * 5.85, 4.2, -7.6, 10.4, Math.PI / 2, 1.05);
     world.spot('grandStairBottom', 0, 0, -10.6);
     world.spot('grandStairTop', 0, 4.2, -1.4);
     world.stairLinks = world.stairLinks || [];
@@ -445,8 +448,8 @@ function buildStairs(world) {
       B.box(run, h, W, tread, x0 + (i + 0.5) * run, 4.2 + h / 2, zc, { tile: 1.2 });
       world.collider(run, h, W, x0 + (i + 0.5) * run, 4.2 + h / 2, zc);
     }
-    railing(B, post, rail, x0 + 3.5, 4.2, zc - 0.8, 7.2, 0, 1.0);
-    railing(B, post, rail, 19.4, 8.4, 0.3, 8.0, 0, 1.05);
+    railing(world, post, rail, x0 + 3.5, 4.2, zc - 0.8, 7.2, 0, 1.0);
+    railing(world, post, rail, 19.4, 8.4, 0.3, 8.0, 0, 1.05);
     world.spot('thirdStairBottom', 15.4, 4.2, zc);
     world.spot('thirdStairTop', 23.6, 8.4, zc);
     world.stairLinks.push({ a: new THREE.Vector3(15.6, 4.2, zc), b: new THREE.Vector3(23.6, 8.4, zc) });
@@ -459,25 +462,25 @@ function buildStairs(world) {
     for (let i = 0; i < 17; i++) {
       const yTop = -rise * (i + 1);
       B.box(run, 0.24, W, tread, -21.6 - (i + 0.5) * run, yTop + 0.12, -0.9, { tile: 1.1 });
-      world.collider(run, 0.6, W, -21.6 - (i + 0.5) * run, yTop - 0.18, -0.9);
+      world.collider(run, 0.24, W, -21.6 - (i + 0.5) * run, yTop + 0.12, -0.9);
     }
     const landY = -rise * 17;
     B.box(1.7, 0.24, 3.6, tread, -26.8, landY + 0.12, 0, { tile: 1.2 });
-    world.collider(1.7, 0.6, 3.6, -26.8, landY - 0.18, 0);
+    world.collider(1.7, 0.24, 3.6, -26.8, landY + 0.12, 0);
     // flight B heads back east at z = +0.9
     for (let i = 0; i < 13; i++) {
       const yTop = landY - rise * (i + 1);
       B.box(run, 0.24, W, tread, -25.9 + (i + 0.5) * run, yTop + 0.12, 0.9, { tile: 1.1 });
-      world.collider(run, 0.6, W, -25.9 + (i + 0.5) * run, yTop - 0.18, 0.9);
+      world.collider(run, 0.24, W, -25.9 + (i + 0.5) * run, yTop + 0.12, 0.9);
     }
-    railing(B, post, rail, -24.6, 0, -0.05, 6.2, 0, 1.0);
+    railing(world, post, rail, -24.6, 0, -0.05, 6.2, 0, 1.0);
     world.spot('basementStairTop', -20.6, 0, -0.9);
     world.spot('basementStairBottom', -22.2, -6.0, 0.9);
     world.stairLinks.push({ a: new THREE.Vector3(-20.8, 0, -0.9), b: new THREE.Vector3(-22.2, -6.0, 0.9), via: new THREE.Vector3(-26.8, -3.4, 0) });
   }
 
   // Great room void railing
-  railing(B, post, rail, -24, 4.2, 2.6, 11.6, 0, 1.05);
+  railing(world, post, rail, -24, 4.2, 2.15, 11.6, 0, 1.05);
 }
 
 // ── roof ───────────────────────────────────────────────────────────────────
