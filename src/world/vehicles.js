@@ -42,13 +42,14 @@ export function buildTruck(world, x, z, rotY = 0) {
   for (let i = 0; i < 5; i++) panel(g, 1.9, 0.06, 0.06, chrome, 0, 1.25 + i * 0.11, 3.36);
   panel(g, 2.2, 0.24, 0.35, chrome, 0, 0.95, 3.36);         // bumper
   for (const s of [-1, 1]) {
-    panel(g, 0.45, 0.22, 0.1, M.emissive(0xfff2d8, 1.4), s * 0.75, 1.52, 3.38);   // headlights
-    panel(g, 0.4, 0.2, 0.08, M.emissive(0xd0342c, 1.0), s * 0.8, 1.55, -3.05);    // tail lights
-    panel(g, 0.12, 0.34, 0.2, trim, s * 1.15, 2.2, 1.6);                          // mirrors
+    panel(g, 0.45, 0.22, 0.1, M.emissiveDim(0xfff2d8, 1.4), s * 0.75, 1.52, 3.38);  // headlights
+    // on the tailgate face, not floating behind it
+    panel(g, 0.4, 0.2, 0.08, M.emissiveDim(0xd0342c, 1.0), s * 0.8, 1.55, -2.88);   // tail lights
+    panel(g, 0.12, 0.34, 0.2, trim, s * 1.15, 2.2, 1.6);                            // mirrors
   }
   // light bar + exhaust + steps
   panel(g, 1.5, 0.14, 0.16, trim, 0, 2.78, 1.2);
-  for (let i = 0; i < 6; i++) panel(g, 0.18, 0.1, 0.12, M.emissive(0xdff0ff, 1.2), -0.6 + i * 0.24, 2.78, 1.14);
+  for (let i = 0; i < 6; i++) panel(g, 0.18, 0.1, 0.12, M.emissiveDim(0xdff0ff, 1.2), -0.6 + i * 0.24, 2.78, 1.14);
   for (const s of [-1, 1]) {
     panel(g, 0.1, 0.1, 1.9, chrome, s * 1.05, 0.72, 0.4);
     panel(g, 0.14, 0.14, 0.5, chrome, s * 0.7, 0.95, -3.1);
@@ -75,6 +76,7 @@ export function buildTruck(world, x, z, rotY = 0) {
   return makeVehicle(world, {
     name: 'Ford F-350 Super Duty', group: g, wheels, steerWheel: wheelG,
     seat: V(-0.45, 1.72, 0.72), radius: 1.9,
+    halfW: 1.12, halfH: 1.4, halfD: 3.2, wheelbase: 3.7,
     maxSpeed: 26, accel: 12, brake: 26, grip: 1.5, mass: 3,
     engine: { base: 62, rev: 1.9, growl: 0.55 },
   }, x, z, rotY);
@@ -99,9 +101,14 @@ export function buildLambo(world, x, z, rotY = 0) {
   panel(g, 1.9, 0.3, 1.1, body, 0, 0.72, -1.6);                      // engine deck
   for (const s of [-1, 1]) {
     panel(g, 0.22, 0.34, 1.9, body, s * 0.95, 0.82, -0.4);           // shoulders
+    // side glass + pillars close the cabin — without them the cockpit is
+    // open air under a hovering roof plank
+    panel(g, 0.035, 0.3, 1.35, glass, s * 0.79, 1.02, -0.5, { rotZ: s * -0.14 });
+    panel(g, 0.07, 0.32, 0.09, trim, s * 0.77, 1.0, 0.18, { rotZ: s * -0.14 });   // A-pillar
+    panel(g, 0.07, 0.32, 0.1, trim, s * 0.77, 1.0, -1.16, { rotZ: s * -0.14 });   // B-pillar
     panel(g, 0.5, 0.16, 0.34, trim, s * 0.86, 0.72, -0.2);           // side intake
-    panel(g, 0.42, 0.1, 0.14, M.emissive(0xffffff, 1.6), s * 0.62, 0.72, 2.16);
-    panel(g, 0.5, 0.08, 0.1, M.emissive(0xd0342c, 1.4), s * 0.6, 0.8, -2.2);
+    panel(g, 0.42, 0.1, 0.14, M.emissiveDim(0xffffff, 1.6), s * 0.62, 0.72, 2.16);
+    panel(g, 0.5, 0.08, 0.1, M.emissiveDim(0xd0342c, 1.4), s * 0.6, 0.8, -2.2);
     panel(g, 0.1, 0.22, 0.14, trim, s * 1.06, 0.98, 0.55);           // mirror
   }
   panel(g, 1.6, 0.1, 0.4, trim, 0, 1.06, -2.15, { rotX: 0.2 });      // wing
@@ -110,7 +117,8 @@ export function buildLambo(world, x, z, rotY = 0) {
   panel(g, 1.3, 0.26, 0.2, trim, 0, 0.5, -2.28);                     // diffuser
   for (const s of [-1, 1]) panel(g, 0.16, 0.16, 0.16, M.get('chrome'), s * 0.3, 0.62, -2.34);
 
-  const wheels = addWheels(g, M, 0.36, 0.22, [[-0.92, 1.4], [0.92, 1.4], [-0.95, -1.35], [0.95, -1.35]], 0.36, 0x1a1c20);
+  // gunmetal rims — near-black discs vanished against the tyres
+  const wheels = addWheels(g, M, 0.36, 0.22, [[-0.92, 1.4], [0.92, 1.4], [-0.95, -1.35], [0.95, -1.35]], 0.36, 0x8a9098);
 
   // cockpit
   panel(g, 1.5, 0.22, 0.34, M.get('darkPlastic'), 0, 0.82, 0.86);
@@ -129,6 +137,7 @@ export function buildLambo(world, x, z, rotY = 0) {
   return makeVehicle(world, {
     name: 'Lamborghini', group: g, wheels, steerWheel: wheelG,
     seat: V(-0.35, 0.78, 0.1), radius: 1.5,
+    halfW: 1.02, halfH: 0.72, halfD: 2.35, wheelbase: 2.75,
     maxSpeed: 62, accel: 26, brake: 34, grip: 2.5, mass: 1.4,
     engine: { base: 110, rev: 3.2, growl: 0.3 },
   }, x, z, rotY);
@@ -161,11 +170,18 @@ function addWheels(g, M, r, width, spots, lift, rimColor = 0xc8ccd2) {
 // ── drivable vehicle controller ────────────────────────────────────────────
 function makeVehicle(world, cfg, x, z, rotY) {
   const v = Object.assign({
-    pos: V(x, 0, z), heading: rotY, speed: 0, steer: 0, wheelSpin: 0,
-    grounded: true, vy: 0, occupied: false,
+    pos: V(x, 0, z), heading: rotY, speed: 0, steer: 0,
+    grounded: true, vy: 0, occupied: false, pitch: 0,
   }, cfg);
   v.home = V(x, 0, z);
   v.homeHeading = rotY;
+  for (const w of v.wheels) w.spin = 0;
+
+  // solid to the player — an OBB blocker that tracks the body
+  v.blocker = world.addBlocker({
+    pos: V(x, v.halfH, z), rotY,
+    halfW: v.halfW, halfH: v.halfH, halfD: v.halfD, active: true,
+  });
 
   world.vehicles.push(v);
   world.addInteract({
@@ -199,48 +215,72 @@ export function updateVehicle(v, world, dt, ctrl) {
   v.heading -= v.steer * authority * v.grip * dt * Math.sign(v.speed || 1);
 
   _fwd.set(Math.sin(v.heading), 0, Math.cos(v.heading));
-  const step = v.speed * dt;
-  v.pos.addScaledVector(_fwd, step);
 
-  // ground follow
-  _ray.origin.set(v.pos.x, v.pos.y + 4, v.pos.z);
-  _ray.direction.copy(_down);
-  const hit = world.octree.rayIntersect(_ray);
-  const groundY = hit ? hit.position.y : null;
-  if (groundY !== null && v.pos.y + 4 - hit.distance > -50) {
-    const target = groundY;
-    if (v.pos.y < target + 0.05) { v.pos.y = damp(v.pos.y, target, 16, dt); v.vy = 0; v.grounded = true; }
-    else { v.vy -= 22 * dt; v.pos.y += v.vy * dt; v.grounded = false; if (v.pos.y < target) { v.pos.y = target; v.vy = 0; v.grounded = true; } }
+  // move in sub-steps so a flat-out Lambo can't skip through a wall between
+  // frames, testing the body sphere as it goes
+  let remaining = v.speed * dt;
+  const stepLen = Math.max(0.5, v.radius * 0.7) * Math.sign(remaining || 1);
+  while (remaining !== 0) {
+    const step = Math.abs(remaining) > Math.abs(stepLen) ? stepLen : remaining;
+    v.pos.addScaledVector(_fwd, step);
+    remaining -= step;
+    _sphere.center.set(v.pos.x, v.pos.y + v.radius * 0.8, v.pos.z);
+    _sphere.radius = v.radius;
+    const c = world.octree.sphereIntersect(_sphere);
+    if (c && Math.abs(c.normal.y) < 0.6) {
+      v.pos.addScaledVector(c.normal, c.depth);
+      const into = _fwd.dot(c.normal) * Math.sign(v.speed || 1);
+      v.speed *= into < -0.2 ? 0.2 : Math.pow(0.9, dt * 60);
+      break;
+    }
+  }
+
+  // ground follow: one ray under each axle so the body pitches with the slope
+  const sampleGround = (along) => {
+    _ray.origin.set(v.pos.x + _fwd.x * along, v.pos.y + 4, v.pos.z + _fwd.z * along);
+    _ray.direction.copy(_down);
+    const hit = world.octree.rayIntersect(_ray);
+    return hit ? hit.position.y : null;
+  };
+  const wb = v.wheelbase / 2;
+  const frontY = sampleGround(wb), rearY = sampleGround(-wb);
+  const groundY = frontY !== null && rearY !== null ? (frontY + rearY) / 2
+    : frontY !== null ? frontY : rearY;
+  if (groundY !== null) {
+    if (v.pos.y < groundY + 0.05) { v.pos.y = damp(v.pos.y, groundY, 16, dt); v.vy = 0; v.grounded = true; }
+    else { v.vy -= 22 * dt; v.pos.y += v.vy * dt; v.grounded = false; if (v.pos.y < groundY) { v.pos.y = groundY; v.vy = 0; v.grounded = true; } }
   } else {
     v.vy -= 22 * dt; v.pos.y += v.vy * dt;
     if (v.pos.y < -20) { resetVehicle(v); }
   }
+  const slopePitch = (v.grounded && frontY !== null && rearY !== null)
+    ? Math.atan2(rearY - frontY, v.wheelbase) : 0;
 
-  // body collision
-  _sphere.center.set(v.pos.x, v.pos.y + v.radius * 0.8, v.pos.z);
-  _sphere.radius = v.radius;
-  const c = world.octree.sphereIntersect(_sphere);
-  if (c && Math.abs(c.normal.y) < 0.6) {
-    v.pos.addScaledVector(c.normal, c.depth);
-    const into = _fwd.dot(c.normal);
-    if (into < -0.2) v.speed *= 0.35;
-    else v.speed *= 0.9;
-  }
+  // weight transfer: nose lifts under throttle, dips under braking
+  const accelPitch = clamp((throttle > 0 ? -throttle : 0) * 0.03 + (braking ? clamp(v.speed / v.maxSpeed, -1, 1) * 0.045 : 0), -0.06, 0.06);
+  v.pitch = damp(v.pitch, slopePitch + accelPitch, 7, dt);
 
   // visuals
   v.group.position.copy(v.pos);
   v.group.rotation.y = v.heading;
+  v.group.rotation.x = v.pitch;
   v.group.rotation.z = damp(v.group.rotation.z, -v.steer * clamp(Math.abs(v.speed) / v.maxSpeed, 0, 1) * 0.09, 6, dt);
-  v.wheelSpin += (v.speed / 0.4) * dt;
   for (const w of v.wheels) {
-    w.obj.rotation.x = v.wheelSpin;
+    w.spin += (v.speed / w.radius) * dt;
+    w.obj.rotation.x = w.spin;
     w.obj.rotation.y = w.steer ? -v.steer * 0.5 : 0;
   }
   if (v.steerWheel) v.steerWheel.rotation.z = -v.steer * 2.2;
+
+  // keep the player-collision box glued to the body (inactive while driven —
+  // the driver shouldn't collide with their own car)
+  v.blocker.pos.set(v.pos.x, v.pos.y + v.halfH, v.pos.z);
+  v.blocker.rotY = v.heading;
+  v.blocker.active = !v.occupied;
 }
 
 export function resetVehicle(v) {
   v.pos.copy(v.home);
   v.heading = v.homeHeading;
-  v.speed = 0; v.vy = 0;
+  v.speed = 0; v.vy = 0; v.pitch = 0;
 }

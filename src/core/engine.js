@@ -17,9 +17,9 @@ const GradeShader = {
     tDiffuse: { value: null },
     resolution: { value: new THREE.Vector2(1, 1) },
     sharpness: { value: 0.35 },
-    vignette: { value: 0.36 },
-    contrast: { value: 1.13 },
-    saturation: { value: 1.12 },
+    vignette: { value: 0.32 },
+    contrast: { value: 1.07 },
+    saturation: { value: 1.09 },
     lift: { value: new THREE.Vector3(0.0, 0.0, 0.002) },
     underwater: { value: 0.0 },
     time: { value: 0 },
@@ -94,14 +94,16 @@ export class Engine {
     this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.22, 0.5, 1.05);
     this.composer.addPass(this.bloom);
 
+    // Tone-map before grading: contrast and sharpening are display-referred
+    // operations — run in linear HDR they crush every shadow to black.
+    this.output = new OutputPass();
+    this.composer.addPass(this.output);
+
     this.grade = new ShaderPass(GradeShader);
     this.composer.addPass(this.grade);
 
     this.smaa = new SMAAPass(1, 1);
     this.composer.addPass(this.smaa);
-
-    this.output = new OutputPass();
-    this.composer.addPass(this.output);
 
     this.clock = new THREE.Clock();
     addEventListener('resize', () => this.resize());
@@ -115,12 +117,15 @@ export class Engine {
     const s = this.settings.renderScale;
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2) * s);
+    const pr = Math.min(devicePixelRatio, 2) * s;
+    this.renderer.setPixelRatio(pr);
     this.renderer.setSize(w, h, false);
+    // the composer keeps its own pixel ratio — without this, renderScale only
+    // shrinks the final blit and the expensive passes still run full-size
+    this.composer.setPixelRatio(pr);
     this.composer.setSize(w, h);
-    const dpr = this.renderer.getPixelRatio();
-    this.grade.uniforms.resolution.value.set(w * dpr, h * dpr);
-    this.bloom.setSize(w * dpr * 0.5, h * dpr * 0.5);
+    this.grade.uniforms.resolution.value.set(w * pr, h * pr);
+    this.bloom.setSize(w * pr * 0.5, h * pr * 0.5);
   }
 
   applySettings() {

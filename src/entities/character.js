@@ -63,6 +63,9 @@ export class Character {
     part(this.neck, cap(0.045 * S, 0.06 * S), skin, 0, 0.03 * S, 0);
     this.head = new THREE.Group();
     this.head.position.y = 0.1 * S;
+    // children carry proportionally bigger heads — a uniform scale-down
+    // reads as a short adult, not a kid
+    this.head.scale.setScalar(spec.headScale || 1);
     this.neck.add(this.head);
     part(this.head, box(0.17 * S, 0.21 * S, 0.18 * S), skin, 0, 0.08 * S, 0);
     // face

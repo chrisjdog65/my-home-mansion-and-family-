@@ -14,7 +14,7 @@ export const BINDINGS = [
   ['interact', ['KeyE'], 'Interact · talk · sit'],
   ['drop', ['KeyG'], 'Drop held item'],
   ['vehicle', ['KeyF'], 'Enter / exit vehicle'],
-  ['flashlight', ['KeyL'], 'Toggle lights in room'],
+  ['flashlight', ['KeyL'], 'Flashlight'],
   ['journal', ['Tab'], 'Journal'],
   ['photo', ['KeyH'], 'Hide HUD (photo mode)'],
   ['screenshot', ['KeyP'], 'Save screenshot'],
@@ -52,6 +52,8 @@ export class Input {
 
     dom.addEventListener('mousedown', (e) => {
       if (!this.locked) {
+        // playing but unlocked (a transient lock refusal) — a click re-locks
+        if (!this.fallback && this.wantLock && e.button === 0) { this.requestLock(); return; }
         // drag-to-look fallback (sandboxed frames, browsers that refuse the lock)
         if (this.fallback && e.button === 0) {
           this.dragging = true;
@@ -97,9 +99,19 @@ export class Input {
 
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === this.dom;
+      if (this.locked) this._everLocked = true;
       this.onLockChange?.(this.locked);
     });
-    document.addEventListener('pointerlockerror', () => this.useFallback());
+    // Chromium refuses a lock requested within ~1.25 s of an Esc-unlock. If
+    // the lock has ever worked, that refusal is transient — retry shortly
+    // instead of permanently downgrading to drag-look.
+    document.addEventListener('pointerlockerror', () => {
+      if (!this._everLocked) { this.useFallback(); return; }
+      clearTimeout(this._retryT);
+      this._retryT = setTimeout(() => {
+        if (!this.locked && this.wantLock) this.requestLock();
+      }, 1400);
+    });
   }
 
   /** Pointer lock is unavailable — switch to hold-and-drag looking. */
@@ -112,18 +124,19 @@ export class Input {
 
   requestLock() {
     if (this.fallback) return;
+    this.wantLock = true;
     try {
       const p = this.dom.requestPointerLock?.({ unadjustedMovement: true });
       if (p && p.catch) {
         p.catch(() => {
-          try { this.dom.requestPointerLock(); } catch (_) { this.useFallback(); }
+          try { this.dom.requestPointerLock(); } catch (_) { if (!this._everLocked) this.useFallback(); }
         });
       }
     } catch (_) {
-      this.useFallback();
+      if (!this._everLocked) this.useFallback();
     }
   }
-  exitLock() { if (!this.fallback) document.exitPointerLock?.(); }
+  exitLock() { this.wantLock = false; if (!this.fallback) document.exitPointerLock?.(); }
 
   down(a) { return this.enabled && this.keys.has(a); }
   hit(a) { return this.enabled && this.pressed.has(a); }
@@ -131,6 +144,7 @@ export class Input {
 
   /** Movement axes in local space (x = strafe, y = forward). */
   axes() {
+    if (!this.enabled) return { x: 0, y: 0 };
     let x = 0, y = 0;
     if (this.down('forward')) y += 1;
     if (this.down('back')) y -= 1;

@@ -23,7 +23,7 @@ import { LightManager } from './systems/lights.js';
 import { Interaction } from './systems/interaction.js';
 import { Audio } from './systems/audio.js';
 
-import { createFamily } from './entities/family.js';
+import { createFamily, separateFamily } from './entities/family.js';
 import { UI } from './ui/ui.js';
 import { ScreenFx } from './systems/screenfx.js';
 
@@ -61,7 +61,7 @@ export class Game {
     };
     addEventListener('keydown', (e) => {
       if (e.code === 'Escape') {
-        if (this.dialogue) { this.endDialogue(); e.preventDefault(); }
+        if (this.dialogue) { this.endDialogue(); this.input.pressed.delete('pause'); e.preventDefault(); }
         else if (this.journalOpen) { this.toggleJournal(false); this.input.pressed.delete('pause'); e.preventDefault(); }
       } else if (e.code === 'Tab' && this.journalOpen) {
         // gameplay input is off while the journal is up, so close it from here
@@ -87,7 +87,9 @@ export class Game {
     await step(0.05, 'Mixing paint and milling timber…', () => {
       this.mats = new Materials(this.engine.renderer);
       this.world = new World(this.engine.scene, this.mats);
-      this.engine.scene.fog = new THREE.Fog(0xbdd3e8, 700, 2600);
+      // near enough that the mountain ring picks up real aerial haze —
+      // backlit ridges with no atmosphere between read as cardboard
+      this.engine.scene.fog = new THREE.Fog(0xbdd3e8, 170, 1250);
     });
 
     await step(0.18, 'Raising four floors…', () => buildMansion(this.world));
@@ -102,7 +104,9 @@ export class Game {
     await step(0.84, 'Squaring up the collision…', () => {
       this.world.build();
       this.sky = new SkySystem(this.engine, this.world);
-      this.sky.setTime(8.4);
+      // just before 8 AM — Kaelie is still on her kitchen coffee, so the
+      // opening objective hint is true
+      this.sky.setTime(7.6);
       this.sky.updateEnv(true);
     });
 
@@ -111,7 +115,8 @@ export class Game {
       this.spawnProps();
       buildNav(this.world);
       this.family = createFamily(this.world);
-      this.lights = new LightManager(this.engine.scene, this.world, this.settings, 10);
+      this.lights = new LightManager(this.engine.scene, this.world, this.settings,
+        this.settings.quality >= 2 ? 14 : 10);
       this.screenFx = new ScreenFx(this.world);
     });
 
@@ -120,6 +125,13 @@ export class Game {
       this.player.teleport(0, 0.25, -20, Math.PI);
       this.interaction = new Interaction(this.world, this.engine.camera, this.player, this.props);
       this.interaction.family = this.family;
+      // a hand torch that rides the camera, for poking around after dark
+      this.flashlight = new THREE.SpotLight(0xfff2da, 0, 34, 0.5, 0.45, 1.4);
+      this.engine.camera.add(this.flashlight, this.flashlight.target);
+      this.flashlight.position.set(0.14, -0.12, 0);
+      this.flashlight.target.position.set(0, 0, -6);
+      this.engine.scene.add(this.engine.camera);
+      this.flashlightOn = false;
       this.setupObjectives();
       this.applyShadowQuality();
       this.mats.setQuality(this.settings.quality);
@@ -137,12 +149,21 @@ export class Game {
     const s = this.settings.shadows;
     const r = this.engine.renderer;
     r.shadowMap.enabled = s > 0;
-    r.shadowMap.type = s > 1 ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    const type = s > 1 ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    const typeChanged = r.shadowMap.type !== type;
+    r.shadowMap.type = type;
     if (this.sky) {
       this.sky.sun.shadow.mapSize.setScalar(s > 1 ? 2048 : 1024);
       if (this.sky.sun.shadow.map) { this.sky.sun.shadow.map.dispose(); this.sky.sun.shadow.map = null; }
     }
-    this.engine.scene.traverse((o) => { if (o.isMesh) o.material.needsUpdate = false; });
+    // the filter type is baked into every program — recompile or the toggle is inert
+    if (typeChanged) {
+      this.engine.scene.traverse((o) => {
+        if (!o.isMesh) return;
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        for (const m of mats) m.needsUpdate = true;
+      });
+    }
   }
 
   spawnProps() {
@@ -162,25 +183,58 @@ export class Game {
         g.castShadow = true;
         this.props.add({ mesh: g, radius: 0.13, mass: 0.5, bounce: 0.2, upright: true, tag: s.tag, name: 'pin', canGrab: false });
       } else if (s.kind === 'bowlingball') {
-        const m = new THREE.Mesh(new THREE.SphereGeometry(0.108, 20, 16), M.solid(s.color, 0.1, 0.2));
-        m.castShadow = true;
-        m.position.set(s.x, s.y, s.z);
-        this.props.add({ mesh: m, radius: 0.108, mass: 6, bounce: 0.18, friction: 0.35, name: 'bowling ball', tag: 'ball' });
+        const g = new THREE.Group();
+        const ball = new THREE.Mesh(new THREE.SphereGeometry(0.108, 20, 16), M.solid(s.color, 0.1, 0.2));
+        ball.castShadow = true;
+        g.add(ball);
+        // finger holes — the one detail a carried ball is missing at arm's length
+        const holeM = M.solid(0x0c0d10, 0.3);
+        for (const [ax, az] of [[0, 0], [0.32, 0.18], [-0.32, 0.18]]) {
+          const hole = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.02, 8), holeM);
+          hole.position.set(Math.sin(ax) * 0.104, Math.cos(ax) * Math.cos(az) * 0.104, Math.sin(az) * 0.104);
+          hole.lookAt(0, 0, 0);
+          hole.rotateX(Math.PI / 2);
+          g.add(hole);
+        }
+        g.position.set(s.x, s.y, s.z);
+        this.props.add({ mesh: g, radius: 0.108, mass: 6, bounce: 0.18, friction: 0.35, name: 'bowling ball', tag: 'ball' });
       } else if (s.kind === 'basketball') {
-        const m = new THREE.Mesh(new THREE.SphereGeometry(0.122, 20, 16), M.solid(0xd1611f, 0.85));
-        m.castShadow = true;
-        m.position.set(s.x, s.y, s.z);
-        this.props.add({ mesh: m, radius: 0.122, mass: 0.7, bounce: 0.74, friction: 1.4, name: 'basketball', tag: 'basketball' });
+        const g = new THREE.Group();
+        const ball = new THREE.Mesh(new THREE.SphereGeometry(0.122, 20, 16), M.solid(0xd1611f, 0.85));
+        ball.castShadow = true;
+        g.add(ball);
+        // the classic black seams stop it reading as a giant orange
+        const seamM = M.solid(0x1c150f, 0.7);
+        for (const rot of [[0, 0], [Math.PI / 2, 0], [0, Math.PI / 2]]) {
+          const seam = new THREE.Mesh(new THREE.TorusGeometry(0.1225, 0.0032, 6, 40), seamM);
+          seam.rotation.set(rot[0], rot[1], 0);
+          g.add(seam);
+        }
+        g.position.set(s.x, s.y, s.z);
+        this.props.add({ mesh: g, radius: 0.122, mass: 0.7, bounce: 0.74, friction: 1.4, name: 'basketball', tag: 'basketball' });
       } else if (s.kind === 'skateboard') {
         const g = new THREE.Group();
-        const deck = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.03, 0.82), M.solid(0x2b3a4a, 0.6));
-        deck.position.y = 0.08;
+        const deck = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.03, 0.66), M.solid(0x2b3a4a, 0.6));
+        deck.position.y = 0.085;
         g.add(deck);
-        for (const oz of [-0.28, 0.28]) for (const ox of [-0.1, 0.1]) {
-          const w = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.03, 10), M.solid(0xe8e2d2, 0.5));
-          w.rotation.z = Math.PI / 2;
-          w.position.set(ox, 0.032, oz);
-          g.add(w);
+        // kicked nose and tail
+        for (const s2 of [-1, 1]) {
+          const kick = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.028, 0.16), M.solid(0x2b3a4a, 0.6));
+          kick.position.set(0, 0.105, s2 * 0.395);
+          kick.rotation.x = s2 * -0.38;
+          g.add(kick);
+        }
+        for (const oz of [-0.26, 0.26]) {
+          // truck hanger between deck and wheels
+          const truck = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.035, 0.07), M.solid(0x9aa0a6, 0.35, 0.8));
+          truck.position.set(0, 0.055, oz);
+          g.add(truck);
+          for (const ox of [-0.1, 0.1]) {
+            const w = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.03, 10), M.solid(0xe8e2d2, 0.5));
+            w.rotation.z = Math.PI / 2;
+            w.position.set(ox, 0.032, oz);
+            g.add(w);
+          }
         }
         g.position.set(s.x, s.y, s.z);
         this.props.add({ mesh: g, radius: 0.2, mass: 1.4, bounce: 0.25, friction: 1.2, name: 'skateboard', tag: 'skate' });
@@ -204,10 +258,22 @@ export class Game {
   }
 
   // ── objectives ──────────────────────────────────────────────────────────
+  loadSave() {
+    try { return JSON.parse(localStorage.getItem('home.save')) || {}; } catch (_) { return {}; }
+  }
+  persist() {
+    try {
+      localStorage.setItem('home.save', JSON.stringify({
+        done: this.objectives.filter((o) => o.done).map((o) => o.id),
+        discovered: [...this.discovered],
+      }));
+    } catch (_) { /* private mode */ }
+  }
+
   setupObjectives() {
     const o = (id, text, hint) => ({ id, text, hint, done: false });
     this.objectives = [
-      o('greet', 'Find Kaelie and say good morning', 'She is usually in the kitchen early on'),
+      o('greet', 'Find Kaelie and say good morning', 'Kitchen first thing, then the sunroom'),
       o('kids', 'Catch up with James and Chloie', 'Try their rooms, the gaming room or the yard'),
       o('fire', 'Light the fire in the great room', 'Walk up to the stone hearth'),
       o('pc', 'Boot up a gaming PC', 'Second floor and the third-floor loft'),
@@ -218,6 +284,13 @@ export class Game {
       o('bowl', 'Drop into the skate bowl', 'Far end of the back yard'),
       o('drive', 'Take the Lamborghini down the drive', 'Press F next to it'),
     ];
+    // progress survives a reload
+    const save = this.loadSave();
+    for (const id of save.done || []) {
+      const ob = this.objectives.find((x) => x.id === id);
+      if (ob) ob.done = true;
+    }
+    for (const name of save.discovered || []) this.discovered.add(name);
     this.ui.setObjectives(this.objectives);
   }
 
@@ -228,6 +301,7 @@ export class Game {
     this.ui.setObjectives(this.objectives);
     this.ui.toast(title || ob.text, 'Objective complete');
     this.audio.play('chime');
+    this.persist();
   }
 
   // ── menu / state ────────────────────────────────────────────────────────
@@ -235,6 +309,13 @@ export class Game {
     document.getElementById('btn-play').onclick = () => this.start();
     document.getElementById('btn-resume').onclick = () => this.pause(false);
     document.getElementById('btn-quit').onclick = () => {
+      // leave no session state dangling: conversations, seats, the driver's
+      // seat and the engine note all end here
+      this.endDialogue();
+      if (this.player.mode === 'drive') this.player.exitVehicle();
+      else if (this.player.mode === 'sit') this.player.stand();
+      this.audio.stopEngine();
+      this.ui.setVehicle(null);
       this.state = 'menu';
       this.ui.showPause(false); this.ui.showHud(false); this.ui.showMenu(true);
       this.input.exitLock();
@@ -257,6 +338,7 @@ export class Game {
       this.state = 'pause';
       this.ui.showPause(true);
       this.input.exitLock();
+      this.audio.suspend();
     } else if (!v && this.state === 'pause') {
       this.state = 'play';
       this.ui.showPause(false);
@@ -341,7 +423,8 @@ export class Game {
     if (playing) this.update(dt);
     else if (this.state === 'menu') this.updateMenuCamera(dt);
 
-    for (const fn of this.world.updaters) fn(dt, this.time);
+    // fire flicker, water and fans freeze with the pause menu up
+    if (this.state !== 'pause') for (const fn of this.world.updaters) fn(dt, this.time);
     this.engine.render(dt);
     this.input.endFrame();
 
@@ -361,7 +444,7 @@ export class Game {
     cam.position.set(Math.sin(t) * 62, 16 + Math.sin(t * 0.7) * 4, Math.cos(t) * 62 + 8);
     cam.lookAt(0, 6, 0);
     if (this.sky) this.sky.update(dt, cam.position, 1);
-    if (this.lights) this.lights.update(cam.position, this.sky.night);
+    if (this.lights) this.lights.update(cam.position, this.sky.night, dt);
     this.world.cameraPos = cam.position;
   }
 
@@ -372,6 +455,11 @@ export class Game {
     if (inp.hit('pause')) { this.dialogue ? this.endDialogue() : this.pause(true); }
     if (inp.hit('journal')) this.toggleJournal(true);
     if (inp.hit('photo')) this.ui.toggleHudVisibility();
+    if (inp.hit('flashlight')) {
+      this.flashlightOn = !this.flashlightOn;
+      this.flashlight.intensity = this.flashlightOn ? 26 : 0;
+      this.audio.play('click');
+    }
     if (inp.hit('screenshot')) {
       const started = this.engine.screenshot(`home-${Date.now()}.png`,
         (ok) => this.ui.toast(ok ? 'Screenshot saved' : 'Could not save the screenshot', ok ? 'Check your downloads' : null));
@@ -415,7 +503,9 @@ export class Game {
     this.engine.setUnderwater(P.submerged);
 
     // ── interaction ──
-    const target = this.dialogue ? null : this.interaction.pick();
+    // no picking while seated or driving: 'Take a seat' while sat in a
+    // recliner (with E actually standing you up) was nonsense
+    const target = this.dialogue || P.mode !== 'walk' ? null : this.interaction.pick();
     const label = this.interaction.labelFor(target);
     let sub = null;
     if (this.props.held) sub = 'Left click to throw · G to drop';
@@ -453,9 +543,12 @@ export class Game {
 
     // ── props & scoring ──
     this.props.update(dt, (p, impact) => {
-      if (p.tag === 'pin') this.audio.play('pin');
-      else this.audio.play('bounce', { gain: clamp(impact / 8, 0.15, 1) });
-    });
+      // a ball bouncing on the basement court shouldn't sound like it's at
+      // your feet from the third floor
+      const att = clamp(1.15 - p.pos.distanceTo(P.position) / 26, 0.03, 1);
+      if (p.tag === 'pin') this.audio.play('pin', { gain: att });
+      else this.audio.play('bounce', { gain: clamp(impact / 8, 0.15, 1) * att });
+    }, P.mode === 'walk' ? P.capsule : null, P.velocity);
     this.checkBasket();
     for (const tag of W.pinTags || []) {
       if (this.props.countKnocked(tag) >= 10) this.complete('strike', 'Strike!');
@@ -489,8 +582,9 @@ export class Game {
     // ── family, world, lights ──
     const hour = this.sky.time;
     for (const f of this.family) f.update(dt, this.time, hour, this.engine.camera.position);
+    separateFamily(this.family);
     this.sky.update(dt, P.position, this.settings.timeScale);
-    this.lights.update(this.engine.camera.position, this.sky.night);
+    this.lights.update(this.engine.camera.position, this.sky.night, dt);
     this.screenFx.update(dt, this.time);
 
     // vehicles idle
@@ -502,10 +596,13 @@ export class Game {
     if (room && !this.discovered.has(room.name)) {
       this.discovered.add(room.name);
       this.ui.toast(room.name, room.floorName || 'Discovered');
+      this.persist();
     }
     this.ui.setClock(this.sky.clockString(), place);
     this.ui.setHeading(P.yaw);
-    this.ui.drawMinimap(W, P, this.family);
+    // 30 Hz is plenty for a minimap
+    this._mapT = (this._mapT || 0) - dt;
+    if (this._mapT <= 0) { this._mapT = 0.033; this.ui.drawMinimap(W, P, this.family); }
 
     // ── audio bed ──
     const wf = W.spots.waterfall;
@@ -516,9 +613,14 @@ export class Game {
       waterfallDistance: wf ? P.position.distanceTo(wf.pos) : 999,
     });
 
-    // zoom
+    // zoom, with a sprint FOV kick that scales with actual speed
     const zoom = inp.mouse.right && P.mode !== 'drive';
-    this.engine.camera.fov = damp(this.engine.camera.fov, zoom ? this.settings.fov * 0.62 : this.settings.fov, 12, dt);
+    const speedKick = P.sprinting && P.onGround
+      ? clamp((Math.hypot(P.velocity.x, P.velocity.z) - 3.6) / 2.8, 0, 1) * 0.07 : 0;
+    const driveKick = P.mode === 'drive' && P.vehicle
+      ? clamp(Math.abs(P.vehicle.speed) / P.vehicle.maxSpeed, 0, 1) * 0.1 : 0;
+    const targetFov = this.settings.fov * (zoom ? 0.62 : 1 + speedKick + driveKick);
+    this.engine.camera.fov = damp(this.engine.camera.fov, targetFov, 12, dt);
     this.engine.camera.updateProjectionMatrix();
   }
 

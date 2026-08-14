@@ -70,25 +70,44 @@ export class Batcher {
   }
 
   flush(parent) {
+    // Merge per material *and* per ~22 m cell: one estate-wide mesh per
+    // material has a 400 m bounding sphere, so standing in a basement bathroom
+    // still vertex-processes every tree — cells give frustum culling something
+    // to reject. Extra draws share the material, so they cost almost nothing.
+    const CELL = 22, BAND = 6;
+    const box = new THREE.Box3();
     for (const [mat, list] of this.buckets) {
       if (!list.length) continue;
-      let merged;
-      try {
-        merged = mergeGeometries(list, false);
-      } catch (e) {
-        merged = null;
+      const cells = new Map();
+      for (const g of list) {
+        box.setFromBufferAttribute(g.attributes.position);
+        const cx = Math.floor((box.min.x + box.max.x) / 2 / CELL);
+        const cy = Math.floor((box.min.y + box.max.y) / 2 / BAND);
+        const cz = Math.floor((box.min.z + box.max.z) / 2 / CELL);
+        const key = `${cx}|${cy}|${cz}`;
+        let arr = cells.get(key);
+        if (!arr) cells.set(key, (arr = []));
+        arr.push(g);
       }
-      if (!merged) {                       // fall back to individual meshes
-        for (const g of list) parent.add(new THREE.Mesh(g, mat));
-        continue;
+      for (const arr of cells.values()) {
+        let merged;
+        try {
+          merged = mergeGeometries(arr, false);
+        } catch (e) {
+          merged = null;
+        }
+        if (!merged) {                     // fall back to individual meshes
+          for (const g of arr) parent.add(new THREE.Mesh(g, mat));
+          continue;
+        }
+        merged.computeBoundingSphere();
+        const mesh = new THREE.Mesh(merged, mat);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.name = `${this.name}:${mat.name || 'mat'}`;
+        parent.add(mesh);
+        for (const g of arr) g.dispose();
       }
-      merged.computeBoundingSphere();
-      const mesh = new THREE.Mesh(merged, mat);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.name = `${this.name}:${mat.name || 'mat'}`;
-      parent.add(mesh);
-      for (const g of list) g.dispose();
     }
     this.buckets.clear();
     return parent;

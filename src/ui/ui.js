@@ -137,6 +137,18 @@ export class UI {
       row.dataset.key = def.key;
       root.appendChild(row);
     }
+
+    const reset = document.createElement('button');
+    reset.className = 'reset-defaults';
+    reset.textContent = 'Reset to defaults';
+    reset.onclick = () => {
+      this.settings.reset();
+      // notify every subscriber, then repaint both panels
+      for (const def of SETTING_DEFS) this.settings.set(def.key, this.settings[def.key]);
+      this.buildSettings($('settingslist'));
+      this.buildSettings($('pause-settings'));
+    };
+    root.appendChild(reset);
   }
 
   /** Keep the two copies of the settings panel in step. */
@@ -198,7 +210,9 @@ export class UI {
     this._compassWidth = 40 * 16;
   }
   setHeading(yaw) {
-    const deg = ((-yaw * 180) / Math.PI + 360) % 360;
+    // yaw is unbounded — double-wrap so JS's signed % can't walk the strip
+    // off its three-repetition band after a few full turns
+    const deg = ((((-yaw * 180) / Math.PI) % 360) + 360) % 360;
     const px = (deg / 360) * this._compassWidth;
     this.el.compass.style.transform = `translateX(${-px - this._compassWidth + 140}px)`;
   }

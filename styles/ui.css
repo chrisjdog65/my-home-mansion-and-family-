@@ -137,6 +137,9 @@ button.primary:active{transform:translateY(1px)}
 .setrow select{width:100%; background:rgba(255,255,255,.06); color:var(--ink); border:1px solid var(--stroke);
   border-radius:7px; padding:5px 8px; font:inherit; font-size:12px}
 .setrow input[type=checkbox]{width:17px; height:17px; accent-color:var(--gold); justify-self:end; grid-column:2/4}
+.reset-defaults{margin-top:12px; align-self:flex-start; background:rgba(255,255,255,.06); color:var(--dim);
+  border:1px solid var(--stroke); border-radius:7px; padding:6px 12px; font:inherit; font-size:12px; cursor:pointer}
+.reset-defaults:hover{color:var(--ink); border-color:var(--gold)}
 
 /* ── HUD ─────────────────────────────────────────────────────── */
 #hud{position:fixed; inset:0; z-index:20; pointer-events:none; font-size:13px}

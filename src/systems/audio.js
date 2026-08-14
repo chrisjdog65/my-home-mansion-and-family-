@@ -32,6 +32,7 @@ export class Audio {
   }
 
   resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); }
+  suspend() { if (this.ctx && this.ctx.state === 'running') this.ctx.suspend(); }
 
   makeNoise(seconds) {
     const n = Math.floor(this.ctx.sampleRate * seconds);
@@ -117,7 +118,12 @@ export class Audio {
         this.noise({ freq: 500, dur: 0.7, gain: 0.1, q: 0.6, sweep: -300, at: 0.04 });
         break;
       case 'bounce': this.blip({ freq: 180 + Math.random() * 60, type: 'sine', dur: 0.16, gain: 0.10 * (opt.gain ?? 1), sweep: -90 }); break;
-      case 'pin': this.noise({ freq: 1800, dur: 0.16, gain: 0.16, q: 2.4, sweep: -900 }); this.blip({ freq: 300, dur: 0.2, gain: 0.07, sweep: -160 }); break;
+      case 'pin': {
+        const g = opt.gain ?? 1;
+        this.noise({ freq: 1800, dur: 0.16, gain: 0.16 * g, q: 2.4, sweep: -900 });
+        this.blip({ freq: 300, dur: 0.2, gain: 0.07 * g, sweep: -160 });
+        break;
+      }
       case 'roll': this.noise({ freq: 120, dur: 1.4, gain: 0.07, q: 0.5, type: 'lowpass' }); break;
       case 'swish': this.noise({ freq: 2600, dur: 0.3, gain: 0.1, q: 0.6, sweep: -2000 }); break;
       case 'pickup': this.blip({ freq: 700, dur: 0.09, gain: 0.06, sweep: 300 }); break;

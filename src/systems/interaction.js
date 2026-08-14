@@ -6,6 +6,8 @@ import * as THREE from 'three';
 
 const _toTarget = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
+const _eye = new THREE.Vector3();
+const _ray = new THREE.Ray();
 
 export class Interaction {
   constructor(world, camera, player, props) {
@@ -15,13 +17,22 @@ export class Interaction {
     this.props = props;
     this.current = null;
     this.family = [];
+    this._famTargets = new Map();
+  }
+
+  /** True when a wall (not the target itself) sits between eye and point. */
+  blocked(pos, dist) {
+    _ray.origin.copy(this.camera.position);
+    _ray.direction.copy(pos).sub(this.camera.position).normalize();
+    const hit = this.world.octree.rayIntersect(_ray);
+    return !!hit && hit.distance < dist - 0.3;
   }
 
   /** Best interactable in front of the camera. */
   pick() {
     const cam = this.camera;
     cam.getWorldDirection(_fwd);
-    let best = null, bestScore = Infinity;
+    let best = null, bestScore = Infinity, bestDist = 0;
 
     const consider = (target, pos, radius) => {
       _toTarget.copy(pos).sub(cam.position);
@@ -31,7 +42,7 @@ export class Interaction {
       const dot = _toTarget.dot(_fwd);
       if (dot < 0.55) return;                       // roughly a 56° cone
       const score = dist * (2 - dot);
-      if (score < bestScore) { bestScore = score; best = target; }
+      if (score < bestScore) { bestScore = score; best = target; bestDist = dist; this._bestPos = pos; }
     };
 
     for (const i of this.world.interactables) {
@@ -40,8 +51,15 @@ export class Interaction {
       consider(i, i.pos, i.radius);
     }
     for (const f of this.family) {
-      consider({ kind: 'family', data: f, label: () => `Talk to ${f.name}` }, f.char.eyePos(new THREE.Vector3()), 3.0);
+      let t = this._famTargets.get(f);
+      if (!t) {
+        t = { kind: 'family', data: f, label: () => `Talk to ${f.name}`, eye: new THREE.Vector3() };
+        this._famTargets.set(f, t);
+      }
+      consider(t, f.char.eyePos(t.eye), 3.0);
     }
+    // no using the fireplace through the living-room wall
+    if (best && this.blocked(this._bestPos, bestDist)) best = null;
     this.current = best;
     return best;
   }

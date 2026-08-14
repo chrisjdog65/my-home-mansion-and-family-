@@ -3,9 +3,9 @@
 // picnic area, skate park, shed, driveway and fencing.
 // ───────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
-import { boxMesh, mesh, planarUV, railing } from './build.js';
+import { boxMesh, mesh, planarUV } from './build.js';
 import { rectSubtract } from './mansion.js';
-import { makeRng, clamp } from '../core/rng.js';
+import { makeRng, clamp, smoothstep } from '../core/rng.js';
 import { groundHeight } from './terrain.js';
 import { Kit, diningChair, armchair, plant } from './furniture.js';
 
@@ -58,10 +58,10 @@ function terrace(world, k, M, B) {
   // string lights
   for (let i = 0; i < 14; i++) {
     const t = i / 13;
-    B.box(0.07, 0.11, 0.07, M.emissive(0xffd9a0, 2.6), px - 4 + t * 8, 3.0 + Math.sin(t * Math.PI) * -0.22, pz - 3, { tile: 0.2 });
-    B.box(0.07, 0.11, 0.07, M.emissive(0xffd9a0, 2.6), px - 4 + t * 8, 3.0 + Math.sin(t * Math.PI) * -0.22, pz + 3, { tile: 0.2 });
+    B.box(0.07, 0.11, 0.07, M.emissiveDim(0xffd9a0, 2.6), px - 4 + t * 8, 3.0 + Math.sin(t * Math.PI) * -0.22, pz - 3, { tile: 0.2 });
+    B.box(0.07, 0.11, 0.07, M.emissiveDim(0xffd9a0, 2.6), px - 4 + t * 8, 3.0 + Math.sin(t * Math.PI) * -0.22, pz + 3, { tile: 0.2 });
   }
-  world.addLight({ pos: V(px, 2.9, pz), color: 0xffc98a, intensity: 22, distance: 18, outdoor: true });
+  world.addLight({ pos: V(px, 2.9, pz), color: 0xffc98a, intensity: 50, distance: 18, decay: 1.7, outdoor: true });
 
   // outdoor lounge furniture
   const lounge = M.paint(0x8d857a, 0.9, 'wicker');
@@ -142,7 +142,7 @@ function pool(world, k, M, B) {
 
   // pool lights
   for (const zz of [20.5, 25.5]) {
-    world.addLight({ pos: V(0, -0.5, zz), color: 0x39c6ff, intensity: 16, distance: 13, outdoor: true, pool: true });
+    world.addLight({ pos: V(0, -0.5, zz), color: 0x39c6ff, intensity: 34, distance: 15, decay: 1.7, outdoor: true, pool: true });
   }
   world.spot('poolEdge', -4, 0, P.z0 - 1.2);
   world.spot('poolWater', 0, -0.4, 22);
@@ -151,11 +151,11 @@ function pool(world, k, M, B) {
 
 function hotTub(world, k, M, B) {
   const cxp = 13.5, czp = 22;
-  // shell
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2;
-    B.box(1.3, 1.0, 0.3, M.get('stone'), cxp + Math.cos(a) * 2.2, 0.2, czp + Math.sin(a) * 2.2, { rotY: Math.PI / 2 - a, tile: 0.7 });
-    world.collider(1.4, 1.0, 0.36, cxp + Math.cos(a) * 2.2, 0.2, czp + Math.sin(a) * 2.2, Math.PI / 2 - a);
+  // shell — segments a touch wider than the chord so the ring closes
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    B.box(1.18, 1.0, 0.3, M.get('stone'), cxp + Math.cos(a) * 2.05, 0.2, czp + Math.sin(a) * 2.05, { rotY: Math.PI / 2 - a, tile: 0.7 });
+    world.collider(1.24, 1.0, 0.34, cxp + Math.cos(a) * 2.05, 0.2, czp + Math.sin(a) * 2.05, Math.PI / 2 - a);
   }
   B.box(4.6, 0.3, 4.6, M.get('poolTile'), cxp, -0.9, czp, { tile: 0.8 });
   world.collider(4.6, 0.3, 4.6, cxp, -0.9, czp);
@@ -166,15 +166,20 @@ function hotTub(world, k, M, B) {
     world.collider(1.2, 0.3, 0.5, cxp + Math.cos(a) * 1.65, -0.55, czp + Math.sin(a) * 1.65, Math.PI / 2 - a);
   }
 
-  const surf = makeWater(world, 4.2, 4.2, cxp, 0.32, czp, 0x2ea3b8, 0.8);
+  const surf = makeWater(world, 3.8, 3.8, cxp, 0.32, czp, 0x2ea3b8, 0.8, true);
   world.water(V(cxp - 2.1, -0.8, czp - 2.1), V(cxp + 2.1, 1, czp + 2.1), 0.32, 'hottub');
 
-  // steam
+  // steam — soft gradient puffs, not bare quads (those read as glass shards)
   const steam = new THREE.Group();
-  const smat = new THREE.MeshBasicMaterial({ color: 0xdff0f5, transparent: true, opacity: 0.055, depthWrite: false });
+  const smat = new THREE.MeshBasicMaterial({
+    map: steamTexture(), color: 0xdff0f5, transparent: true, opacity: 0.16,
+    depthWrite: false, side: THREE.DoubleSide,
+  });
   for (let i = 0; i < 16; i++) {
     const s = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.6), smat);
     s.position.set(cxp + (Math.random() - 0.5) * 3, 0.5 + Math.random() * 1.2, czp + (Math.random() - 0.5) * 3);
+    s.userData.scale = 0.8 + Math.random() * 0.7;
+    s.userData.spin = (Math.random() - 0.5) * 0.5;
     steam.add(s);
   }
   world.addProp(steam);
@@ -183,16 +188,36 @@ function hotTub(world, k, M, B) {
       const s = steam.children[i];
       s.position.y += dt * 0.22;
       if (s.position.y > 2.4) s.position.y = 0.42;
+      s.scale.setScalar(s.userData.scale * (0.7 + (s.position.y - 0.42) * 0.3));   // wisps widen as they rise
       s.lookAt(world.cameraPos || V(0, 2, 0));
-      s.rotation.z = t * 0.2 + i;
+      s.rotation.z = s.userData.spin * t + i;
     }
   });
-  world.addLight({ pos: V(cxp, 0.1, czp), color: 0x49d2e0, intensity: 11, distance: 9, outdoor: true, pool: true });
+  world.addLight({ pos: V(cxp, 0.1, czp), color: 0x49d2e0, intensity: 24, distance: 12, decay: 1.7, outdoor: true, pool: true });
   world.spot('hotTub', cxp, 0, czp - 3.2);
 }
 
+/** Soft radial white blob — the shared billboard texture for steam wisps. */
+let _steamTex = null;
+function steamTexture() {
+  if (_steamTex) return _steamTex;
+  const S = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(S / 2, S / 2, S * 0.04, S / 2, S / 2, S * 0.48);
+  g.addColorStop(0, 'rgba(255,255,255,0.85)');
+  g.addColorStop(0.5, 'rgba(255,255,255,0.32)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, S, S);
+  _steamTex = new THREE.CanvasTexture(c);
+  _steamTex.colorSpace = THREE.SRGBColorSpace;
+  return _steamTex;
+}
+
 /** Animated water surface — two scrolling normal maps over a physical material. */
-export function makeWater(world, w, d, x, y, z, color = 0x1c7fa8, opacity = 0.86) {
+export function makeWater(world, w, d, x, y, z, color = 0x1c7fa8, opacity = 0.86, circle = false) {
   const M = world.mats;
   const set = M.tex.get('ripple', { size: 256, strength: 2.2, rough: [0.05, 0.05] });
   const mat = new THREE.MeshPhysicalMaterial({
@@ -204,14 +229,14 @@ export function makeWater(world, w, d, x, y, z, color = 0x1c7fa8, opacity = 0.86
   mat.normalMap.repeat.set(Math.max(2, w / 3), Math.max(2, d / 3));
   mat.normalScale.set(0.55, 0.55);
 
-  const geo = new THREE.PlaneGeometry(w, d, 1, 1);
+  const geo = circle ? new THREE.CircleGeometry(w / 2, 40) : new THREE.PlaneGeometry(w, d, 1, 1);
   geo.rotateX(-Math.PI / 2);
   const m = new THREE.Mesh(geo, mat);
   m.position.set(x, y, z);
   m.receiveShadow = false;
   world.addProp(m);
   world.onUpdate((dt, t) => {
-    mat.normalMap.offset.set(t * 0.021, t * 0.014);
+    mat.normalMap.offset.set((t * 0.021) % 1, (t * 0.014) % 1);
     m.position.y = y + Math.sin(t * 0.9) * 0.012;
   });
   return m;
@@ -243,14 +268,15 @@ function pondAndFalls(world, k, M, B, rng) {
   world.water(V(cxp - rx, -1.0, czp - rz), V(cxp + rx, 0, czp + rz), -0.35, 'pond');
 
   // ── the waterfall cliff at the back of the pond ──
-  const wx = cxp, wz = czp + rz + 3.5;
+  const wx = cxp, wz = czp + rz + 1.5;   // close enough that the curtain lands in the water
   for (let i = 0; i < 22; i++) {
     const a = rng.range(-1.5, 1.5);
     const s = rng.range(1.4, 3.6);
     const px = wx + a * 4.4, pz = wz + rng.range(-1.4, 1.8);
     const h = clamp(5.2 - Math.abs(a) * 1.7, 1.2, 5.6) * rng.range(0.7, 1.15);
-    B.box(s, h, s * 0.8, M.get('rock'), px, h / 2 - 0.4, pz, { rotY: rng() * 3, tile: 1.6 });
-    world.collider(s, h, s * 0.8, px, h / 2 - 0.4, pz, 0);
+    const gy = groundHeight(px, pz);
+    B.box(s, h, s * 0.8, M.get('rock'), px, gy + h / 2 - 0.3, pz, { rotY: rng() * 3, tile: 1.6 });
+    world.collider(s, h, s * 0.8, px, gy + h / 2 - 0.3, pz, 0);
   }
   // ledge the water pours off
   B.box(5.0, 0.5, 2.4, M.get('rock'), wx, 4.4, wz - 0.6, { tile: 1.4 });
@@ -271,7 +297,7 @@ function pondAndFalls(world, k, M, B, rng) {
   fall.position.set(wx, 2.2, wz - 1.75);
   fall.rotation.x = 0.06;
   world.addProp(fall);
-  world.onUpdate((dt, t) => { fallMat.normalMap.offset.y = -t * 1.5; fallMat.normalMap.offset.x = Math.sin(t * 0.4) * 0.03; });
+  world.onUpdate((dt, t) => { fallMat.normalMap.offset.y = -(t * 1.5) % 1; fallMat.normalMap.offset.x = Math.sin(t * 0.4) * 0.03; });
 
   // spray at the base
   const spray = new THREE.Group();
@@ -296,17 +322,42 @@ function pondAndFalls(world, k, M, B, rng) {
     B.box(1.5, 0.4, 1.2, M.get('rock'), cxp - 6 + i * 3, 0.06, czp - rz - 1.6, { rotY: rng(), tile: 1 });
     world.collider(1.5, 0.5, 1.2, cxp - 6 + i * 3, 0.02, czp - rz - 1.6);
   }
-  const bx = cxp + rx - 2;
+  // arched bridge — the deck springs from one bank and lands on the other
+  const bx = cxp + rx - 2, bz0 = czp - 5, bspan = 9.6;
+  const gA = groundHeight(bx, bz0), gB = groundHeight(bx, bz0 + bspan);
+  const deckY = (t) => gA + (gB - gA) * t + 0.05 + Math.sin(t * Math.PI) * 0.45;
+  const deckAng = (t) => Math.atan2(gB - gA + Math.cos(t * Math.PI) * Math.PI * 0.45, bspan);
   for (let i = 0; i < 9; i++) {
-    B.box(1.6, 0.12, 0.4, M.get('walnut'), bx, 0.7 + Math.sin((i / 8) * Math.PI) * 0.5, czp - 5 + i * 1.2, { tile: 0.6 });
-    world.collider(1.6, 0.2, 0.45, bx, 0.7 + Math.sin((i / 8) * Math.PI) * 0.5, czp - 5 + i * 1.2);
+    const t = i / 8, zz = bz0 + t * bspan, y = deckY(t);
+    B.box(1.6, 0.12, 1.28, M.get('walnut'), bx, y, zz, { rotX: -deckAng(t), tile: 0.6 });
+    world.collider(1.6, 0.2, 1.25, bx, y - 0.02, zz);
   }
-  railing(world, M.get('walnut'), M.get('walnut'), bx - 0.85, 0.9, czp - 0.2, 9.6, Math.PI / 2, 0.9, 1.2);
-  railing(world, M.get('walnut'), M.get('walnut'), bx + 0.85, 0.9, czp - 0.2, 9.6, Math.PI / 2, 0.9, 1.2);
+  // short approach planks resting on the banks
+  for (const ze of [bz0 - 1.0, bz0 + bspan + 1.0]) {
+    const gy = groundHeight(bx, ze);
+    B.box(1.6, 0.12, 1.0, M.get('walnut'), bx, gy + 0.05, ze, { tile: 0.6 });
+    world.collider(1.6, 0.18, 1.0, bx, gy + 0.03, ze);
+  }
+  // railings follow the arc: a post on every plank, rail lengths tilted between
+  for (const s of [-1, 1]) {
+    for (let i = 0; i < 9; i++) {
+      const t = i / 8, zz = bz0 + t * bspan, y = deckY(t);
+      B.box(0.07, 0.85, 0.07, M.get('walnut'), bx + s * 0.72, y + 0.48, zz, { tile: 0.4 });
+      if (i < 8) {
+        const y2 = deckY((i + 1) / 8);
+        const len = Math.hypot(bspan / 8, y2 - y) + 0.06;
+        const ang = Math.atan2(y2 - y, bspan / 8);
+        for (const hh of [0.42, 0.9]) {
+          B.box(0.06, 0.07, len, M.get('walnut'), bx + s * 0.72, (y + y2) / 2 + hh, zz + bspan / 16, { rotX: -ang, tile: 0.5 });
+        }
+      }
+    }
+    world.collider(0.1, 1.4, bspan + 0.3, bx + s * 0.72, (gA + gB) / 2 + 0.7, bz0 + bspan / 2);
+  }
 
   world.spot('pond', cxp + 2, 0, czp - rz - 3);
   world.spot('waterfall', wx, 0, wz - 5);
-  world.addLight({ pos: V(wx, 1.2, wz - 3), color: 0x6fd8e8, intensity: 12, distance: 15, outdoor: true, pool: true });
+  world.addLight({ pos: V(wx, 1.2, wz - 3), color: 0x6fd8e8, intensity: 26, distance: 16, decay: 1.7, outdoor: true, pool: true });
 }
 
 // ── picnic area ────────────────────────────────────────────────────────────
@@ -456,11 +507,14 @@ function skatePark(world, k, M, B) {
   B.box(4.1, 0.06, 0.76, M.get('chrome'), cxp + 6, top + 0.47, czp + 11, { tile: 0.4 });
   world.collider(4.0, 0.5, 0.7, cxp + 6, top + 0.22, czp + 11);
 
-  // floodlights + fence
+  // floodlights + fence — two heads per mast: one washes the near ramps, one
+  // is thrown out over the pad so the flat actually reads as floodlit
   for (const s of [-1, 1]) {
     B.box(0.24, 7.0, 0.24, M.get('blackMetal'), cxp + s * 15, top + 3.5, czp - 11, { tile: 0.6 });
-    B.box(1.2, 0.4, 0.5, M.emissive(0xf0f6ff, 2.0), cxp + s * 15, top + 6.9, czp - 10.6, { tile: 0.4 });
-    world.addLight({ pos: V(cxp + s * 15, top + 6.6, czp - 10.2), color: 0xeaf2ff, intensity: 90, distance: 40, outdoor: true, night: true });
+    B.box(1.2, 0.4, 0.5, M.emissiveDim(0xf0f6ff, 2.0), cxp + s * 15, top + 6.9, czp - 10.6, { rotX: 0.35, tile: 0.4 });
+    B.box(1.0, 0.35, 0.5, M.emissiveDim(0xf0f6ff, 2.0), cxp + s * 15, top + 6.35, czp - 10.55, { rotX: 0.7, tile: 0.4 });
+    world.addLight({ pos: V(cxp + s * 14, top + 6.2, czp - 9.4), color: 0xeaf2ff, intensity: 26, distance: 26, decay: 1.5, outdoor: true, night: true });
+    world.addLight({ pos: V(cxp + s * 9, top + 5.0, czp - 2.5), color: 0xeaf2ff, intensity: 26, distance: 26, decay: 1.5, outdoor: true, night: true });
     world.collider(0.3, 7.0, 0.3, cxp + s * 15, top + 3.5, czp - 11);
   }
   world.spot('skatepark', cxp - 8, top, czp - 4);
@@ -576,10 +630,16 @@ function shed(world, k, M, B) {
   for (let i = 0; i < 7; i++) {
     B.box(0.08, 1.8, 0.12, M.solid(tools[i % 4], 0.6), x - 2.8 + i * 0.5, y + 0.9, z + d / 2 - 0.3, { rotZ: 0.08 * (i % 3 - 1), tile: 0.3 });
   }
-  // wheelbarrow
-  B.box(0.9, 0.3, 0.6, M.paint(0x2f81ff, 0.6, 'barrow'), x + 2.2, y + 0.6, z - 0.6, { tile: 0.4 });
-  B.box(0.3, 0.3, 0.1, M.get('rubber'), x + 2.2, y + 0.3, z - 1.0, { tile: 0.2 });
-  world.collider(1.0, 0.8, 0.8, x + 2.2, y + 0.5, z - 0.6);
+  // wheelbarrow — tub on sloped handle rails: wheel at the nose, legs at the
+  // handle end, so it parks on the floor instead of floating
+  const wbx = x + 2.2, wbz = z - 0.6, frame = M.get('blackMetal');
+  B.box(0.9, 0.3, 0.6, M.paint(0x2f81ff, 0.6, 'barrow'), wbx, y + 0.46, wbz, { rotX: -0.2, tile: 0.4 });
+  for (const s of [-1, 1]) {
+    B.box(0.05, 0.06, 1.7, frame, wbx + s * 0.24, y + 0.33, wbz + 0.25, { rotX: -0.22, tile: 0.3 });  // handle rails
+    B.box(0.05, 0.38, 0.05, frame, wbx + s * 0.24, y + 0.19, wbz + 0.55, { tile: 0.2 });              // rear legs
+  }
+  B.box(0.1, 0.34, 0.34, M.get('rubber'), wbx, y + 0.17, wbz - 0.55, { tile: 0.2 });                  // front wheel
+  world.collider(0.9, 0.9, 1.9, wbx, y + 0.45, wbz + 0.2);
 
   world.addLight({ pos: V(x, y + h - 0.4, z), color: 0xffe0b0, intensity: 14, distance: 9, room: 'Shed' });
   world.addRoom({ name: 'Garden Shed', type: 'shed', floor: 'ground', floorName: 'Grounds', x, z, y, w, d, h });
@@ -592,6 +652,15 @@ function driveway(world, k, M, B) {
   // main run out to the road
   B.box(12, 0.16, 46, asphalt, 6, 0.02, -36, { tile: 3 });
   world.collider(12, 0.2, 46, 6, 0.0, -36);
+  // the lawn falls away beyond the pad, so the last stretch to the front gate
+  // rides the ground down
+  const roadY = (z) => 0.02 + (groundHeight(6, z) + 0.12 - 0.02) * smoothstep(60, 74, -z);
+  for (let i = 0; i < 8; i++) {
+    const z0 = -59 - i * 1.95, z1 = z0 - 1.95;
+    const y0 = roadY(z0), y1 = roadY(z1);
+    B.box(12, 0.16, Math.hypot(1.95, y1 - y0) + 0.06, asphalt, 6, (y0 + y1) / 2, (z0 + z1) / 2, { rotX: -Math.atan2(y0 - y1, 1.95), tile: 3 });
+    world.collider(12, 0.22, 2.0, 6, (y0 + y1) / 2 - 0.02, (z0 + z1) / 2);
+  }
   // apron in front of the garage
   B.box(26, 0.16, 14, asphalt, 14, 0.02, -20, { tile: 3 });
   world.collider(26, 0.2, 14, 14, 0.0, -20);
@@ -613,31 +682,35 @@ function driveway(world, k, M, B) {
   world.collider(1.4, 1.9, 1.4, -8, 0.95, -26);
   makeWater(world, 3.6, 3.6, -8, 0.42, -26, 0x2b7f9c, 0.85);
 
-  // walkway to the front door
-  B.box(4.0, 0.16, 12, M.get('stone'), 0, 0.03, -19, { tile: 1.4 });
-  world.collider(4.0, 0.2, 12, 0, 0.0, -19);
-  // porch
-  B.box(14, 0.35, 4.5, M.get('stone'), 0, 0.06, -15.2, { tile: 1.4 });
-  world.collider(14, 0.35, 4.5, 0, 0.06, -15.2);
+  // walkway to the front door (ends where the porch begins)
+  B.box(4.0, 0.16, 7.4, M.get('stone'), 0, 0.03, -21.3, { tile: 1.4 });
+  world.collider(4.0, 0.2, 7.4, 0, 0.0, -21.3);
+  // shallow step off the walkway onto the porch
+  B.box(4.0, 0.12, 0.6, M.get('stone'), 0, 0.0, -17.55, { tile: 1 });
+  world.collider(4.0, 0.16, 0.6, 0, -0.02, -17.55);
+  // porch — finish floor just below the foyer slab, edge clear of the door swing
+  B.box(14, 0.35, 4.3, M.get('stone'), 0, -0.15, -15.3, { tile: 1.4 });
+  world.collider(14, 0.35, 4.3, 0, -0.15, -15.3);
   for (const s of [-1, 1]) {
-    B.box(0.6, 5.2, 0.6, M.get('stone'), s * 5.4, 2.7, -15.6, { tile: 1 });
-    world.collider(0.7, 5.2, 0.7, s * 5.4, 2.7, -15.6);
-    plant(k, s * 3.6, 0.24, -15.0, 1.2);
+    B.box(0.6, 5.2, 0.6, M.get('stone'), s * 5.4, 2.62, -15.6, { tile: 1 });
+    world.collider(0.7, 5.2, 0.7, s * 5.4, 2.62, -15.6);
+    plant(k, s * 3.6, 0.03, -15.0, 1.2);
   }
   B.box(13.4, 0.5, 5.0, M.get('shingle'), 0, 5.4, -15.4, { tile: 1.2 });
-  world.addLight({ pos: V(0, 4.4, -14.6), color: 0xffd9a0, intensity: 22, distance: 15, outdoor: true, night: true });
+  world.addLight({ pos: V(0, 4.4, -14.6), color: 0xffd9a0, intensity: 48, distance: 16, decay: 1.7, outdoor: true, night: true });
   for (const s of [-1, 1]) {
-    B.box(0.24, 0.5, 0.24, M.emissive(0xffcf8a, 1.6), s * 1.9, 2.5, -13.3, { tile: 0.2 });
+    B.box(0.24, 0.5, 0.24, M.emissiveDim(0xffcf8a, 1.6), s * 1.9, 2.5, -13.3, { tile: 0.2 });
   }
-  // lamp posts along the drive
+  // lamp posts along the drive — the west row sits wide of the front walkway
+  // (x -2..2), which would otherwise get a post dead-centre in the path
   for (let i = 0; i < 6; i++) {
     const z = -22 - i * 8;
     for (const s of [-1, 1]) {
-      const x = 6 + s * 7.5;
+      const x = s > 0 ? 6 + 7.5 : 6 - 9.6;
       B.box(0.18, 3.4, 0.18, M.get('blackMetal'), x, 1.7, z, { tile: 0.4 });
-      B.box(0.4, 0.5, 0.4, M.emissive(0xffd79a, 2.2), x, 3.6, z, { tile: 0.3 });
+      B.box(0.4, 0.5, 0.4, M.emissiveDim(0xffd79a, 2.2), x, 3.6, z, { tile: 0.3 });
       world.collider(0.24, 3.4, 0.24, x, 1.7, z);
-      world.addLight({ pos: V(x, 3.5, z), color: 0xffc98a, intensity: 20, distance: 16, outdoor: true, night: true });
+      world.addLight({ pos: V(x, 3.5, z), color: 0xffc98a, intensity: 48, distance: 17, decay: 1.7, outdoor: true, night: true });
     }
   }
   world.spot('driveway', 6, 0, -22);
@@ -655,22 +728,49 @@ function fencing(world, k, M, B, rng) {
   for (const r of runs) {
     const len = r.axis === 'x' ? r.x1 - r.x0 : r.z1 - r.z0;
     const n = Math.floor(len / 3);
+    const inGate = (v) => r.axis === 'x' && r.z < 0 && v > 0.5 && v < 11.8;   // gate at the drive
     for (let i = 0; i <= n; i++) {
       const t = i / n;
       const x = r.axis === 'x' ? r.x0 + t * len : r.x;
       const z = r.axis === 'x' ? r.z : r.z0 + t * len;
-      if (r.axis === 'x' && x > -8 && x < 20 && r.z < 0) continue;      // gate at the drive
+      if (inGate(x)) continue;
       const gy = groundHeight(x, z);
       B.box(0.16, 1.5, 0.16, post, x, gy + 0.75, z, { tile: 0.4 });
       if (i < n) {
         const nx = r.axis === 'x' ? x + len / n : x;
         const nz = r.axis === 'x' ? z : z + len / n;
+        if (inGate(nx)) continue;
         const gy2 = groundHeight(nx, nz);
         for (const hh of [0.55, 1.05]) {
           B.box(r.axis === 'x' ? len / n : 0.08, 0.1, r.axis === 'x' ? 0.08 : len / n, post,
             (x + nx) / 2, (gy + gy2) / 2 + hh, (z + nz) / 2, { tile: 0.5 });
         }
+        world.collider(r.axis === 'x' ? len / n : 0.14, 1.5, r.axis === 'x' ? 0.14 : len / n,
+          (x + nx) / 2, (gy + gy2) / 2 + 0.75, (z + nz) / 2);
       }
     }
+  }
+
+  // gate pillars on the fence-post grid either side of the drive, iron
+  // leaves swung open against the fence
+  const bay = 140 / 46, gcx = 25 * bay - 70;
+  const iron = M.get('blackMetal');
+  for (const s of [-1, 1]) {
+    const gx = gcx + s * 2 * bay;
+    const gy = groundHeight(gx, -74);
+    B.box(0.55, 2.4, 0.55, M.get('stone'), gx, gy + 1.2, -74, { tile: 0.8 });
+    B.box(0.8, 0.18, 0.8, M.get('stone'), gx, gy + 2.49, -74, { tile: 0.6 });
+    world.collider(0.6, 2.6, 0.6, gx, gy + 1.3, -74);
+    const open = 2.95;                 // swung right back and parked against the fence
+    const dxv = -s * Math.cos(open), dzv = Math.sin(open);
+    const rotY = Math.atan2(-dzv, dxv);
+    for (const hh of [0.32, 1.42]) {
+      B.box(5.6, 0.08, 0.06, iron, gx + dxv * 2.8, gy + hh, -74 + dzv * 2.8, { rotY, tile: 0.5 });
+    }
+    for (let j = 0; j < 12; j++) {
+      const dd = 0.3 + j * 0.46;
+      B.box(0.05, 1.5, 0.05, iron, gx + dxv * dd, gy + 0.85, -74 + dzv * dd, { tile: 0.3 });
+    }
+    world.collider(5.6, 1.7, 0.12, gx + dxv * 2.8, gy + 0.85, -74 + dzv * 2.8, rotY);
   }
 }

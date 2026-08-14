@@ -12,6 +12,7 @@ export class Materials {
     this.env = envMap || null;
     this.cache = new Map();
     this.all = [];
+    this.dimmable = [];        // emissives whose brightness follows the sun
     this._defs = defs(this.tex);
   }
 
@@ -89,10 +90,32 @@ export class Materials {
     return m;
   }
 
+  /**
+   * Emissive that follows the sun: lamp heads, floodlights and headlights
+   * shouldn't blaze at noon. SkySystem drives these via `dimmable`.
+   */
+  emissiveDim(hex, intensity = 1.4) {
+    const key = `emisdim:${hex}:${intensity}`;
+    if (this.cache.has(key)) return this.cache.get(key);
+    const m = new THREE.MeshStandardMaterial({
+      color: 0x1b1d20, emissive: new THREE.Color(hex), emissiveIntensity: intensity,
+      roughness: 0.4, metalness: 0,
+    });
+    m.userData.baseEmissive = intensity;
+    this.dimmable.push(m);
+    this.cache.set(key, m); this.all.push(m);
+    return m;
+  }
+
   setQuality(q) {
     // q: 0 low, 1 medium, 2 high — drops normal maps on low-end hardware.
+    // Remember each material's authored strength: forcing 1.0 here would turn
+    // polished marble and painted walls into lumpy plaster.
     for (const m of this.all) {
-      if (m.normalMap) m.normalScale?.setScalar(q === 0 ? 0 : 1);
+      if (!m.normalMap || !m.normalScale) continue;
+      if (!m.userData.authoredNormal) m.userData.authoredNormal = m.normalScale.clone();
+      if (q === 0) m.normalScale.setScalar(0);
+      else m.normalScale.copy(m.userData.authoredNormal);
     }
   }
 }
@@ -111,7 +134,7 @@ function defs(tex) {
     theaterCarpet: () => std({ ...T('theaterCarpet', { size: 256, strength: 1.5, rough: [0.95, 0.08] }), roughness: 0.96 }),
     tile: () => new THREE.MeshPhysicalMaterial({ ...T('tile', { size: 256, strength: 1.4, rough: [0.26, 0.22] }), roughness: 0.3, clearcoat: 0.25, clearcoatRoughness: 0.12, normalScale: new THREE.Vector2(0.6, 0.6) }),
     poolTile: () => new THREE.MeshPhysicalMaterial({ ...T('poolTile', { size: 256, strength: 1.3, rough: [0.24, 0.18] }), roughness: 0.28, clearcoat: 0.3, normalScale: new THREE.Vector2(0.6, 0.6) }),
-    paver: () => new THREE.MeshPhysicalMaterial({ ...T('marble', { size: 512, strength: 0.7, rough: [0.42, 0.16] }), color: 0xb9b3a5, metalness: 0, roughness: 0.5, clearcoat: 0.08, normalScale: new THREE.Vector2(0.4, 0.4) }),
+    paver: () => std({ ...T('flagstone', { size: 512, strength: 1.3, rough: [0.62, 0.24] }), metalness: 0, roughness: 0.68, normalScale: new THREE.Vector2(0.7, 0.7) }),
     concrete: () => std({ ...T('concrete', { size: 256, strength: 1.1, rough: [0.82, 0.25] }), roughness: 0.85 }),
     polishedConcrete: () => new THREE.MeshPhysicalMaterial({ ...T('concrete', { size: 256, strength: 0.8, rough: [0.35, 0.2] }), roughness: 0.35, clearcoat: 0.3 }),
     laneWood: () => new THREE.MeshPhysicalMaterial({ ...T('laneWood', { size: 512, strength: 0.5, rough: [0.14, 0.08] }), roughness: 0.16, clearcoat: 0.7, clearcoatRoughness: 0.1, normalScale: new THREE.Vector2(0.4, 0.4) }),
@@ -139,14 +162,17 @@ function defs(tex) {
     blackMetal: () => std({ color: 0x1b1d20, metalness: 0.9, roughness: 0.4 }),
     darkPlastic: () => std({ color: 0x24262b, metalness: 0.1, roughness: 0.55 }),
     rubber: () => std({ color: 0x14161a, metalness: 0, roughness: 0.95 }),
+    rubberFloor: () => std({ ...T('tile', { size: 256, strength: 0.9, rough: [0.88, 0.1] }), color: 0x2e343b, roughness: 0.9 }),
     gold: () => std({ color: 0xd9b26a, metalness: 1, roughness: 0.22 }),
 
+    // near-clear with a restrained reflection — at 0.24/1.6 every pane read
+    // as a glowing milk-white sheet and the yard was invisible from indoors
     glass: () => new THREE.MeshPhysicalMaterial({
-      color: 0xdfe9f2, metalness: 0, roughness: 0.03, transparent: true, opacity: 0.24,
-      envMapIntensity: 1.6, side: THREE.DoubleSide, depthWrite: false,
+      color: 0xd6e4ec, metalness: 0, roughness: 0.03, transparent: true, opacity: 0.13,
+      envMapIntensity: 0.7, side: THREE.DoubleSide, depthWrite: false,
     }),
     mirror: () => std({ color: 0xdfe6ee, metalness: 1, roughness: 0.08 }),
-    screenOff: () => std({ color: 0x07090c, metalness: 0.4, roughness: 0.22 }),
+    screenOff: () => std({ color: 0x2c3138, metalness: 0.5, roughness: 0.2 }),
 
     carPaintRed: () => new THREE.MeshPhysicalMaterial({ color: 0xb3121a, metalness: 0.85, roughness: 0.22, clearcoat: 1, clearcoatRoughness: 0.03 }),
     carPaintYellow: () => new THREE.MeshPhysicalMaterial({ color: 0xf5c518, metalness: 0.7, roughness: 0.18, clearcoat: 1, clearcoatRoughness: 0.03 }),
@@ -158,7 +184,7 @@ function defs(tex) {
       transmission: 0, envMapIntensity: 1.8, clearcoat: 1, clearcoatRoughness: 0.02,
     }),
 
-    foliage: () => std({ color: 0x2f6b32, roughness: 0.9, metalness: 0, side: THREE.DoubleSide }),
+    foliage: () => std({ color: 0x3d7a41, roughness: 0.88, metalness: 0, side: THREE.DoubleSide }),
     bark: () => std({ ...T('walnut', { size: 256, strength: 3.2, rough: [0.94, 0.1] }), color: 0x6a5340, roughness: 0.95 }),
   };
 }

@@ -76,9 +76,11 @@ const GEN = {
     const rows = 7;
     for (let r = 0; r < rows; r++) {
       const y = (r / rows) * S, hh = S / rows;
-      let x = -rng() * 40;
-      while (x < S) {
-        const w = S / 7 * rng.range(0.7, 1.6);
+      // stones laid edge to edge, last one trimmed to the tile so the course
+      // wraps on a mortar joint instead of a sheared stone
+      let x = 0;
+      while (x < S - 2) {
+        const w = Math.min(S - x, S / 7 * rng.range(0.7, 1.6));
         const g = rng.range(0.42, 0.72);
         roundRect(ctx, x + 1.5, y + 1.5, w - 3, hh - 3, 4);
         const grd = ctx.createLinearGradient(x, y, x + w, y + hh);
@@ -138,10 +140,44 @@ const GEN = {
     ctx.fillStyle = '#6d6660'; ctx.fillRect(0, 0, S, S);
     for (let i = 0; i < 2600; i++) {
       const x = rng() * S, y = rng() * S, r = rng.range(1.2, 4.2), t = rng.range(0.55, 1.15);
-      ctx.beginPath(); ctx.ellipse(x, y, r, r * rng.range(.6, 1), rng() * 3, 0, 7);
-      ctx.fillStyle = rgb(150 * t, 143 * t, 132 * t); ctx.fill();
+      const ry = r * rng.range(.6, 1), rot = rng() * 3;
+      ctx.fillStyle = rgb(150 * t, 143 * t, 132 * t);
+      // stones near an edge are drawn wrapped so the tile repeats cleanly
+      for (const dx of [-S, 0, S]) for (const dy of [-S, 0, S]) {
+        if (x + dx < -6 || x + dx > S + 6 || y + dy < -6 || y + dy > S + 6) continue;
+        ctx.beginPath(); ctx.ellipse(x + dx, y + dy, r, ry, rot, 0, 7); ctx.fill();
+      }
     }
     lumHeight(ctx, S, h, 1);
+  },
+
+  flagstone(ctx, S, h, rng) {
+    ctx.fillStyle = '#7a736a'; ctx.fillRect(0, 0, S, S);          // grout
+    const rows = 4;
+    for (let r = 0; r < rows; r++) {
+      const y = (r / rows) * S, hh = S / rows;
+      let x = 0;
+      while (x < S - 2) {
+        const w = Math.min(S - x, S / 4 * rng.range(0.72, 1.5));
+        const g = rng.range(0.72, 1.02);
+        roundRect(ctx, x + 2.5, y + 2.5, w - 5, hh - 5, 3);
+        const grd = ctx.createLinearGradient(x, y, x + w * 0.8, y + hh);
+        grd.addColorStop(0, rgb(176 * g, 168 * g, 154 * g));
+        grd.addColorStop(1, rgb(148 * g, 141 * g, 128 * g));
+        ctx.fillStyle = grd; ctx.fill();
+        x += w;
+      }
+    }
+    // weathering speckle + height from luminance
+    const d = ctx.getImageData(0, 0, S, S);
+    for (let i = 0; i < S * S; i++) {
+      const x = i % S, y = (i / S) | 0;
+      const n = fb(x / S * 18, y / S * 18, 3);
+      const k = 0.88 + n * 0.22;
+      d.data[i * 4] *= k; d.data[i * 4 + 1] *= k; d.data[i * 4 + 2] *= k;
+      h[i] = clamp((d.data[i * 4] / 255) * 0.9 + n * 0.1, 0, 1);
+    }
+    ctx.putImageData(d, 0, 0);
   },
 
   // ---------------------------------------------------------------- soft
@@ -322,6 +358,47 @@ const GEN = {
 // ── helpers ────────────────────────────────────────────────────────────────
 function rgb(r, g, b) { return `rgb(${r | 0},${g | 0},${b | 0})`; }
 
+// Which generators need their edges blended to tile cleanly. Structured
+// patterns (brick, tile, shingle, flagstone) are periodic by construction;
+// everything driven by raw fbm is not, and shows a hard seam at every repeat.
+// 'x'/'y' limits the blend to the non-periodic axis so plank/board layouts
+// keep their crisp joints.
+const SEAMLESS = {
+  oakFloor: 'x', walnut: 'xy', maple: 'xy', marble: 'xy', concrete: 'xy',
+  asphalt: 'xy', carpet: 'xy', fabric: 'xy', leather: 'xy', drywall: 'xy',
+  grass: 'xy', mountainRock: 'xy', brushedMetal: 'xy', laneWood: 'y',
+  courtWood: 'x', ripple: 'xy',
+};
+
+/**
+ * Cross-fades each edge into a half-tile-shifted copy so texel (0,y) matches
+ * texel (S-1,y). Done one axis at a time: the shifted copy's own seam lands
+ * where the blend weight is zero, so two passes leave no seam in either axis.
+ */
+function makeSeamless(ctx, S, h, mode) {
+  const img = ctx.getImageData(0, 0, S, S);
+  const F = Math.max(8, Math.round(S * 0.16));
+  const blend = (axis) => {
+    const src = img.data.slice();
+    const hs = h.slice();
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const c = axis === 'x' ? x : y;
+      const dist = Math.min(c, S - 1 - c);
+      if (dist >= F) continue;
+      let w = 1 - dist / F;
+      w = w * w * (3 - 2 * w);
+      const sx = axis === 'x' ? (x + S / 2) % S : x;
+      const sy = axis === 'y' ? (y + S / 2) % S : y;
+      const i = (y * S + x) * 4, j = (sy * S + sx) * 4;
+      for (let k = 0; k < 3; k++) img.data[i + k] = src[i + k] * (1 - w) + src[j + k] * w;
+      h[y * S + x] = hs[y * S + x] * (1 - w) + hs[sy * S + sx] * w;
+    }
+  };
+  if (mode.includes('x')) blend('x');
+  if (mode.includes('y')) blend('y');
+  ctx.putImageData(img, 0, 0);
+}
+
 // Per-pixel writes go through a staging ImageData (thousands of 1x1 fillRects
 // would cost hundreds of milliseconds per texture).
 function px(ctx, x, y, r, g, b) {
@@ -400,6 +477,7 @@ export class TextureFactory {
     const h = new Float32Array(size * size);
     gen(ctx, size, h, makeRng(hash(name)));
     ctx.__flush();
+    if (SEAMLESS[name]) makeSeamless(ctx, size, h, SEAMLESS[name]);
 
     const rep = o.repeat || [1, 1];
     const map = new THREE.CanvasTexture(c);

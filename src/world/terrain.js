@@ -7,6 +7,8 @@ import { Sky } from 'three/addons/objects/Sky.js';
 import { makeNoise2D, fbm, clamp, smoothstep } from '../core/rng.js';
 import { makeRng } from '../core/rng.js';
 import { planarUV } from './build.js';
+import { Atmosphere } from './atmosphere.js';
+import { plantGrass } from './vegetation.js';
 
 const noise = makeNoise2D(31415);
 
@@ -84,6 +86,20 @@ export function buildTerrain(world) {
   }
   g.computeVertexNormals();
   planarUV(g, 3.0);
+  // cut the turf out from under the skate pad: at this vertex density the
+  // lawn caps the bowl with green triangles you can see from the rim
+  {
+    const idx = g.index.array;
+    const keep = [];
+    for (let i = 0; i < idx.length; i += 3) {
+      let cx = 0, cz = 0;
+      for (let k = 0; k < 3; k++) { cx += pos.getX(idx[i + k]); cz += pos.getZ(idx[i + k]); }
+      cx /= 3; cz /= 3;
+      if (cx > 10 && cx < 42 && cz > 50 && cz < 74) continue;
+      keep.push(idx[i], idx[i + 1], idx[i + 2]);
+    }
+    g.setIndex(keep);
+  }
   const ground = new THREE.Mesh(g, M.get('grass'));
   ground.receiveShadow = true;
   ground.name = 'lawn';
@@ -103,7 +119,7 @@ export function buildTerrain(world) {
   far.rotateX(-Math.PI / 2);
   const fp = far.attributes.position;
   const colors = new Float32Array(fp.count * 3);
-  const cRock = new THREE.Color(0x565349), cGrass = new THREE.Color(0x47643b), cSnow = new THREE.Color(0xe4ecf3);
+  const cRock = new THREE.Color(0x726c5e), cGrass = new THREE.Color(0x4a6a3e), cSnow = new THREE.Color(0xe4ecf3);
   const tmp = new THREE.Color();
   for (let i = 0; i < fp.count; i++) {
     const x = fp.getX(i), z = fp.getZ(i);
@@ -118,22 +134,29 @@ export function buildTerrain(world) {
       h += (ridge * 300 + ridge2 * 90) * t * southBias;
     }
     fp.setY(i, h);
+    // rock takes over low so the middle distance is scrub and stone, not a
+    // smooth green wall filling the southern sky; noise breaks the banding
+    const vary = fbm(noise, x * 0.01 + 9, z * 0.01 - 4, 3) * 0.5 + 0.5;
     const snow = smoothstep(235, 380, h);
-    const rock = smoothstep(30, 120, h);
-    tmp.copy(cGrass).lerp(cRock, rock).lerp(cSnow, snow);
-    colors[i * 3] = tmp.r; colors[i * 3 + 1] = tmp.g; colors[i * 3 + 2] = tmp.b;
+    const rock = smoothstep(14, 110, h) * (0.75 + vary * 0.35);
+    tmp.copy(cGrass).lerp(cRock, Math.min(1, rock)).lerp(cSnow, snow);
+    const k = 0.92 + vary * 0.28;
+    colors[i * 3] = tmp.r * k; colors[i * 3 + 1] = tmp.g * k; colors[i * 3 + 2] = tmp.b * k;
   }
   far.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   far.computeVertexNormals();
-  const farMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96, metalness: 0, flatShading: false });
+  // flat shading keeps the low-poly ridges reading as rock faces instead of
+  // smooth-shaded soft-serve
+  const farMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96, metalness: 0, flatShading: true });
   const farMesh = new THREE.Mesh(far, farMat);
   farMesh.position.y = -0.4;
   farMesh.receiveShadow = false;
   farMesh.name = 'mountains';
   scene.add(farMesh);
 
-  // ── trees ───────────────────────────────────────────────────────────────
+  // ── trees & grass ───────────────────────────────────────────────────────
   plantTrees(world);
+  plantGrass(world);
 
   return ground;
 }
@@ -172,8 +195,9 @@ function plantTrees(world) {
     if (r < 110) world.collider(1.0, 5 * s, 1.0, x, y + 2.5 * s, z);
   }
 
-  // ornamental trees close to the house
-  for (const [x, z] of [[-38, -20], [38, -20], [-40, 22], [40, 22], [-34, 46], [34, 46]]) {
+  // ornamental trees close to the house (none near the shed — a canopy
+  // through its roof reads terribly from inside)
+  for (const [x, z] of [[-38, -20], [38, -20], [-42, 12], [40, 22], [-34, 46], [34, 46]]) {
     const y = groundHeight(x, z);
     B.box(0.45, 3.2, 0.45, bark, x, y + 1.6, z, { tile: 1 });
     for (let t = 0; t < 3; t++) {
@@ -206,8 +230,9 @@ export class SkySystem {
     this.sun.shadow.camera.far = 260;
     const S = 70;
     Object.assign(this.sun.shadow.camera, { left: -S, right: S, top: S, bottom: -S });
-    this.sun.shadow.bias = -0.0006;
-    this.sun.shadow.normalBias = 0.035;
+    this.sun.shadow.camera.updateProjectionMatrix();   // the ortho camera never recomputes on its own
+    this.sun.shadow.bias = -0.0004;
+    this.sun.shadow.normalBias = 0.06;   // large flat slabs banded at 0.035
     this.sunTarget = new THREE.Object3D();
     scene.add(this.sun, this.sunTarget);
     this.sun.target = this.sunTarget;
@@ -227,6 +252,9 @@ export class SkySystem {
     this._envSky.scale.setScalar(1000);
     this._envScene.add(this._envSky);
 
+    this.atmosphere = new Atmosphere(scene);
+    this._sunDir = new THREE.Vector3();
+
     this.time = 8.5;          // hours
     this.dayLength = 24 * 60; // seconds of real time for a full day
     this._lastEnv = -99;
@@ -237,9 +265,9 @@ export class SkySystem {
     // rises in the east, crosses the southern sky, sets in the west
     const t = ((hour - 6) / 12) * Math.PI;         // 0 at sunrise, π at sunset
     const elev = Math.sin(t) * 1.02;
-    const az = -0.42 + t * (Math.PI + 0.84);       // ENE → south → WNW
+    const az = -0.42 + (t / Math.PI) * (Math.PI + 0.84);   // ENE → south → WNW
     const c = Math.cos(elev);
-    return new THREE.Vector3(Math.cos(az) * c, Math.sin(elev), Math.sin(az) * c).normalize();
+    return this._sunDir.set(Math.cos(az) * c, Math.sin(elev), Math.sin(az) * c).normalize();
   }
 
   setTime(hour) {
@@ -262,10 +290,10 @@ export class SkySystem {
 
     // Sky fill is kept deliberately low: without it every interior washes out,
     // and the house is meant to be lit by its own fixtures.
-    this.hemi.intensity = 0.24 + 0.24 * day;
+    this.hemi.intensity = 0.28 + 0.3 * day;
     this.hemi.color.setHex(day > 0.3 ? 0xa8c6e8 : 0x2c3a56);
     this.hemi.groundColor.setHex(0x4a4238);
-    this.ambient.intensity = 0.07 + 0.02 * day;
+    this.ambient.intensity = 0.08 + 0.04 * day;
 
     u.turbidity.value = 2.6 + dusk * 5.5;
     u.rayleigh.value = 1.4 + dusk * 2.6 + (1 - day) * 0.6;
@@ -273,6 +301,11 @@ export class SkySystem {
 
     this.engine.renderer.toneMappingExposure = 0.62 + day * 0.16;
     this.night = day < 0.18;
+    this.atmosphere.setSun(dir, day, dusk);
+
+    // lamp heads, floodlights and headlights come up with the dark
+    const glow = 0.12 + 0.88 * (1 - day);
+    for (const m of this.world.mats.dimmable) m.emissiveIntensity = m.userData.baseEmissive * glow;
 
     // haze on the horizon follows the sky
     const fog = this.engine.scene.fog;
@@ -299,12 +332,15 @@ export class SkySystem {
     if (this.envRT) this.envRT.dispose();
     this.envRT = rt;
     this.engine.scene.environment = rt.texture;
-    this.engine.scene.environmentIntensity = 0.18 + clamp(this.dir.y, 0, 1) * 0.32;
+    // restrained: full-sky IBL indoors is what washed the kitchen and every
+    // bathroom out to a white void at midday
+    this.engine.scene.environmentIntensity = 0.14 + clamp(this.dir.y, 0, 1) * 0.2;
   }
 
   update(dt, playerPos, timeScale = 1) {
     this.setTime(this.time + (dt / this.dayLength) * 24 * timeScale);
     this.updateEnv();
+    this.atmosphere.update(dt);
     // keep the shadow frustum on the player
     this.sunTarget.position.copy(playerPos);
     this.sun.position.copy(playerPos).addScaledVector(this.dir, 120);

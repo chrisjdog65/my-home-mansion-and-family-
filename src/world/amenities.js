@@ -27,6 +27,13 @@ export function theater(k, R) {
   screenMat.name = 'cinema';
   const scr = boxMesh(0.06, 3.6, R.d - 3.2, screenMat, sx, y + 2.5, R.z, { cast: false });
   world.addProp(scr);
+  // slim light bezel so the screen still reads as a screen when it's off —
+  // black-on-black it vanished into the screen wall
+  const bezel = M.paint(0xd6dade, 0.55, 'bezel');
+  for (const s of [-1, 1]) {
+    B.box(0.1, 0.08, R.d - 3.2 + 0.16, bezel, sx, y + 2.5 + s * 1.84, R.z, { tile: 0.4 });
+    B.box(0.1, 3.6, 0.08, bezel, sx, y + 2.5, R.z + s * ((R.d - 3.2) / 2 + 0.04), { tile: 0.4 });
+  }
   const screen = { mesh: scr, mat: screenMat, on: false, kind: 'cinema' };
   world.screens.push(screen);
 
@@ -35,17 +42,35 @@ export function theater(k, R) {
     B.box(0.35, 4.2, 1.2, M.paint(0x6d1024, 0.95, 'velvet'), sx + 0.1, y + 2.2, R.z + s * ((R.d - 3.0) / 2), { tile: 0.9 });
   }
 
-  // tiered seating: 4 rows climbing away from the screen
-  const rows = 4;
+  // tiered seating: 4 rows climbing away from the screen.  The room's only
+  // door is on the south wall, so a flat ~1.9 m aisle runs the length of it —
+  // every tier stops at `zA`, and each raised tier drops a recessed corner
+  // stair down to the aisle (0.4 m risers, under the player's 0.52 step-up).
+  const rows = 4, riser = 0.4;
+  const zN = R.z - R.d / 2 + 0.6;                   // north edge of the tiers
+  const zA = R.z + R.d / 2 - 2.0;                   // south edge — the aisle starts here
   for (let r = 0; r < rows; r++) {
     const px = x0 + 6.0 + r * 3.4;
-    const step = r * 0.42;
-    const cyTier = y + step - (0.42 + step) / 2;    // tier top lands exactly on `step`
-    B.box(3.4, 0.42 + step, R.d - 1.2, M.get('theaterCarpet'), px, cyTier, R.z, { tile: 1.6 });
-    world.collider(3.4, 0.42 + step, R.d - 1.2, px, cyTier, R.z);
-    const seats = 5;
+    const step = r * riser;
+    const cyTier = y + (step - riser) / 2;          // tier top lands exactly on `step`
+    const slab = (w, d, sx2, sz2) => {
+      B.box(w, riser + step, d, M.get('theaterCarpet'), sx2, cyTier, sz2, { tile: 1.6 });
+      world.collider(w, riser + step, d, sx2, cyTier, sz2);
+    };
+    const nd = Math.max(0, r - 1) * 0.45;           // recessed stair notch depth
+    slab(3.4, (zA - nd) - zN, px, (zN + zA - nd) / 2);
+    if (nd > 0) {
+      slab(2.3, nd, px - 0.55, zA - nd / 2);        // tier continues west of the notch
+      for (let i = 0; i < r - 1; i++) {             // steps descend south to the aisle
+        const st = riser * (r - 1 - i);
+        const sz = zA - nd + (i + 0.5) * 0.45;
+        B.box(1.1, st + riser, 0.45, M.get('theaterCarpet'), px + 1.15, y + (st - riser) / 2, sz, { tile: 1.6 });
+        world.collider(1.1, st + riser, 0.45, px + 1.15, y + (st - riser) / 2, sz);
+      }
+    }
+    const seats = 5, s0 = zN + 0.8, s1 = zA - 1.1;  // seats stay clear of the notches
     for (let s = 0; s < seats; s++) {
-      const sz = R.z - (R.d - 3.2) / 2 + (s + 0.5) * ((R.d - 3.2) / seats);
+      const sz = s0 + (s + 0.5) * ((s1 - s0) / seats);
       recliner(k, px, y + step, sz, -Math.PI / 2);
     }
     // step lighting
@@ -159,8 +184,9 @@ export function bowling(k, R) {
       color: [0x11223a, 0x5a1030, 0x0f3b2e, 0x3a2a05][i],
     });
   }
-  // seating along the back wall
-  for (let i = 0; i < 4; i++) barstool(k, foulX + 3.2, R.z - 5.1 + i * 3.4, y, { rotY: Math.PI / 2 });
+  // spectator stools along the back wall, turned to face the lanes and kept
+  // clear of the approach platforms (which reach foulX + 3.6, R.z ± 1.4..3.8)
+  for (const dz of [-5.1, -4.2, 4.2, 5.1]) barstool(k, R.x + R.w / 2 - 0.5, R.z + dz, y, { rotY: -Math.PI / 2 });
   // neon
   B.box(0.1, 0.2, R.d - 2, M.emissive(0xff3f8a, 2.4), R.x - R.w / 2 + 0.3, y + 3.6, R.z, { tile: 0.5 });
   B.box(0.1, 0.2, R.d - 2, M.emissive(0x3fd0ff, 2.4), R.x + R.w / 2 - 0.3, y + 3.6, R.z, { tile: 0.5 });
@@ -172,7 +198,8 @@ export function court(k, R) {
   const { world, M, B } = k;
   const y = R.y;
   const lineMat = M.paint(0x9c2b21, 0.4, 'courtline');
-  const line = (w, d, x, z) => B.box(w, 0.006, d, lineMat, x, y + 0.07, z, { tile: 0.5 });
+  // lines hug the slab (bottom ~0.045 above it) instead of hovering visibly
+  const line = (w, d, x, z) => B.box(w, 0.006, d, lineMat, x, y + 0.048, z, { tile: 0.5 });
 
   // boundary + centre
   line(R.w - 2.0, 0.08, R.x, R.z - (R.d - 1.4) / 2);
@@ -180,7 +207,7 @@ export function court(k, R) {
   line(0.08, R.d - 1.4, R.x - (R.w - 2.0) / 2, R.z);
   line(0.08, R.d - 1.4, R.x + (R.w - 2.0) / 2, R.z);
   line(0.08, R.d - 1.4, R.x, R.z);
-  ringLine(k, R.x, y + 0.07, R.z, 1.8, lineMat);
+  ringLine(k, R.x, y + 0.048, R.z, 1.8, lineMat);
 
   for (const s of [-1, 1]) {
     const hx = R.x + s * (R.w / 2 - 1.6);
@@ -188,7 +215,7 @@ export function court(k, R) {
     line(0.08, 4.9, hx - s * 2.9, R.z);
     line(5.8, 0.08, hx - s * 2.9, R.z - 2.45);
     line(5.8, 0.08, hx - s * 2.9, R.z + 2.45);
-    ringLine(k, hx - s * 5.8, y + 0.07, R.z, 1.8, lineMat);
+    ringLine(k, hx - s * 5.8, y + 0.048, R.z, 1.8, lineMat);
     hoop(k, hx, y, R.z, s);
   }
 
@@ -207,10 +234,11 @@ export function court(k, R) {
 }
 
 function ringLine(k, x, y, z, r, mat) {
-  const n = 34;
+  // many short segments so the circle reads round, not as chunky dashes
+  const n = 60;
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2;
-    k.B.box(0.3, 0.006, 0.08, mat, x + Math.cos(a) * r, y, z + Math.sin(a) * r, { rotY: Math.PI / 2 - a, tile: 0.3 });
+    k.B.box(0.2, 0.006, 0.08, mat, x + Math.cos(a) * r, y, z + Math.sin(a) * r, { rotY: Math.PI / 2 - a, tile: 0.3 });
   }
 }
 
@@ -247,8 +275,11 @@ function hoop(k, x, y, z, s) {
 export function gym(k, R) {
   const { world, M, B } = k;
   const y = R.y, x = R.x, z = R.z;
-  // mirror wall
-  B.box(R.w - 1.0, 2.4, 0.05, M.get('mirror'), x, y + 1.5, z - R.d / 2 + 0.14, { tile: 2 });
+  // mirror wall — two runs flanking the doorway (the room's only door is
+  // centred on this wall: 1.4 m leaf + 0.5 m clearance each side)
+  for (const s of [-1, 1]) {
+    B.box(R.w / 2 - 1.7, 2.4, 0.05, M.get('mirror'), x + s * (R.w / 4 + 0.35), y + 1.5, z - R.d / 2 + 0.14, { tile: 2 });
+  }
   // rubber flooring already from the room; add mats
   B.box(2.0, 0.04, 1.2, M.paint(0x2b6a8a, 0.95, 'mat'), x - 2.4, y + 0.07, z + 1.6, { tile: 0.8 });
 
@@ -342,20 +373,24 @@ export function gamingRoom(k, R, id) {
   k.p(chair, 0, 0.05, 0, 0.62, 0.06, 0.62, M.get('darkPlastic'), 0.3);
   k.pc(chair, 0, 0.5, 0, 0.65, 1.0, 0.6);
 
-  // LED strip round the ceiling + shelf of collectibles
+  // LED strip round the ceiling
   for (const s of [-1, 1]) {
     B.box(R.w - 0.6, 0.05, 0.05, M.emissive(rgb[id % 4], 2.6), x, y + R.h - 0.22, z + s * (R.d / 2 - 0.25), { tile: 0.4 });
   }
-  B.box(R.w - 2.4, 0.05, 0.28, M.paint(0x1b1f27, 0.5, 'shelf'), x, y + 1.7, z - R.d / 2 + 0.3, { tile: 0.4 });
+  // collectibles shelf runs down the east wall — the north wall holds the
+  // room's centred door, so nothing hangs there
+  const shX = x + R.w / 2 - 0.3;
+  B.box(0.28, 0.05, R.d - 2.4, M.paint(0x1b1f27, 0.5, 'shelf'), shX, y + 1.7, z, { tile: 0.4 });
   for (let i = 0; i < 8; i++) {
     B.box(0.12, 0.22, 0.12, M.emissive([0x4fc3f7, 0xffb74d, 0xba68c8, 0x81c784][i % 4], 0.5),
-      x - (R.w - 3.4) / 2 + i * ((R.w - 3.4) / 7), y + 1.84, z - R.d / 2 + 0.3, { tile: 0.2 });
+      shX, y + 1.84, z - (R.d - 3.4) / 2 + i * ((R.d - 3.4) / 7), { tile: 0.2 });
   }
 
-  // couch + console TV on the opposite wall
+  // console TV on the west wall, clear of the doorway and of the shelf
   const tvMat = M.get('screenOff').clone(); tvMat.name = `gtv${id}`;
-  B.box(1.7, 1.0, 0.06, M.get('blackMetal'), x, y + 1.6, z - R.d / 2 + 0.2, { tile: 0.4 });
-  const gtv = boxMesh(1.6, 0.9, 0.02, tvMat, x, y + 1.6, z - R.d / 2 + 0.26, { cast: false });
+  const tvX = x - R.w / 2 + 0.2;
+  B.box(0.06, 1.0, 1.7, M.get('blackMetal'), tvX, y + 1.6, z, { tile: 0.4 });
+  const gtv = boxMesh(0.02, 0.9, 1.6, tvMat, tvX + 0.06, y + 1.6, z, { cast: false });
   world.addProp(gtv);
   const gScreen = { mesh: gtv, mat: tvMat, on: false, kind: 'tv' };
   world.screens.push(gScreen);
@@ -369,31 +404,39 @@ export function gamingRoom(k, R, id) {
   world.addInteract({
     pos: V(x, y + 1.0, dz - 0.7), radius: 2.4,
     label: () => (screens[0].on ? 'Shut down the rig' : 'Boot the gaming PC'),
-    onUse: powerOn, kind: 'pc',
+    onUse: powerOn, kind: 'pc', data: screens[0],
   });
   world.addInteract({ pos: V(chair.x, y + 0.6, chair.z), radius: 1.5, label: 'Sit at the PC', kind: 'seat', seat: { x: chair.x, y: y + 0.6, z: chair.z, rotY: Math.PI } });
   world.spot(`gaming${id}`, chair.x, y, chair.z, { rotY: Math.PI });
-  world.addLight({ pos: V(x, y + 1.4, dz), color: rgb[id % 4], intensity: 6, distance: 7, lamp: true });
+  world.addLight({ pos: V(x, y + 1.4, dz), color: rgb[id % 4], intensity: 10, distance: 8, lamp: true });
 }
 
 // ── laundry ────────────────────────────────────────────────────────────────
 export function laundry(k, R) {
   const { world, M, B } = k;
-  const y = R.y, z = R.z - R.d / 2 + 0.7;
+  const y = R.y, z0 = R.z - R.d / 2;
+  // the room's only door is centred on the corridor (north) wall, so the
+  // washer/dryer run lives against the west wall instead, facing east
+  const wx = R.x - R.w / 2 + 0.53;
   for (let i = 0; i < 2; i++) {
-    const x = R.x - 1.2 + i * 1.15;
-    B.box(0.9, 1.0, 0.75, M.paint(i ? 0xe9edf1 : 0xd8e2ea, 0.35, 'appliance'), x, y + 0.5, z, { tile: 0.5 });
-    B.box(0.5, 0.5, 0.06, M.get('carGlass'), x, y + 0.55, z + 0.38, { tile: 0.3 });
-    B.box(0.86, 0.14, 0.1, M.get('darkPlastic'), x, y + 0.94, z + 0.36, { tile: 0.3 });
-    B.box(0.2, 0.06, 0.06, M.emissive(0x6fd3ff, 1.0), x - 0.28, y + 0.94, z + 0.4, { tile: 0.2 });
-    world.collider(0.95, 1.05, 0.8, x, y + 0.5, z);
+    const z = z0 + 1.0 + i * 1.15;
+    B.box(0.75, 1.0, 0.9, M.paint(i ? 0xe9edf1 : 0xd8e2ea, 0.35, 'appliance'), wx, y + 0.5, z, { tile: 0.5 });
+    B.box(0.06, 0.5, 0.5, M.get('carGlass'), wx + 0.38, y + 0.55, z, { tile: 0.3 });
+    B.box(0.1, 0.14, 0.86, M.get('darkPlastic'), wx + 0.36, y + 0.94, z, { tile: 0.3 });
+    B.box(0.06, 0.06, 0.2, M.emissive(0x6fd3ff, 1.0), wx + 0.4, y + 0.94, z - 0.28, { tile: 0.2 });
+    world.collider(0.8, 1.05, 0.95, wx, y + 0.5, z);
   }
-  B.box(2.6, 0.06, 0.65, M.get('marble'), R.x - 0.65, y + 1.06, z, { tile: 0.8 });
-  B.box(2.6, 0.9, 0.35, M.paint(0xdfe4e8, 0.5, 'lcab'), R.x - 0.65, y + 2.0, z - 0.15, { tile: 0.6 });
-  // hanging rail + baskets
-  B.box(1.6, 0.04, 0.04, M.get('chrome'), R.x + 1.8, y + 1.9, z, { tile: 0.2 });
+  // folding counter over the machines + upper cabinet on the same wall
+  B.box(0.65, 0.06, 2.6, M.get('marble'), wx, y + 1.06, z0 + 1.55, { tile: 0.8 });
+  B.box(0.35, 0.9, 2.6, M.paint(0xdfe4e8, 0.5, 'lcab'), wx - 0.18, y + 2.0, z0 + 1.55, { tile: 0.6 });
+  // drying rail on the corridor wall east of the door, on proper brackets
+  B.box(1.6, 0.04, 0.04, M.get('chrome'), R.x + 1.8, y + 1.9, z0 + 0.32, { tile: 0.2 });
+  for (const s of [-1, 1]) {
+    B.box(0.05, 0.05, 0.3, M.get('chrome'), R.x + 1.8 + s * 0.7, y + 1.9, z0 + 0.21, { tile: 0.2 });
+  }
+  // baskets under the rail, clear of the door swing
   for (let i = 0; i < 3; i++) {
-    B.box(0.5, 0.34, 0.36, M.paint([0xc9d6df, 0xe0d3c4, 0xcfd8c9][i], 0.85, 'basket'), R.x + 1.4 + i * 0.6, y + 0.18, z + 0.9, { tile: 0.3 });
+    B.box(0.5, 0.34, 0.36, M.paint([0xc9d6df, 0xe0d3c4, 0xcfd8c9][i], 0.85, 'basket'), R.x + 1.4 + i * 0.6, y + 0.18, z0 + 0.85, { tile: 0.3 });
   }
   world.spot('laundry', R.x, y, R.z);
 }

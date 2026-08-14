@@ -50,10 +50,12 @@ export function buildMansion(world) {
   const matWalnut = M.get('walnut');
   const matSteel = M.get('steel');
 
-  const floorMat = (name, w, d) => {
-    const key = name === 'rubberFloor' ? 'rubber' : name;
-    try { return M.get(key); } catch (e) { return M.get('oakFloor'); }
+  const floorMat = (name) => {
+    try { return M.get(name); } catch (e) { return M.get('oakFloor'); }
   };
+
+  // world-space window centres, so furnish.js can hang curtains on real glass
+  world.windowMap = [];
 
   // ── per level ────────────────────────────────────────────────────────────
   for (const F of FLOORS) {
@@ -72,6 +74,23 @@ export function buildMansion(world) {
         cuts.push({ axis, coord, pos, w: dr.w, h: dr.w > 1.6 ? 2.7 : 2.25, owner: R, side: dr.side, dr });
       }
     }
+    // the second-floor gallery railing at z ≈ 2.15 is meant to overlook the
+    // double-height great room — open the upper storey of its north wall.
+    // The wall stays visually solid to 4.35 and past the archway header; the
+    // collider keeps a parapet to 1.1 m above the gallery floor (y 5.3) so
+    // the void railing, not an invisible wall, is what stops a lean.
+    if (F.key === 'ground') {
+      const GR = rooms.find((r) => r.type === 'great' && r.tall);
+      if (GR) {
+        const door = (GR.doors || []).find((dd) => dd.side === 'n');
+        const ox0 = GR.x0 + 1;
+        const ox1 = door ? cx(GR) + door.at - door.w / 2 - 0.3 : GR.x1 - 1;
+        cuts.push({
+          axis: 'z', coord: GR.z0, pos: (ox0 + ox1) / 2, w: ox1 - ox0,
+          y0: 4.35, h: 7.6, colY0: 5.3, owner: null, side: 'n', only: GR,
+        });
+      }
+    }
     F._cuts = cuts;
 
     // structural slab (also the collision floor)
@@ -81,16 +100,21 @@ export function buildMansion(world) {
     }
 
     // corridor / gallery finish where it isn't a room
-    const corridorRects = rectSubtract(
-      { x0: HOUSE.x0, x1: HOUSE.x1, z0: F.key === 'basement' ? -1.6 : CORR.z0, z1: F.key === 'basement' ? 1.6 : CORR.z1 },
-      holes,
-    );
-    for (const r of corridorRects) {
+    const band = { x0: HOUSE.x0, x1: HOUSE.x1, z0: F.key === 'basement' ? -1.6 : CORR.z0, z1: F.key === 'basement' ? 1.6 : CORR.z1 };
+    for (const r of rectSubtract(band, holes)) {
       const m = F.key === 'basement' ? M.get('polishedConcrete') : M.get('marble');
       B.box(rw(r), 0.04, rd(r), m, cx(r), y + 0.02, cz(r), { tile: 2 });
-      if (F.key !== 'ground' || true) {
-        B.box(rw(r), 0.05, rd(r), matCeil, cx(r), y + F.ceil, cz(r), { tile: 2 });
-      }
+    }
+    // the ceiling also dodges any stairwell descending from the level above,
+    // or the camera clips through it on every trip up or down.  On the top
+    // floor nothing exists above — stairs arrive through the FLOOR there, so
+    // its own holes must not be punched through the ceiling as well
+    const above = nextKey(F.key);
+    const wellsAbove = (SLAB_HOLES[above] || [])
+      .filter((h) => h.x0 < band.x1 && h.x1 > band.x0 && h.z0 < band.z1 && h.z1 > band.z0)
+      .map((h) => ({ x0: h.x0 - 0.3, x1: h.x1 + 0.3, z0: h.z0 - 0.3, z1: h.z1 + 0.3 }));
+    for (const r of rectSubtract(band, above ? [...holes, ...wellsAbove] : [])) {
+      B.box(rw(r), 0.05, rd(r), matCeil, cx(r), y + F.ceil, cz(r), { tile: 2 });
     }
 
     // ── rooms ──────────────────────────────────────────────────────────────
@@ -104,10 +128,13 @@ export function buildMansion(world) {
         B.box(rw(fr), 0.045, rd(fr), floorMat(R.floor), cx(fr), y + 0.022, cz(fr), { tile: R.floor === 'marble' ? 1.6 : 1.4 });
       }
 
-      // ceiling (skip where a void continues up)
-      const voidAbove = (SLAB_HOLES[nextKey(F.key)] || []).some(
-        (h) => h.x0 < R.x1 - 0.2 && h.x1 > R.x0 + 0.2 && h.z0 < R.z1 - 0.2 && h.z1 > R.z0 + 0.2,
-      );
+      // ceiling (skip only where a void substantially continues up — a corner
+      // graze from a stairwell must not delete the whole room's ceiling)
+      const voidAbove = (SLAB_HOLES[nextKey(F.key)] || []).some((hl) => {
+        const ox = Math.min(R.x1, hl.x1) - Math.max(R.x0, hl.x0);
+        const oz = Math.min(R.z1, hl.z1) - Math.max(R.z0, hl.z0);
+        return ox > 0 && oz > 0 && ox * oz > 0.15 * w * d;
+      });
       if (!voidAbove || isTall) {
         B.box(w, 0.05, d, matCeil, x, ceilY, z, { tile: 2 });
       }
@@ -132,8 +159,10 @@ export function buildMansion(world) {
           distance: Math.max(9, Math.min(22, Math.hypot(w, d) * 0.85)),
           room: R.name, floor: F.key,
         });
-        // the fixture itself
-        addFixture(world, R.type, lx, ly, z);
+        // the visible housing hangs from the real ceiling — a long pendant in
+        // tall rooms — while the virtual light stays lower so the room reads lit
+        const fy = isTall ? ceilY - 2.9 : ceilY - 0.28;
+        addFixture(world, R.type, lx, fy, z, ceilY);
       }
     }
 
@@ -145,16 +174,34 @@ export function buildMansion(world) {
           pos: new THREE.Vector3(lx, y + F.ceil - 0.8, 0), color: 0xffdcb4,
           intensity: 11, decay: 1.85, distance: 14, room: 'Gallery', floor: F.key,
         });
-        addFixture(world, 'corridor', lx, y + F.ceil - 0.3, 0);
+        addFixture(world, 'corridor', lx, y + F.ceil - 0.3, 0, y + F.ceil);
       }
     }
 
     buildExteriorShell(world, F, matStone, matStucco, matWall, matGlass, matTrim);
   }
 
+  // the galleries are places too — register them so the HUD stops calling the
+  // middle of the house 'The Grounds'.  Registered LAST so roomAt()'s
+  // smallest-area preference keeps picking the real rooms where they overlap.
+  const galleryNames = {
+    basement: 'Lower Gallery', ground: 'Grand Gallery',
+    second: 'Second-Floor Gallery', third: 'Third-Floor Gallery',
+  };
+  for (const F of FLOORS) {
+    world.addRoom({
+      name: galleryNames[F.key], type: 'corridor', floor: F.key, floorName: F.name,
+      x: 0, z: 0, w: HOUSE.x1 - HOUSE.x0,
+      d: F.key === 'basement' ? 3.2 : CORR.z1 - CORR.z0,
+      y: F.y, h: F.ceil,
+      def: { floor: F.key === 'basement' ? 'polishedConcrete' : 'marble' },
+    });
+  }
+
   buildStairs(world);
   buildRoof(world);
   buildFoyerFeature(world);
+  if (FLOOR_ROOMS.ground.some((r) => r.garageDoors)) buildGarageDoors(world);
 
   return world;
 }
@@ -182,22 +229,32 @@ function lightPower(type) {
     case 'bowling': return 18;
     case 'great': return 24;
     case 'garage': case 'workshop': case 'storage': return 18;
+    case 'gym': return 26;
     case 'gaming': return 7;
+    case 'bath': return 9;              // baths also have a vanity light
     default: return 14;
   }
 }
 
 // ── fixtures ───────────────────────────────────────────────────────────────
-function addFixture(world, type, x, y, z) {
+// `y` anchors the visible housing; `ceilY` is the real ceiling it hangs from.
+function addFixture(world, type, x, y, z, ceilY = y + 0.2) {
   const M = world.mats, B = world.static;
+  if (type === 'theater') {
+    // recessed can, flush with the ceiling — no stem
+    B.box(0.22, 0.1, 0.22, M.emissive(0xff8a5c, 1.4), x, ceilY - 0.06, z, { tile: 1 });
+    return;
+  }
+  // a thin drop rod ties the housing to the ceiling instead of floating free
+  if (ceilY - y > 0.14) {
+    B.box(0.04, ceilY - y, 0.04, M.get('blackMetal'), x, (y + ceilY) / 2, z, { tile: 0.5 });
+  }
   if (type === 'court' || type === 'garage' || type === 'workshop' || type === 'storage' || type === 'gym') {
     B.box(2.4, 0.09, 0.34, M.get('steel'), x, y + 0.1, z, { tile: 1 });
     B.box(2.3, 0.06, 0.28, M.emissive(0xf4f8ff, 1.9), x, y + 0.03, z, { tile: 1 });
   } else if (type === 'corridor') {
     B.box(0.3, 0.06, 0.3, M.get('gold'), x, y + 0.16, z, { tile: 1 });
     B.box(0.24, 0.16, 0.24, M.emissive(0xffd9a8, 1.6), x, y + 0.02, z, { tile: 1 });
-  } else if (type === 'theater') {
-    B.box(0.22, 0.1, 0.22, M.emissive(0xff8a5c, 1.4), x, y, z, { tile: 1 });
   } else {
     B.box(0.55, 0.05, 0.55, M.get('chrome'), x, y + 0.14, z, { tile: 1 });
     B.box(0.46, 0.14, 0.46, M.emissive(0xfff0d8, 1.5), x, y + 0.02, z, { tile: 1 });
@@ -225,12 +282,17 @@ function buildRoomWalls(world, R, F, wallCol, matTrim, cuts) {
     else { px = R.x1 - WALL_T / 2; pz = cz(R); len = rd(R); rotY = Math.PI / 2; axis = 'x'; coord = R.x1; from = R.z0; to = R.z1; }
 
     const openings = [];
+    const colOpenings = [];
     for (const c of cuts) {
+      if (c.only && c.only !== R) continue;
       if (c.axis !== axis || Math.abs(c.coord - coord) > 0.25) continue;
       if (c.pos < from - 0.05 || c.pos > to + 0.05) continue;
       const world0 = axis === 'z' ? cx(R) : cz(R);
       const local = (axis === 'x' ? -(c.pos - world0) : (c.pos - world0));
-      openings.push({ x: local, w: c.w, y0: 0, y1: Math.min(c.h, h - 0.2) });
+      const o = { x: local, w: c.w, y0: c.y0 || 0, y1: Math.min(c.h, h - 0.2) };
+      openings.push(o);
+      // an overlook keeps a collider parapet where the wall visually opens
+      colOpenings.push(c.colY0 === undefined ? o : { ...o, y0: c.colY0 });
       // only the room that declared the door hangs the leaf
       if (c.owner === R && !c._placed) {
         c._placed = true;
@@ -239,11 +301,33 @@ function buildRoomWalls(world, R, F, wallCol, matTrim, cuts) {
     }
 
     wallWithOpenings(B, wallCol, px, pz, len, h, WALL_T, openings, rotY, 2.2, y);
-    wallColliders(world, px, pz, len, h, WALL_T, openings, rotY, y);
+    wallColliders(world, px, pz, len, h, WALL_T, colOpenings, rotY, y);
 
-    // baseboard
-    B.box(len, 0.13, WALL_T + 0.03, matTrim, px, y + 0.065, pz, { rotY, tile: 1 });
+    // baseboard + crown, stopped where an opening actually reaches them
+    trimRun(B, matTrim, px, pz, len, rotY, y + 0.065, 0.13, WALL_T + 0.03, openings, (o) => o.y0 < 0.3);
+    trimRun(B, matTrim, px, pz, len, rotY, y + h - 0.045, 0.09, WALL_T + 0.03, openings, (o) => o.y1 > h - 0.25);
   }
+}
+
+// A horizontal trim box along a wall, cut where the given openings reach it —
+// doorways break the baseboard, only full-height cuts break the crown.
+function trimRun(B, mat, px, pz, len, rotY, cy, th, td, openings, reaches) {
+  const cuts = openings.filter(reaches)
+    .map((o) => ({ a: o.x - o.w / 2, b: o.x + o.w / 2 }))
+    .sort((p, q) => p.a - q.a);
+  const half = len / 2;
+  const put = (x0, x1) => {
+    if (x1 - x0 < 0.08) return;
+    const lx = (x0 + x1) / 2;
+    B.box(x1 - x0, th, td, mat, px + Math.cos(rotY) * lx, cy, pz - Math.sin(rotY) * lx, { rotY, tile: 1 });
+  };
+  let cursor = -half;
+  for (const c of cuts) {
+    const a = Math.max(-half, c.a), b = Math.min(half, c.b);
+    if (a > cursor) put(cursor, a);
+    cursor = Math.max(cursor, b);
+  }
+  if (cursor < half) put(cursor, half);
 }
 
 function wallColliders(world, px, pz, len, h, t, openings, rotY, baseY) {
@@ -317,7 +401,7 @@ function registerDoor(world, R, F, side, dr, px, pz, rotY, local) {
 
 // ── exterior shell ─────────────────────────────────────────────────────────
 function buildExteriorShell(world, F, matStone, matStucco, matWall, matGlass, matTrim) {
-  const B = world.static;
+  const B = world.static, M = world.mats;
   const y = F.y;
   const h = F.ceil + 0.4;
   const outer = F.key === 'ground' || F.key === 'basement' ? matStone : matStucco;
@@ -335,16 +419,8 @@ function buildExteriorShell(world, F, matStone, matStucco, matWall, matGlass, ma
     const glass = [];
 
     if (F.key !== 'basement') {
-      const step = 4.4, half = s.len / 2;
-      for (let p = -half + step / 2; p < half; p += step) {
-        // front door
-        if (s.key === 'n' && Math.abs(p) < 4.6 && F.key === 'ground') continue;
-        // garage doors
-        if (s.key === 'n' && F.key === 'ground' && p > 20 && p < 30) continue;
-        if (s.key === 's' && (GLASS_SPANS[F.key] || []).some((g) => p > g.x0 - 2.2 && p < g.x1 + 2.2)) continue;
-        openings.push({ x: p, w: 2.1, y0: 0.95, y1: 2.85 });
-        glass.push({ x: p, w: 2.1, y0: 0.95, y1: 2.85 });
-      }
+      const half = s.len / 2;
+      // doors and curtain spans go in first so the window grid can dodge them
       if (s.key === 'n' && F.key === 'ground') {
         openings.push({ x: 0, w: 2.6, y0: 0, y1: 2.7 });        // front door
         openings.push({ x: 25.5, w: 8.4, y0: 0, y1: 3.0 });     // garage
@@ -359,6 +435,52 @@ function buildExteriorShell(world, F, matStone, matStucco, matWall, matGlass, ma
         openings.push({ x: c, w, y0: 0.12, y1: F.ceil - 0.1 });
         glass.push({ x: c, w, y0: 0.12, y1: F.ceil - 0.1, curtain: true });
       }
+
+      // interior partitions meeting this facade, in wall-local coordinates —
+      // a wall arriving edge-on through the middle of a pane reads terribly
+      const parts = [];
+      for (const R of FLOOR_ROOMS[F.key] || []) {
+        const touches =
+          s.key === 'n' ? Math.abs(R.z0 - HOUSE.z0) < 0.2 :
+          s.key === 's' ? Math.abs(R.z1 - HOUSE.z1) < 0.2 :
+          s.key === 'w' ? Math.abs(R.x0 - HOUSE.x0) < 0.2 : Math.abs(R.x1 - HOUSE.x1) < 0.2;
+        if (!touches) continue;
+        for (const b of (s.key === 'n' || s.key === 's') ? [R.x0, R.x1] : [-R.z1, -R.z0]) {
+          if (b > -half + 0.3 && b < half - 0.3) parts.push(b);
+        }
+      }
+      parts.sort((a, b) => a - b);
+      const segs = [];
+      { let a = -half; for (const b of [...parts, half]) { if (b - a > 0.1) segs.push([a, b]); a = b; } }
+
+      const WIN = 1.05 + 0.15;                    // pane half-width + clearance
+      const fits = (q) => parts.every((b) => Math.abs(q - b) >= WIN - EPS) &&
+        openings.every((o) => Math.abs(q - o.x) >= 1.05 + o.w / 2 + 0.25);
+
+      const step = 4.4;
+      for (let p = -half + step / 2; p < half; p += step) {
+        // front door
+        if (s.key === 'n' && Math.abs(p) < 4.6 && F.key === 'ground') continue;
+        // garage doors
+        if (s.key === 'n' && F.key === 'ground' && p > 20 && p < 30) continue;
+        if (s.key === 's' && (GLASS_SPANS[F.key] || []).some((g) => p > g.x0 - 2.2 && p < g.x1 + 2.2)) continue;
+        let q = p;
+        if (!parts.every((b) => Math.abs(p - b) >= WIN)) {
+          // straddles a partition — slide to the nearest clear spot in the
+          // same room, or leave the bay blank rather than bunch the grid
+          let best = null;
+          for (const [a, b] of segs) {
+            if (b - a < WIN * 2) continue;
+            const c = Math.min(Math.max(p, a + WIN), b - WIN);
+            if (Math.abs(c - p) > 2.2 || !fits(c)) continue;
+            if (best === null || Math.abs(c - p) < Math.abs(best - p)) best = c;
+          }
+          if (best === null) continue;
+          q = best;
+        }
+        openings.push({ x: q, w: 2.1, y0: 0.95, y1: 2.85 });
+        glass.push({ x: q, w: 2.1, y0: 0.95, y1: 2.85 });
+      }
     }
 
     const outPz = s.key === 'n' ? HOUSE.z0 - T_OUT / 2 : s.key === 's' ? HOUSE.z1 + T_OUT / 2 : 0;
@@ -367,15 +489,57 @@ function buildExteriorShell(world, F, matStone, matStucco, matWall, matGlass, ma
     const inPx = s.key === 'w' ? HOUSE.x0 + T_IN / 2 : s.key === 'e' ? HOUSE.x1 - T_IN / 2 : 0;
 
     wallWithOpenings(B, outer, outPx, outPz, s.len, h, T_OUT, openings, s.rotY, 2.6, y);
-    wallWithOpenings(B, matWall, inPx, inPz, s.len, h, T_IN, openings, s.rotY, 2.4, y);
+    // the inner face takes each room's own paint, run by run — one generic
+    // white sheet per facade bleached the theater and the bowling alley
+    {
+      const half = s.len / 2;
+      const runs = [];
+      for (const R of FLOOR_ROOMS[F.key] || []) {
+        const touches =
+          s.key === 'n' ? Math.abs(R.z0 - HOUSE.z0) < 0.2 :
+          s.key === 's' ? Math.abs(R.z1 - HOUSE.z1) < 0.2 :
+          s.key === 'w' ? Math.abs(R.x0 - HOUSE.x0) < 0.2 : Math.abs(R.x1 - HOUSE.x1) < 0.2;
+        if (!touches) continue;
+        const [a, b] = (s.key === 'n' || s.key === 's') ? [R.x0, R.x1] : [-R.z1, -R.z0];
+        runs.push({
+          a: Math.max(a, -half), b: Math.min(b, half),
+          mat: M.paint(R.wall, R.type === 'gaming' ? 0.75 : 0.66, `wall_${R.name}`),
+        });
+      }
+      runs.sort((p, q) => p.a - q.a);
+      // whatever no room claims (partition thickness, corridor ends) stays white
+      const fills = [];
+      let cur = -half;
+      for (const r of runs) {
+        if (r.a > cur + 0.02) fills.push({ a: cur, b: r.a, mat: matWall });
+        cur = Math.max(cur, r.b);
+      }
+      if (cur < half - 0.02) fills.push({ a: cur, b: half, mat: matWall });
+      for (const r of [...runs, ...fills]) {
+        const c = (r.a + r.b) / 2;
+        const sub = openings
+          .filter((o) => o.x + o.w / 2 > r.a + EPS && o.x - o.w / 2 < r.b - EPS)
+          .map((o) => ({ ...o, x: o.x - c }));
+        wallWithOpenings(B, r.mat, inPx + Math.cos(s.rotY) * c, inPz - Math.sin(s.rotY) * c,
+          r.b - r.a, h, T_IN, sub, s.rotY, 2.4, y);
+      }
+    }
     wallColliders(world, (outPx + inPx) / 2, (outPz + inPz) / 2, s.len, h, T_OUT + T_IN + 0.1, openings, s.rotY, y);
+
+    // rooms shouldn't go bare where the shell stands in for their perimeter
+    // walls — baseboard + crown on the inner face, cut at doors and curtains
+    trimRun(B, matTrim, inPx, inPz, s.len, s.rotY, y + 0.065, 0.13, T_IN + 0.03, openings, (o) => o.y0 < 0.3);
+    trimRun(B, matTrim, inPx, inPz, s.len, s.rotY, y + F.ceil - 0.045, 0.09, T_IN + 0.03, openings, (o) => o.y1 > F.ceil - 0.25);
 
     // glazing + frames
     for (const g of glass) {
       const gx = (s.key === 'w' ? HOUSE.x0 : s.key === 'e' ? HOUSE.x1 : 0) + Math.cos(s.rotY) * g.x;
       const gz = (s.key === 'n' ? HOUSE.z0 : s.key === 's' ? HOUSE.z1 : 0) - Math.sin(s.rotY) * g.x;
       const gh = g.y1 - g.y0;
+      // publish where the pane actually ended up, so curtains find real glass
+      if (!g.curtain) world.windowMap.push({ floor: F.key, side: s.key, x: gx, z: gz, w: g.w });
       B.box(g.w - 0.08, gh - 0.08, 0.03, matGlass, gx, y + (g.y0 + g.y1) / 2, gz, { rotY: s.rotY, tile: 1 });
+      world.collider(g.w, gh, 0.06, gx, y + (g.y0 + g.y1) / 2, gz, s.rotY);   // glass is solid
       // frame
       const fm = matTrim;
       B.box(g.w, 0.09, 0.16, fm, gx, y + g.y0, gz, { rotY: s.rotY, tile: 1 });
@@ -431,9 +595,10 @@ function buildStairs(world) {
       const len = Math.hypot(24 * run, 4.2);
       B.box(0.09, 0.09, len, rail, s * (W / 2 - 0.06), 2.1 + 1.0, (z0 + topZ) / 2, { rotX: -Math.atan2(4.2, 24 * run), tile: 0.5 });
     }
-    // upper gallery railings around the void
-    railing(world, post, rail, 0, 4.2, -2.35, 12.0, 0, 1.05);
-    for (const s of [-1, 1]) railing(world, post, rail, s * 5.85, 4.2, -7.6, 10.4, Math.PI / 2, 1.05);
+    // upper gallery railing along the void's south rim — split at x ±1.5 so
+    // the stair mouth stays open.  The void's east and west sides are solid
+    // bedroom walls at x ±6, so they need (and get) no rails.
+    for (const s of [-1, 1]) railing(world, post, rail, s * 3.75, 4.2, -2.35, 4.5, 0, 1.05);
     world.spot('grandStairBottom', 0, 0, -10.6);
     world.spot('grandStairTop', 0, 4.2, -1.4);
     world.stairLinks = world.stairLinks || [];
@@ -450,6 +615,7 @@ function buildStairs(world) {
     }
     railing(world, post, rail, x0 + 3.5, 4.2, zc - 0.8, 7.2, 0, 1.0);
     railing(world, post, rail, 19.4, 8.4, 0.3, 8.0, 0, 1.05);
+    railing(world, post, rail, 15.35, 8.4, 1.1, 1.5, Math.PI / 2, 1.05);   // west edge of the well
     world.spot('thirdStairBottom', 15.4, 4.2, zc);
     world.spot('thirdStairTop', 23.6, 8.4, zc);
     world.stairLinks.push({ a: new THREE.Vector3(15.6, 4.2, zc), b: new THREE.Vector3(23.6, 8.4, zc) });
@@ -473,7 +639,13 @@ function buildStairs(world) {
       B.box(run, 0.24, W, tread, -25.9 + (i + 0.5) * run, yTop + 0.12, 0.9, { tile: 1.1 });
       world.collider(run, 0.24, W, -25.9 + (i + 0.5) * run, yTop + 0.12, 0.9);
     }
-    railing(world, post, rail, -24.6, 0, -0.05, 6.2, 0, 1.0);
+    // guard the open well from the hall floor (hole x -27.9..-21.6, z ±1.9) —
+    // posts on the slab, the flight-A mouth at the east end left open
+    railing(world, post, rail, -24.75, 0, -1.95, 6.3, 0, 1.0);
+    railing(world, post, rail, -24.75, 0, 1.95, 6.3, 0, 1.0);
+    railing(world, post, rail, -27.95, 0, 0, 3.9, Math.PI / 2, 1.0);
+    railing(world, post, rail, -21.55, 0, 0.85, 2.1, Math.PI / 2, 1.0);    // drop over flight B
+    railing(world, post, rail, -21.55, 0, -1.75, 0.3, Math.PI / 2, 1.0);   // sliver north of the mouth
     world.spot('basementStairTop', -20.6, 0, -0.9);
     world.spot('basementStairBottom', -22.2, -6.0, 0.9);
     world.stairLinks.push({ a: new THREE.Vector3(-20.8, 0, -0.9), b: new THREE.Vector3(-22.2, -6.0, 0.9), via: new THREE.Vector3(-26.8, -3.4, 0) });
@@ -513,21 +685,61 @@ function buildRoof(world) {
     m.castShadow = m.receiveShadow = true;
     world.staticRoot.add(m);
   }
-  // ridge cap + chimneys
+  // ridge cap + chimneys — shafts start at y 12.0, above the third-floor
+  // ceiling, so they live in the attic and the sky, not in the bedrooms
   B.box(len, 0.24, 0.5, M.get('stone'), 0, ridge + 0.05, 0, { tile: 1 });
   for (const [x, z] of [[-24, 7], [-12, -8], [10, 9]]) {
-    B.box(1.7, 6.2, 1.4, M.get('brick'), x, 13.6, z, { tile: 1.2 });
+    B.box(1.7, 4.7, 1.4, M.get('brick'), x, 14.35, z, { tile: 1.2 });
     B.box(2.0, 0.3, 1.7, M.get('stone'), x, 16.8, z, { tile: 1 });
-    world.collider(1.7, 6.2, 1.4, x, 13.6, z);
+    world.collider(1.7, 4.7, 1.4, x, 14.35, z);
+  }
+}
+
+// ── garage doors ───────────────────────────────────────────────────────────
+// The shell leaves an 8.4 m bay in the north face; the plan promises doors,
+// so two sectional leaves slide up under the ceiling rather than swing.
+function buildGarageDoors(world) {
+  const M = world.mats, B = world.static;
+  const matSlat = M.paint(0xd9d5cc, 0.55, 'garageDoor');
+  B.box(0.22, 3.0, 0.34, M.get('stone'), 25.5, 1.5, HOUSE.z0, { tile: 1 });   // pier between the bays
+  world.collider(0.22, 3.0, 0.34, 25.5, 1.5, HOUSE.z0);
+
+  for (const bx of [23.4, 27.6]) {
+    const leafW = 4.06, leafH = 2.96, slats = 6, sh = leafH / slats;
+    const g = new THREE.Group();
+    g.position.set(bx, 0, HOUSE.z0 + 0.02);
+    for (let i = 0; i < slats; i++) {
+      g.add(boxMesh(leafW, sh - 0.025, 0.055, matSlat, 0, (i + 0.5) * sh, 0, { tile: 1.1 }));
+    }
+    g.add(boxMesh(0.5, 0.06, 0.05, M.get('steel'), 0, 0.92, 0.05));           // lift handle
+    world.addProp(g);
+
+    const door = { open: false, t: 0 };
+    world.onUpdate((dt) => {
+      door.t += ((door.open ? 1 : 0) - door.t) * Math.min(1, dt * 2.5);
+      g.position.y = door.t * (leafH - 0.12);
+    });
+    world.addBlocker({
+      get active() { return door.t < 0.5; },
+      pos: new THREE.Vector3(bx, leafH / 2, HOUSE.z0 + 0.02),
+      halfW: leafW / 2, halfH: leafH / 2, halfD: 0.1, rotY: 0,
+    });
+    world.addInteract({
+      pos: new THREE.Vector3(bx, 1.2, HOUSE.z0 + 0.02), radius: 2.8,
+      label: () => (door.open ? 'Close the garage door' : 'Open the garage door'),
+      onUse: () => { door.open = !door.open; return door.open ? 'creak' : 'latch'; },
+      kind: 'garageDoor', data: door,
+    });
   }
 }
 
 // ── foyer showpiece ────────────────────────────────────────────────────────
 function buildFoyerFeature(world) {
   const M = world.mats, B = world.static;
-  // marble medallion in the entry floor
-  const ring = new THREE.Mesh(new THREE.RingGeometry(1.4, 2.4, 48), M.get('gold'));
-  ring.rotation.x = -Math.PI / 2; ring.position.set(0, 0.055, -8);
+  // marble medallion in the entry floor — sized to the clear strip between
+  // the front doors (wall inner face z ≈ -12.88) and the grand stair (z -9.4)
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.6, 48), M.get('gold'));
+  ring.rotation.x = -Math.PI / 2; ring.position.set(0, 0.055, -11.2);
   ring.receiveShadow = true;
   world.staticRoot.add(ring);
 

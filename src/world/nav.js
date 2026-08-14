@@ -34,17 +34,25 @@ export function buildNav(world) {
     return best;
   };
 
-  // rooms
+  // rooms — the door node sits in the actual opening, not the wall's centre:
+  // several doors are offset metres along their wall (theater +6, court ±11),
+  // and a centred node walks the family straight through drywall
   for (const R of world.rooms) {
     if (!R.floor || !spine[R.floor]) continue;
     if (R.type === 'shed') continue;
+    const corridorSide = R.z < 0 ? 's' : 'n';
+    const plan = (R.def?.doors || []).find((d) => d.side === corridorSide);
+    const doorX = R.x + (plan?.at || 0);
     const doorZ = R.z < 0 ? R.z + R.d / 2 - 0.6 : R.z - R.d / 2 + 0.6;
-    const door = world.navNode(`d_${R.name}`, R.x, R.y, doorZ, ['door']);
-    const centre = world.navNode(`r_${R.name}`, R.x, R.y, R.z, ['room', R.type]);
+    const door = world.navNode(`d_${R.name}`, doorX, R.y, doorZ, ['door']);
+    // the kitchen's centre is the island — park the family beside it, not in it
+    const cx = R.type === 'kitchen' ? R.x + 3 : R.x;
+    const cz = R.type === 'kitchen' ? R.z + 1.5 : R.z;
+    const centre = world.navNode(`r_${R.name}`, cx, R.y, cz, ['room', R.type]);
     centre.room = R;
     R.navNode = centre;
     world.navLink(door, centre);
-    world.navLink(door, nearestSpine(R.floor, R.x));
+    world.navLink(door, nearestSpine(R.floor, doorX));
   }
 
   // stairs

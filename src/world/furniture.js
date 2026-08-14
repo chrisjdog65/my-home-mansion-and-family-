@@ -467,7 +467,64 @@ export function plant(k, x, y, z, scale = 1) {
 export function artwork(k, x, y, z, w, h, rotY, color) {
   const M = k.M;
   k.box(w + 0.08, h + 0.08, 0.05, M.get('gold'), x, y, z, { rotY, tile: 0.4 });
-  k.box(w, h, 0.02, M.paint(color, 0.7, `art${color}`), x, y, z + 0.02, { rotY, tile: 0.6 });
+  // canvas sits proud of the frame along its facing normal, whatever rotY is.
+  // No `tile` here: the default 0..1 box UVs map the painted canvas edge to
+  // edge, where world-projected UVs would crop it arbitrarily.
+  k.box(w, h, 0.02, artMaterial(M, color, x, y, z), x + 0.045 * Math.sin(rotY), y, z + 0.045 * Math.cos(rotY), { rotY });
+}
+
+/**
+ * Tiny procedural abstract — a few layered gradient bands and soft blob
+ * strokes on a 128px canvas, seeded from the hanging spot so every picture in
+ * the house is different but stable between loads.
+ */
+function artMaterial(M, color, x, y, z) {
+  const seed = ((Math.round((x + 512) * 8) * 73856093) ^ (Math.round((z + 512) * 8) * 19349663) ^ (Math.round((y + 64) * 4) * 83492791) ^ color) >>> 0;
+  const key = `artcv:${color}:${seed}`;
+  if (M.cache.has(key)) return M.cache.get(key);
+  const rng = makeRng(seed);
+  const cv = document.createElement('canvas');
+  cv.width = 128; cv.height = 96;
+  const ctx = cv.getContext('2d');
+  const hsl = { h: 0, s: 0, l: 0 };
+  new THREE.Color(color).getHSL(hsl);
+  const css = (dh, ds, dl, a = 1) => {
+    const hh = (((hsl.h + dh) % 1) + 1) % 1;
+    const ss = Math.min(1, Math.max(0, hsl.s + ds));
+    const ll = Math.min(0.92, Math.max(0.08, hsl.l + dl));
+    return `hsla(${(hh * 360).toFixed(0)},${(ss * 100).toFixed(0)}%,${(ll * 100).toFixed(0)}%,${a})`;
+  };
+  // 2-3 horizontal gradient bands
+  const bands = rng.int(2, 3);
+  let y0 = 0;
+  for (let i = 0; i < bands; i++) {
+    const y1 = i === bands - 1 ? 96 : Math.min(88, y0 + rng.range(20, 96 / bands + 16));
+    const g = ctx.createLinearGradient(0, y0, 0, y1);
+    g.addColorStop(0, css(rng.range(-0.05, 0.05), rng.range(-0.1, 0.1), rng.range(0.06, 0.3)));
+    g.addColorStop(1, css(rng.range(-0.08, 0.08), rng.range(-0.05, 0.15), rng.range(-0.18, 0.06)));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, y0, 128, Math.ceil(y1 - y0) + 1);
+    y0 = y1;
+  }
+  // soft blob strokes over the bands
+  for (let i = 0, n = rng.int(3, 5); i < n; i++) {
+    const bx = rng.range(14, 114), by = rng.range(12, 84), r = rng.range(9, 26);
+    const g = ctx.createRadialGradient(bx, by, r * 0.15, bx, by, r);
+    g.addColorStop(0, css(rng.range(-0.14, 0.14), rng.range(0, 0.2), rng.range(-0.1, 0.28), rng.range(0.4, 0.75)));
+    g.addColorStop(1, css(0, 0, 0, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(bx, by, r * rng.range(0.8, 1.6), r, rng.range(0, Math.PI), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const map = new THREE.CanvasTexture(cv);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.anisotropy = 4;
+  const m = new THREE.MeshStandardMaterial({ map, roughness: 0.85, metalness: 0 });
+  m.name = key;
+  M.cache.set(key, m);
+  M.all.push(m);
+  return m;
 }
 
 export function curtains(k, x, y, z, w, rotY, color = 0xb9ada0) {

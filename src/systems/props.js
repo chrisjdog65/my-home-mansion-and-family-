@@ -61,31 +61,64 @@ export class Props {
     const p = this.held;
     if (!p) return;
     const target = this._v.set(0, -0.16, -0.75).applyQuaternion(camera.quaternion).add(camera.position);
-    p.pos.lerp(target, clamp(dt * 18, 0, 1));
-    p.mesh.quaternion.slerp(camera.quaternion, clamp(dt * 10, 0, 1));
+    p.pos.lerp(target, 1 - Math.exp(-18 * dt));
+    p.mesh.quaternion.slerp(camera.quaternion, 1 - Math.exp(-10 * dt));
   }
 
-  update(dt, onImpact) {
+  /**
+   * Capsule-vs-sphere: the player's boots push props aside (and wake them).
+   * @returns {boolean} whether the player is touching this prop
+   */
+  playerPush(p, capsule, playerVelocity) {
+    const seg = this._v2.subVectors(capsule.end, capsule.start);
+    const t = clamp(this._v.subVectors(p.pos, capsule.start).dot(seg) / seg.lengthSq(), 0, 1);
+    this._v.copy(capsule.start).addScaledVector(seg, t);
+    const d = this._v.subVectors(p.pos, this._v);
+    const r = p.radius + capsule.radius;
+    const l2 = d.lengthSq();
+    if (l2 >= r * r || l2 < 1e-8) return false;
+    const l = Math.sqrt(l2);
+    d.multiplyScalar(1 / l);
+    p.pos.addScaledVector(d, r - l);
+    const push = playerVelocity ? Math.max(0, playerVelocity.dot(d)) : 0;
+    p.velocity.addScaledVector(d, push + 0.6);
+    p.sleeping = false;
+    if (p.upright && p.age > 0.5 && push > 1.0) p.knocked = true;
+    return true;
+  }
+
+  update(dt, onImpact, playerCapsule = null, playerVelocity = null) {
     const oct = this.world.octree;
     for (const p of this.list) {
       if (p === this.held) continue;
       p.age += dt;
       const speed2 = p.velocity.lengthSq();
-      if (p.sleeping && speed2 < 0.0004) continue;
+      if (p.sleeping && speed2 < 0.0004) {
+        // still kickable while asleep — the touch is what wakes it
+        if (!(playerCapsule && this.playerPush(p, playerCapsule, playerVelocity))) continue;
+      }
 
       p.velocity.y -= GRAVITY * dt;
       // air drag
       p.velocity.multiplyScalar(Math.max(0, 1 - 0.12 * dt));
-      p.pos.addScaledVector(p.velocity, dt);
 
-      this._sphere.center.copy(p.pos);
-      this._sphere.radius = p.radius;
-      const hit = oct.sphereIntersect(this._sphere);
-      if (hit) {
+      // sub-step so a thrown ball can't pass through a wall between frames
+      const steps = Math.min(6, Math.ceil((p.velocity.length() * dt) / (p.radius * 0.8)) || 1);
+      const h = dt / steps;
+      p.grounded = false;
+      for (let s = 0; s < steps; s++) {
+        p.pos.addScaledVector(p.velocity, h);
+        this._sphere.center.copy(p.pos);
+        this._sphere.radius = p.radius;
+        const hit = oct.sphereIntersect(this._sphere);
+        if (!hit) continue;
         const vn = p.velocity.dot(hit.normal);
         if (vn < 0) {
           const impact = -vn;
-          p.velocity.addScaledVector(hit.normal, -(1 + p.bounce) * vn);
+          // gentle contacts settle dead — bouncing the per-frame gravity
+          // impulse forever would keep resting props micro-hopping
+          const e = impact > 1.0 ? p.bounce : 0;
+          p.velocity.addScaledVector(hit.normal, -(1 + e) * vn);
           if (impact > 1.4 && onImpact) onImpact(p, impact, hit.normal);
           // an upright object only topples from a sideways knock, never from
           // settling onto the floor
@@ -98,9 +131,11 @@ export class Props {
           p.velocity.x *= f; p.velocity.z *= f;
           p.grounded = true;
         }
-      } else {
-        p.grounded = false;
       }
+
+      // the player's boots: walking into a ball nudges it, walking into a
+      // pin knocks it flying
+      if (playerCapsule) this.playerPush(p, playerCapsule, playerVelocity);
 
       // roll / tumble
       if (p.upright) {
@@ -112,10 +147,11 @@ export class Props {
           p.mesh.rotation.z = THREE.MathUtils.lerp(p.mesh.rotation.z, lean * 0.15, dt * 6);
         }
       } else if (speed2 > 0.02) {
-        const axis = this._v2.set(-p.velocity.z, 0, p.velocity.x);
+        // rolling axis is up × v — for travel +x the ball turns about −z
+        const axis = this._v2.set(p.velocity.z, 0, -p.velocity.x);
         if (axis.lengthSq() > 1e-6) {
           axis.normalize();
-          p.mesh.rotateOnWorldAxis(axis, (p.velocity.length() / p.radius) * dt * 0.6);
+          p.mesh.rotateOnWorldAxis(axis, (p.velocity.length() / p.radius) * dt);
         }
       }
 

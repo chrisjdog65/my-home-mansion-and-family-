@@ -44,9 +44,12 @@ export function furnishAll(world) {
       case 'pantry': case 'storage': storage(k, R, rng); break;
       default: break;
     }
-    // a little life everywhere
-    if (['bedroom', 'great', 'family', 'library', 'foyer', 'dining', 'sunroom', 'music'].includes(t)) {
-      plant(k, R.x - R.w / 2 + 0.9, R.y, R.z + R.d / 2 - 0.9, rng.range(0.9, 1.3));
+    // a little life everywhere — but not in narrow rooms, where the corner
+    // pot lands on the nightstands; the family room's west corner holds the
+    // bookshelf, so its plant takes the east corner instead
+    if (['bedroom', 'great', 'family', 'library', 'foyer', 'dining', 'sunroom', 'music'].includes(t) && R.w >= 7) {
+      const px = t === 'family' ? R.x + R.w / 2 - 0.9 : R.x - R.w / 2 + 0.9;
+      plant(k, px, R.y, R.z + R.d / 2 - 0.9, rng.range(0.9, 1.3));
     }
   }
   return k;
@@ -83,19 +86,33 @@ function bedroom(k, R, rng) {
   rug(k, R.x, R.y, R.z + inward * -0.4, Math.min(4.2, R.w - 2), Math.min(3.4, R.d - 3), pal.rug);
 
   // opposite wall: dresser + TV, wardrobe. `inward` points from the window
-  // wall into the room, so the far wall is +inward, not -inward — getting this
-  // backwards parked every bedroom's furniture outside the house.
-  const oz = wallZ + inward * (R.d - 0.9);
-  dresser(k, R.x - 1.2, R.y, oz, { rotY: north ? Math.PI : 0, w: Math.min(2.2, R.w * 0.3) });
-  tv(k, R.x - 1.2, R.y, oz + inward * 0.35, { rotY: north ? Math.PI : 0, w: 1.5, h: 1.55, wall: true });
-  wardrobe(k, R.x + R.w / 2 - 1.1, R.y, oz + inward * 0.1, { rotY: north ? Math.PI : 0 });
+  // wall into the room, so the far wall is +inward, not -inward — and it is
+  // also the wall the entry door is on, so re-derive the door span from the
+  // plan and keep the row clear of it (leaf half-width + 0.4 m swing margin).
+  const farZ = north ? R.z + R.d / 2 : R.z - R.d / 2;
+  const dDef = (R.def?.doors || []).find((dd) => dd.side === (north ? 's' : 'n'));
+  const doorX = R.x + (dDef?.at ?? 0);
+  const clear = (dDef?.w ?? 1.0) / 2 + 0.4;
+  const westRun = (doorX - clear) - (R.x - R.w / 2 + 0.25);
+  const eastRun = (R.x + R.w / 2 - 2.1) - (doorX + clear); // stops at the wardrobe corner
+  const side = westRun >= eastRun ? -1 : 1;
+  const dw = Math.min(2.2, R.w * 0.3, Math.max(westRun, eastRun));
+  const dx = doorX + side * (clear + dw / 2);
+  dresser(k, dx, R.y, farZ - inward * 0.4, { rotY: north ? Math.PI : 0, w: dw });
+  tv(k, dx, R.y, farZ - inward * 0.17, { rotY: north ? Math.PI : 0, w: Math.min(1.5, dw - 0.2), h: 1.55, wall: true });
+  // wardrobe holds the far corner, swinging onto the side wall when the
+  // doorway crowds it (narrow rooms, offset doors)
+  const cornerFits = R.x + R.w / 2 - 1.95 > doorX + clear;
+  if (cornerFits) wardrobe(k, R.x + R.w / 2 - 1.1, R.y, farZ - inward * 0.45, { rotY: north ? Math.PI : 0 });
+  else wardrobe(k, R.x + R.w / 2 - 0.45, R.y, farZ - inward * 1.15, { rotY: -Math.PI / 2 });
 
   // desk under the window for the kids
   if (owner === 'james' || owner === 'chloie') {
     const dx = R.x + R.w / 2 - 1.4;
     desk(k, dx, R.y, wallZ + inward * 0.55, { rotY: north ? 0 : Math.PI, w: 1.4 });
     officeChair(k, dx, R.y, wallZ + inward * 1.35, { rotY: north ? Math.PI : 0, color: owner === 'james' ? 0x2f6fb5 : 0xb56fa8 });
-    bookshelf(k, R.x - R.w / 2 + 1.1, R.y, R.z, { rotY: north ? -Math.PI / 2 : Math.PI / 2, w: 1.4, h: 1.8 });
+    // shelf back tight to the west wall, shifted off the wall's door span
+    bookshelf(k, R.x - R.w / 2 + 0.35, R.y, R.z - inward * 1.8, { rotY: Math.PI / 2, w: 1.4, h: 1.8 });
     // toys
     for (let i = 0; i < 5; i++) {
       k.box(0.22, 0.22, 0.22, k.M.solid(rng.pick([0xd0342c, 0x2f81ff, 0xf0b429, 0x6ab04c]), 0.6),
@@ -104,35 +121,121 @@ function bedroom(k, R, rng) {
   } else if (owner === 'you') {
     armchair(k, R.x - R.w / 2 + 1.8, R.y, R.z + inward * 1.2, { rotY: Math.PI / 2 });
     coffeeTable(k, R.x - R.w / 2 + 3.2, R.y, R.z + inward * 1.2, { w: 0.7, d: 0.7 });
-    bookshelf(k, R.x + R.w / 2 - 2.4, R.y, oz + inward * 0.05, { rotY: north ? Math.PI : 0, w: 1.6, h: 2.1 });
+    bookshelf(k, dx - dw / 2 - 0.95, R.y, farZ - inward * 0.22, { rotY: north ? Math.PI : 0, w: 1.6, h: 2.1 });
   } else if (R.w > 7.5) {
     armchair(k, R.x + R.w / 2 - 1.6, R.y, R.z, { rotY: north ? -Math.PI / 2 : Math.PI / 2 });
   }
 
-  artwork(k, R.x + 1.6, R.y + 1.9, oz + inward * 0.08, 1.0, 0.7, north ? Math.PI : 0, pal.art);
-  curtains(k, R.x, R.y, wallZ + inward * 0.22, Math.min(3.2, R.w * 0.5), north ? 0 : Math.PI, rng.pick([0xbfb4a6, 0xa8b2bb, 0xc9bcae]));
+  // one seeded touch per generic bedroom so the twenty of them stop rhyming.
+  // Everything lands at the window end or the west wall — well clear of the
+  // entry door span on the far wall.
+  if (!owner && R.name !== 'Bunk Room') {
+    // window-end corner east of the bed, kept clear of the side wall, the bed
+    // and the east nightstand (which exists when R.w > 7)
+    const cornerMin = R.w > 7 ? 2.55 : 1.95;
+    const cornerX = R.x + Math.min(Math.max(R.w / 2 - 1.4, cornerMin), R.w / 2 - 0.85);
+    const cornerOk = R.w / 2 - 0.85 >= cornerMin;
+    const variant = rng.pick(cornerOk ? ['reading', 'desk', 'bench', 'bean'] : ['bench', 'bean']);
+    if (variant === 'reading') {
+      // reading chair + floor lamp in the window-end corner
+      armchair(k, cornerX, R.y, wallZ + inward * 1.25, { rotY: north ? 0 : Math.PI, color: pal.rug });
+      const lx = R.x + R.w / 2 - 0.55, lz = wallZ + inward * 0.55;
+      k.box(0.26, 0.04, 0.26, M.get('blackMetal'), lx, R.y + 0.02, lz, { tile: 0.2 });
+      k.box(0.05, 1.5, 0.05, M.get('blackMetal'), lx, R.y + 0.77, lz, { tile: 0.2 });
+      k.box(0.32, 0.3, 0.32, M.emissive(0xffe0b0, 0.9), lx, R.y + 1.62, lz, { tile: 0.4 });
+      k.world.addLight({ pos: V(lx, R.y + 1.6, lz), color: 0xffd39a, intensity: 6, distance: 6.5, lamp: true });
+    } else if (variant === 'desk') {
+      // small desk + chair under the window
+      desk(k, cornerX, R.y, wallZ + inward * 0.55, { rotY: north ? 0 : Math.PI, w: 1.3 });
+      officeChair(k, cornerX, R.y, wallZ + inward * 1.3, { rotY: north ? Math.PI : 0, color: pal.art });
+    } else if (variant === 'bench') {
+      // upholstered bench at the foot of the bed
+      const bnz = bz + inward * 1.55;
+      k.box(1.3, 0.16, 0.42, M.paint(pal.rug, 0.9, 'bench'), bx, R.y + 0.36, bnz, { tile: 0.5 });
+      for (const s of [-1, 1]) k.box(0.06, 0.28, 0.36, M.get('walnut'), bx + s * 0.55, R.y + 0.14, bnz, { tile: 0.3 });
+      k.col(1.3, 0.5, 0.45, bx, R.y + 0.25, bnz);
+    } else {
+      // play rug + beanbag against the west wall for the kid-adjacent rooms
+      const px = R.x - R.w / 2 + 1.1, pz = R.z + inward * 0.3;
+      rug(k, px, R.y, pz, 1.7, 1.7, pal.duvet);
+      k.box(0.75, 0.32, 0.75, M.solid(pal.art, 0.95), px, R.y + 0.16, pz, { tile: 0.4 });
+      k.box(0.55, 0.2, 0.55, M.solid(pal.rug, 0.95), px, R.y + 0.4, pz, { tile: 0.3 });
+      k.col(0.8, 0.55, 0.8, px, R.y + 0.3, pz);
+    }
+  }
+
+  // artwork goes on the entry wall opposite the dresser, if that stretch of
+  // wall (door to wardrobe/corner) still has room for it
+  const artLo = side < 0 ? doorX + (clear - 0.3) : R.x - R.w / 2 + 0.35;
+  const artHi = side < 0 ? R.x + R.w / 2 - (cornerFits ? 2.0 : 0.85) : doorX - (clear - 0.3);
+  if (artHi - artLo > 1.2) artwork(k, (artLo + artHi) / 2, R.y + 1.9, farZ - inward * 0.1, 1.0, 0.7, north ? Math.PI : 0, pal.art);
+  // curtains hang centred on each actual window pane — the facade grid slides
+  // panes around partitions, so read the published map; fall back to the room
+  // centre when the map has nothing for this wall
+  const curCol = rng.pick([0xbfb4a6, 0xa8b2bb, 0xc9bcae]);
+  const wins = (k.world.windowMap || []).filter((wn) =>
+    wn.floor === R.floor && wn.side === (north ? 'n' : 's') &&
+    wn.x > R.x - R.w / 2 + 0.2 && wn.x < R.x + R.w / 2 - 0.2);
+  if (wins.length) {
+    for (const wn of wins) curtains(k, wn.x, R.y, wallZ + inward * 0.22, Math.min(3.2, (wn.w || 2.1) + 1.0), north ? 0 : Math.PI, curCol);
+  } else {
+    curtains(k, R.x, R.y, wallZ + inward * 0.22, Math.min(3.2, R.w * 0.5), north ? 0 : Math.PI, curCol);
+  }
   if (owner) k.world.spot(`room_${owner}`, R.x, R.y, R.z);
 }
 
 // ── bathrooms ──────────────────────────────────────────────────────────────
 function bathroom(k, R, rng) {
+  const M = k.M;
   const north = R.z < 0;
-  const inward = north ? 1 : -1;
-  const wallZ = north ? R.z - R.d / 2 : R.z + R.d / 2;
+  const inward = north ? 1 : -1;                       // window wall → into the room
+  const wallZ = north ? R.z - R.d / 2 : R.z + R.d / 2; // facade (window) end
+  const zi = (f) => wallZ + inward * f;                // f metres in from that end
   const wide = R.w > 5;
+  const xW = R.x - R.w / 2, xE = R.x + R.w / 2;
+  // the room's only door sits on the corridor wall — re-derive its span from
+  // the plan (leaf half-width + 0.4 m swing) and gather every fixture at the
+  // window end so these long rooms read as a bathroom, not an empty corridor
+  const dDef = (R.def?.doors || []).find((dd) => dd.side === (north ? 's' : 'n'));
+  const doorX = R.x + (dDef?.at ?? 0);
+  const doorClear = (dDef?.w ?? 0.9) / 2 + 0.4;
+  const doorWallZ = north ? R.z + R.d / 2 : R.z - R.d / 2;
 
-  vanity(k, R.x - (wide ? 1.4 : 0), R.y, wallZ + inward * 0.42, { rotY: north ? 0 : Math.PI, w: wide ? 2.0 : 1.3 });
-  toilet(k, R.x + R.w / 2 - 0.7, R.y, R.z - inward * 0.6, { rotY: north ? -Math.PI / 2 : Math.PI / 2 });
+  // shower in the west corner of the window end, tiled back against the wall
+  const shX = xW + (wide ? 1.0 : 0.9);
+  shower(k, shX, R.y, zi(0.9), { rotY: north ? 0 : Math.PI, w: wide ? 1.6 : 1.3, d: wide ? 1.4 : 1.2 });
   if (wide) {
-    bathtub(k, R.x + 0.6, R.y, R.z + inward * (R.d / 2 - 1.2), { rotY: 0 });
-    shower(k, R.x - R.w / 2 + 1.0, R.y, R.z + inward * (R.d / 2 - 1.0), { rotY: 0, w: 1.6, d: 1.4 });
+    // freestanding tub under the windows, bath mat alongside
+    bathtub(k, R.x + 0.7, R.y, zi(0.72), { rotY: 0 });
+    k.box(1.3, 0.024, 0.6, M.paint(0xdde7ea, 0.96, 'bathmat'), R.x + 0.7, R.y + 0.06, zi(1.55), { tile: 0.5 });
   } else {
-    shower(k, R.x - R.w / 2 + 0.9, R.y, R.z + inward * (R.d / 2 - 0.9), { rotY: 0, w: 1.3, d: 1.2 });
+    k.box(0.9, 0.024, 0.55, M.paint(0xdde7ea, 0.96, 'bathmat'), shX, R.y + 0.06, zi(1.85), { tile: 0.5 });
   }
-  // towels
+  // vanity backs onto the east wall facing the room
+  vanity(k, xE - 0.45, R.y, zi(wide ? 2.4 : 2.2), { rotY: -Math.PI / 2, w: wide ? 2.0 : 1.3 });
+  if (wide) {
+    // his-and-hers: a second vanity plus a framed mirror on the west wall
+    vanity(k, xW + 0.45, R.y, zi(2.9), { rotY: Math.PI / 2, w: 1.6 });
+    k.box(0.05, 1.35, 0.95, M.get('gold'), xW + 0.17, R.y + 1.75, zi(4.6), { tile: 0.4 });
+    k.box(0.04, 1.2, 0.8, M.get('mirror'), xW + 0.21, R.y + 1.75, zi(4.6), { tile: 0.6 });
+    // toilet on the east wall past the vanity, out of the door sightline
+    toilet(k, xE - 0.5, R.y, zi(3.9), { rotY: -Math.PI / 2 });
+  } else {
+    toilet(k, xW + 0.45, R.y, zi(2.5), { rotY: Math.PI / 2 });
+  }
+  // towel bar: chrome rod on wall brackets, towels draped over it
+  const tbz = zi(wide ? 0.8 : 0.9);
+  k.box(0.04, 0.04, 1.0, M.get('chrome'), xE - 0.26, R.y + 1.25, tbz, { tile: 0.2 });
+  for (const s of [-1, 1]) k.box(0.2, 0.05, 0.05, M.get('chrome'), xE - 0.15, R.y + 1.25, tbz + s * 0.42, { tile: 0.2 });
   for (let i = 0; i < 2; i++) {
-    k.box(0.1, 0.5, 0.34, k.M.paint(rng.pick([0xe8eef2, 0xd7e3e8]), 0.95, 'towel'),
-      R.x + R.w / 2 - 0.14, R.y + 1.3, R.z + inward * (0.4 + i * 0.5), { tile: 0.3 });
+    k.box(0.12, 0.5, 0.34, M.paint(rng.pick([0xe8eef2, 0xd7e3e8]), 0.95, 'towel'),
+      xE - 0.28, R.y + 1.03, tbz + (i ? 0.22 : -0.22), { tile: 0.3 });
+  }
+  // hamper tucked beside the door, outside the leaf swing
+  const hx = doorX - doorClear - 0.35;
+  if (hx - 0.3 > xW + 0.2) {
+    k.box(0.5, 0.62, 0.4, M.paint(0xd8dde1, 0.85, 'hamper'), hx, R.y + 0.31, doorWallZ - inward * 0.4, { tile: 0.4 });
+    k.col(0.5, 0.62, 0.4, hx, R.y + 0.31, doorWallZ - inward * 0.4);
   }
 }
 
@@ -145,26 +248,34 @@ function greatRoom(k, R) {
   armchair(k, R.x + 1.8, R.y, R.z - 0.8, { rotY: -Math.PI / 2 });
   armchair(k, R.x + 1.8, R.y, R.z + 1.6, { rotY: -Math.PI / 2 });
   coffeeTable(k, R.x - 1.4, R.y, R.z + 0.2, { w: 1.6, d: 0.9 });
-  tv(k, R.x - R.w / 2 + 3.4, R.y, R.z - R.d / 2 + 1.0, { rotY: 0, w: 2.2, h: 2.7, wall: true });
+  // hung on the chimney breast: the stone face sits at z0 + 0.55 (fireplace
+  // base z0 + 0.5, stone slab centred -0.2 with 0.5 depth), so at 0.58 the
+  // set's 0.05-deep frame rests on the stone ~0.03 proud instead of floating
+  tv(k, R.x - R.w / 2 + 3.4, R.y, R.z - R.d / 2 + 0.58, { rotY: 0, w: 2.2, h: 2.7, wall: true });
   // grand piano corner + double height drapes
   piano(k, R.x + R.w / 2 - 3.0, R.y, R.z + R.d / 2 - 3.0, Math.PI * 0.15);
   for (let i = 0; i < 3; i++) {
-    k.box(0.4, 7.6, 0.4, M.get('stone'), R.x - R.w / 2 + 1.0 + i * (R.w - 2) / 2, R.y + 3.8, R.z + R.d / 2 - 0.6, { tile: 1.4 });
+    const colX = R.x - R.w / 2 + 1.0 + i * (R.w - 2) / 2;
+    k.box(0.4, 7.6, 0.4, M.get('stone'), colX, R.y + 3.8, R.z + R.d / 2 - 0.6, { tile: 1.4 });
+    k.col(0.45, 7.6, 0.45, colX, R.y + 3.8, R.z + R.d / 2 - 0.6);
   }
   k.world.spot('greatRoom', R.x - 1.0, R.y, R.z + 0.6);
   k.world.spot('fireplaceSeat', R.x - 2.2, R.y, R.z + 1.2);
 }
 
 function familyRoom(k, R) {
-  fireplace(k, R.x, R.y, R.z - R.d / 2 + 0.5, { rotY: 0, w: 2.4, h: 2.6 });
+  // off-centre: the room's corridor door is dead-centre on this wall
+  fireplace(k, R.x - 3.2, R.y, R.z - R.d / 2 + 0.5, { rotY: 0, w: 2.4, h: 2.6 });
   rug(k, R.x, R.y, R.z + 0.6, 4.4, 3.2, 0x6f6355);
   sofa(k, R.x, R.y, R.z + 2.4, { w: 2.8, rotY: Math.PI, color: 0x8c94a0, cushion: 0xdfe3e8 });
   armchair(k, R.x - 2.4, R.y, R.z + 0.6, { rotY: -Math.PI / 2, color: 0x7a6a58 });
   armchair(k, R.x + 2.4, R.y, R.z + 0.6, { rotY: Math.PI / 2, color: 0x7a6a58 });
   coffeeTable(k, R.x, R.y, R.z + 1.2);
-  tvUnit(k, R.x, R.y, R.z - R.d / 2 + 2.0, { rotY: 0, w: 2.2 });
-  tv(k, R.x, R.y, R.z - R.d / 2 + 1.9, { rotY: 0, w: 1.9, h: 1.4 });
-  bookshelf(k, R.x - R.w / 2 + 1.0, R.y, R.z + R.d / 2 - 2.0, { rotY: Math.PI / 2, w: 2.0, h: 2.2 });
+  // TV wall on the east end — clear of the fireplace and of the kitchen
+  // opening at R.z ± 1.1 on that wall
+  tvUnit(k, R.x + R.w / 2 - 0.4, R.y, R.z - 3.2, { rotY: -Math.PI / 2, w: 2.2 });
+  tv(k, R.x + R.w / 2 - 0.5, R.y, R.z - 3.2, { rotY: -Math.PI / 2, w: 1.9, h: 1.4 });
+  bookshelf(k, R.x - R.w / 2 + 0.35, R.y, R.z + R.d / 2 - 2.0, { rotY: Math.PI / 2, w: 2.0, h: 2.2 });
   k.world.spot('familyRoom', R.x, R.y, R.z + 1.6);
 }
 
@@ -188,7 +299,9 @@ function kitchen(k, R) {
   counterRun(k, R.x - 2.6, R.y, backZ, 5.4, { rotY: Math.PI });
   range(k, R.x + 1.2, R.y, backZ, { rotY: Math.PI });
   fridge(k, R.x + 3.4, R.y, backZ, { rotY: Math.PI });
-  counterRun(k, R.x + R.w / 2 - 1.4, R.y, R.z - 1.2, 3.0, { rotY: -Math.PI / 2, upper: false });
+  // east run backs onto the east wall, south of the sunroom archway (which
+  // spans R.z ± 1.1 on that wall)
+  counterRun(k, R.x + R.w / 2 - 0.48, R.y, R.z + 2.8, 3.0, { rotY: -Math.PI / 2, upper: false });
   island(k, R.x - 0.6, R.y, R.z - 1.0, { w: 3.4, d: 1.2 });
   // fruit bowl + kettle on the island
   k.box(0.34, 0.1, 0.34, M.paint(0xd8cfbe, 0.4, 'bowl'), R.x - 1.4, R.y + 1.0, R.z - 1.0, { tile: 0.2 });
@@ -227,8 +340,10 @@ function dining(k, R) {
 }
 
 function library(k, R) {
-  for (let i = 0; i < 4; i++) {
-    bookshelf(k, R.x - R.w / 2 + 1.1, R.y, R.z - 3.6 + i * 2.0, { rotY: Math.PI / 2, w: 1.8, h: 2.6 });
+  // west wall run, backs tight to the wall and split around the west door
+  // (its leaf is at R.z ± 0.7)
+  for (const zz of [R.z - 3.7, R.z - 1.85, R.z + 1.75, R.z + 3.6]) {
+    bookshelf(k, R.x - R.w / 2 + 0.35, R.y, zz, { rotY: Math.PI / 2, w: 1.8, h: 2.6 });
   }
   bookshelf(k, R.x, R.y, R.z - R.d / 2 + 0.4, { w: 2.4, h: 2.6 });
   desk(k, R.x + 1.4, R.y, R.z + 1.0, { rotY: Math.PI, w: 1.9, d: 0.85 });
@@ -258,7 +373,8 @@ function foyer(k, R) {
   // family photo wall going up the stair
   const colors = [0x3f5c6b, 0x6b543f, 0x4a3f5c, 0x3f6b4d, 0x6b3f4a];
   for (let i = 0; i < 5; i++) {
-    artwork(k, R.x - 5.9, R.y + 2.0 + i * 0.55, R.z - 4.0 + i * 1.1, 0.7, 0.5, -Math.PI / 2, colors[i]);
+    // west wall — the canvas must face east into the room
+    artwork(k, R.x - 5.9, R.y + 2.0 + i * 0.55, R.z - 4.0 + i * 1.1, 0.7, 0.5, Math.PI / 2, colors[i]);
   }
   k.world.spot('foyerCentre', R.x, R.y, R.z - 5.0);
 }

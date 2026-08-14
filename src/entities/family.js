@@ -38,7 +38,7 @@ export const FAMILY = [
   {
     id: 'james', name: 'James', role: 'Your son, 11', colorKey: 'j',
     height: 1.42, skin: 0xecc7a8, hair: 0x3b2a1c, hairStyle: 'short',
-    shirt: 0x2f6fb5, pants: 0x39424f, shoes: 0xd4463a, build: 0.86,
+    shirt: 0x2f6fb5, pants: 0x39424f, shoes: 0xd4463a, build: 0.86, headScale: 1.14,
     schedule: [
       [7, "r_James's Room", 'still waking up'],
       [9, 'r_Gaming Room', 'queued into a match'],
@@ -64,7 +64,7 @@ export const FAMILY = [
   {
     id: 'chloie', name: 'Chloie', role: 'Your daughter, 8', colorKey: 'c',
     height: 1.26, skin: 0xf0cdb0, hair: 0x8a5a34, hairStyle: 'ponytail',
-    shirt: 0xdba0d8, pants: 0x6a5a8a, shoes: 0xf2f0ea, build: 0.82,
+    shirt: 0xdba0d8, pants: 0x6a5a8a, shoes: 0xf2f0ea, build: 0.82, headScale: 1.24,
     schedule: [
       [7, "r_Chloie's Room", 'reorganising her animals'],
       [9, 'out_pond', 'looking for frogs'],
@@ -149,9 +149,11 @@ export class FamilyMember {
           this.idleTimer = this.rng.range(5, 13);
           const node = this.world.navIndex?.get(goal);
           if (node) {
+            // a tight wander keeps them out of the kitchen island and other
+            // furniture parked near room centres
             const p = node.pos.clone();
-            p.x += this.rng.range(-2.4, 2.4);
-            p.z += this.rng.range(-2.4, 2.4);
+            p.x += this.rng.range(-1.5, 1.5);
+            p.z += this.rng.range(-1.5, 1.5);
             this.path = [p];
           }
         }
@@ -207,4 +209,26 @@ function angleDamp(a, b, lambda, dt) {
 
 export function createFamily(world) {
   return FAMILY.map((spec) => new FamilyMember(world, spec));
+}
+
+/**
+ * Keep the family out of each other's shoes: the schedule regularly sends two
+ * of them to the same node (movie night, lunch), and without a separation
+ * pass they end up standing inside one another.
+ */
+export function separateFamily(members) {
+  for (let i = 0; i < members.length; i++) {
+    for (let j = i + 1; j < members.length; j++) {
+      const a = members[i].char.pos, b = members[j].char.pos;
+      if (Math.abs(a.y - b.y) > 1.5) continue;
+      const dx = b.x - a.x, dz = b.z - a.z;
+      const d = Math.hypot(dx, dz);
+      const MIN = 0.62;
+      if (d >= MIN || d < 1e-4) continue;
+      const push = (MIN - d) / 2;
+      const nx = dx / d, nz = dz / d;
+      a.x -= nx * push; a.z -= nz * push;
+      b.x += nx * push; b.z += nz * push;
+    }
+  }
 }

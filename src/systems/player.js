@@ -9,6 +9,7 @@ import { clamp, damp, lerp } from '../core/rng.js';
 const STAND_H = 1.78, CROUCH_H = 1.12, RADIUS = 0.32;
 const EYE_OFFSET = -0.14;                 // eye sits just below the capsule top
 const GRAVITY = 26;
+const UP = new THREE.Vector3(0, 1, 0);
 
 export class Player {
   constructor(world, camera, input, settings) {
@@ -42,6 +43,8 @@ export class Player {
     this.landImpact = 0;
     this.fallSpeed = 0;
     this.coyote = 0;
+    this.jumpBuffer = 0;
+    this._jumped = false;
     this._v = new THREE.Vector3();
     this._fwd = new THREE.Vector3();
     this._right = new THREE.Vector3();
@@ -67,7 +70,7 @@ export class Player {
     const m = this.input.mouse;
     this.yaw -= m.dx;
     this.pitch -= m.dy;
-    const gp = this.input.gamepad();
+    const gp = this.input.enabled ? this.input.gamepad() : null;
     if (gp) {
       const dz = (v) => (Math.abs(v) < 0.2 ? 0 : v);
       const s = this.settings.sensitivity * 2.6 * dt;
@@ -126,7 +129,7 @@ export class Player {
       }
       if (inp.down('jump')) dir.y += 1;
       if (inp.down('crouch')) dir.y -= 1;
-      this.velocity.lerp(dir.multiplyScalar(speed), clamp(dt * 4.5, 0, 1));
+      this.velocity.lerp(dir.multiplyScalar(speed), 1 - Math.exp(-4.5 * dt));
       // buoyancy holds you at the surface
       const depth = water.surfaceY - (this.capsule.start.y - RADIUS + this.height * 0.72);
       this.velocity.y += clamp(depth, -0.6, 1.2) * 5.5 * dt;
@@ -142,18 +145,27 @@ export class Player {
         this.velocity.x = damp(this.velocity.x, 0, 14, dt);
         this.velocity.z = damp(this.velocity.z, 0, 14, dt);
       }
-      this.velocity.y -= GRAVITY * dt;
-      if (this.onGround && inp.hit('jump')) {
+      // a jump pressed a moment early or a moment after stepping off a ledge
+      // still fires — without the grace windows it reads as eaten input
+      if (inp.hit('jump')) this.jumpBuffer = 0.14;
+      if (this.jumpBuffer > 0 && (this.onGround || this.coyote > 0)) {
         this.velocity.y = 7.4;
         this.onGround = false;
+        this.coyote = 0;
+        this.jumpBuffer = 0;
+        this._jumped = true;
       }
     }
+    this.jumpBuffer = Math.max(0, this.jumpBuffer - dt);
 
-    // integrate (sub-stepped so fast movement can't tunnel)
+    // integrate (sub-stepped so fast movement can't tunnel, and gravity is
+    // applied per sub-step so jump height doesn't drift with frame rate)
     const steps = Math.min(5, Math.ceil((this.velocity.length() * dt) / 0.28) || 1);
     const h = dt / steps;
     this.coyote = this.onGround ? 0.18 : Math.max(0, this.coyote - dt);
+    const wasGrounded = this.onGround;
     for (let i = 0; i < steps; i++) {
+      if (!water) this.velocity.y -= GRAVITY * h;
       const bx = this.capsule.start.x, bz = this.capsule.start.z;
       this._v.copy(this.velocity).multiplyScalar(h);
       const wantX = this._v.x, wantZ = this._v.z;
@@ -162,10 +174,15 @@ export class Player {
       // if a kerb, threshold or stair nosing ate the movement, step over it
       const gotX = this.capsule.start.x - bx, gotZ = this.capsule.start.z - bz;
       const want = Math.hypot(wantX, wantZ);
-      if (want > 1e-4 && Math.hypot(gotX, gotZ) < want * 0.55 && (this.onGround || this.coyote > 0)) {
+      if (want > 1e-4 && Math.hypot(gotX, gotZ) < want * 0.55 && (this.onGround || this.coyote > 0 || water)) {
         this.tryStepUp(wantX - gotX, wantZ - gotZ);
       }
     }
+    // walking down stairs: glue to the treads instead of skipping airborne
+    if (wasGrounded && !this.onGround && !this._jumped && !water && this.velocity.y <= 0.01) {
+      this.snapDown();
+    }
+    if (this.onGround) this._jumped = false;
 
     // footsteps + head bob
     const speedXZ = Math.hypot(this.velocity.x, this.velocity.z);
@@ -208,6 +225,31 @@ export class Player {
     const c = this.capsule.clone();
     c.end.y = c.start.y - RADIUS + STAND_H - RADIUS;
     return !this.world.octree.capsuleIntersect(c);
+  }
+
+  /**
+   * Descending a stair at walking speed out-runs gravity, so without this the
+   * player skips airborne off every tread — killing footsteps and head bob.
+   * Sweep a short way down; if ground is there, stand on it.
+   */
+  snapDown() {
+    const oct = this.world.octree;
+    const s0 = this.capsule.start.clone(), e0 = this.capsule.end.clone();
+    const MAX = 0.42;
+    for (let d = 0; d < MAX; d += 0.06) {
+      this.capsule.translate(this._v.set(0, -0.06, 0));
+      const hit = oct.capsuleIntersect(this.capsule);
+      if (hit) {
+        if (hit.normal.y < 0.42) break;   // a wall, not a tread
+        this.capsule.translate(this._v.copy(hit.normal).multiplyScalar(hit.depth + 0.001));
+        this.onGround = true;
+        if (this.velocity.y < 0) this.velocity.y = 0;
+        return true;
+      }
+    }
+    this.capsule.start.copy(s0);
+    this.capsule.end.copy(e0);
+    return false;
   }
 
   collide() {
@@ -332,7 +374,7 @@ export class Player {
   updateDriving(dt) {
     const v = this.vehicle;
     if (!v) { this.mode = 'walk'; return; }
-    const seat = v.seat.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), v.heading).add(v.pos);
+    const seat = this._v.copy(v.seat).applyAxisAngle(UP, v.heading).add(v.pos);
     this.capsule.start.copy(seat);
     this.capsule.end.copy(seat).setY(seat.y + 0.4);
     this.bobAmount = 0;
@@ -348,9 +390,10 @@ export class Player {
   syncCamera(dt) {
     const cam = this.camera;
     if (this.mode === 'drive' && this.vehicle) {
+      // rigid attach — any smoothing here lags metres behind at speed and
+      // puts the camera through the rear glass
       const v = this.vehicle;
-      const seat = v.seat.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), v.heading).add(v.pos);
-      cam.position.lerp(seat, clamp(dt * 22, 0, 1));
+      cam.position.copy(v.seat).applyAxisAngle(UP, v.heading).add(v.pos);
       cam.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
       return;
     }
@@ -366,7 +409,7 @@ export class Player {
     this.landImpact = damp(this.landImpact, 0, 7, dt);
     eye.y += bobY - this.landImpact * 0.28;
 
-    cam.position.lerp(eye, clamp(dt * 30, 0, 1));
+    cam.position.lerp(eye, 1 - Math.exp(-30 * dt));
     const strafeLean = clamp((this.velocity.x * Math.cos(this.yaw) - this.velocity.z * Math.sin(this.yaw)) * 0.012, -0.05, 0.05);
     this.lean = damp(this.lean, strafeLean + bobX * 0.3, 8, dt);
     cam.rotation.set(this.pitch, this.yaw, this.lean, 'YXZ');

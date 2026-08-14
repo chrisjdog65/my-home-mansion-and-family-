@@ -21,7 +21,9 @@ export class ScreenFx {
       c.width = cfg.w; c.height = cfg.h;
       const tex = new THREE.CanvasTexture(c);
       tex.colorSpace = THREE.SRGBColorSpace;
-      tex.minFilter = THREE.LinearFilter;
+      // keep mipmaps: point-sampling a 192px canvas from across the room
+      // crawls and shimmers; regenerating mips at 8-12 fps is negligible
+      tex.anisotropy = 4;
       this.chan[kind] = { canvas: c, ctx: c.getContext('2d'), tex, t: 0, acc: 0, cfg };
     }
   }
