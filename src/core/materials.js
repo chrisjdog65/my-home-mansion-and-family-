@@ -111,6 +111,7 @@ function defs(tex) {
     theaterCarpet: () => std({ ...T('theaterCarpet', { size: 256, strength: 1.5, rough: [0.95, 0.08] }), roughness: 0.96 }),
     tile: () => new THREE.MeshPhysicalMaterial({ ...T('tile', { size: 256, strength: 1.4, rough: [0.26, 0.22] }), roughness: 0.3, clearcoat: 0.25, clearcoatRoughness: 0.12, normalScale: new THREE.Vector2(0.6, 0.6) }),
     poolTile: () => new THREE.MeshPhysicalMaterial({ ...T('poolTile', { size: 256, strength: 1.3, rough: [0.24, 0.18] }), roughness: 0.28, clearcoat: 0.3, normalScale: new THREE.Vector2(0.6, 0.6) }),
+    paver: () => new THREE.MeshPhysicalMaterial({ ...T('marble', { size: 512, strength: 0.7, rough: [0.42, 0.16] }), color: 0xb9b3a5, metalness: 0, roughness: 0.5, clearcoat: 0.08, normalScale: new THREE.Vector2(0.4, 0.4) }),
     concrete: () => std({ ...T('concrete', { size: 256, strength: 1.1, rough: [0.82, 0.25] }), roughness: 0.85 }),
     polishedConcrete: () => new THREE.MeshPhysicalMaterial({ ...T('concrete', { size: 256, strength: 0.8, rough: [0.35, 0.2] }), roughness: 0.35, clearcoat: 0.3 }),
     laneWood: () => new THREE.MeshPhysicalMaterial({ ...T('laneWood', { size: 512, strength: 0.5, rough: [0.14, 0.08] }), roughness: 0.16, clearcoat: 0.7, clearcoatRoughness: 0.1, normalScale: new THREE.Vector2(0.4, 0.4) }),
@@ -122,7 +123,7 @@ function defs(tex) {
 
     // ── walls & structure
     wall: () => std({ ...T('drywall', { size: 256, strength: 0.6, rough: [0.78, 0.12] }), color: 0xf2efe9, roughness: 0.8 }),
-    stone: () => std({ ...T('fieldstone', { size: 512, strength: 2.0, rough: [0.86, 0.25] }), roughness: 0.9 }),
+    stone: () => std({ ...T('fieldstone', { size: 512, strength: 2.0, rough: [0.86, 0.25] }), color: 0xd6cfc2, roughness: 0.9 }),
     brick: () => std({ ...T('brick', { size: 256, strength: 1.8, rough: [0.88, 0.2] }), roughness: 0.9 }),
     shingle: () => std({ ...T('shingle', { size: 256, strength: 1.6, rough: [0.9, 0.15] }), roughness: 0.92 }),
     stucco: () => std({ ...T('concrete', { size: 256, strength: 1.2, rough: [0.85, 0.15] }), color: 0xe8e1d4, roughness: 0.88 }),

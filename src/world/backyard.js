@@ -37,7 +37,7 @@ function terrace(world, k, M, B) {
   ];
   for (const r of rectSubtract(deck, holes)) {
     const w = r.x1 - r.x0, d = r.z1 - r.z0;
-    B.box(w, 0.3, d, M.get('marble'), (r.x0 + r.x1) / 2, -0.14, (r.z0 + r.z1) / 2, { tile: 1.2 });
+    B.box(w, 0.3, d, M.get('paver'), (r.x0 + r.x1) / 2, -0.14, (r.z0 + r.z1) / 2, { tile: 1.2 });
     world.collider(w, 0.3, d, (r.x0 + r.x1) / 2, -0.14, (r.z0 + r.z1) / 2);
   }
   // steps down to the lawn
@@ -122,7 +122,7 @@ function pool(world, k, M, B) {
   // coping
   for (const [cx2, cz2, cw, cd] of [[0, P.z0 - 0.3, w + 1.2, 0.6], [0, P.z1 + 0.3, w + 1.2, 0.6],
     [P.x0 - 0.3, (P.z0 + P.z1) / 2, 0.6, d + 1.2], [P.x1 + 0.3, (P.z0 + P.z1) / 2, 0.6, d + 1.2]]) {
-    B.box(cw, 0.16, cd, M.get('marble'), cx2, 0.08, cz2, { tile: 0.8 });
+    B.box(cw, 0.16, cd, M.get('paver'), cx2, 0.08, cz2, { tile: 0.8 });
     world.collider(cw, 0.2, cd, cx2, 0.06, cz2);
   }
 
@@ -221,9 +221,9 @@ export function makeWater(world, w, d, x, y, z, color = 0x1c7fa8, opacity = 0.86
 function pondAndFalls(world, k, M, B, rng) {
   const cxp = -22, czp = 48, rx = 12, rz = 9;
 
-  // basin dug into the lawn: ring of stone + a flat bed
-  B.box(rx * 2, 1.4, rz * 2, M.get('rock'), cxp, -0.72, czp, { tile: 2.4 });
-  world.collider(rx * 2, 1.4, rz * 2, cxp, -0.72, czp);
+  // basin dug into the lawn: ring of stone + a flat bed below the water line
+  B.box(rx * 2, 1.6, rz * 2, M.get('rock'), cxp, -1.6, czp, { tile: 2.4 });
+  world.collider(rx * 2, 1.6, rz * 2, cxp, -1.6, czp);
   for (let i = 0; i < 46; i++) {
     const a = (i / 46) * Math.PI * 2;
     const px = cxp + Math.cos(a) * (rx + 0.5), pz = czp + Math.sin(a) * (rz + 0.5);
@@ -236,11 +236,11 @@ function pondAndFalls(world, k, M, B, rng) {
   for (let i = 0; i < 90; i++) {
     const a = rng() * Math.PI * 2, r = rng.range(0.86, 1.0);
     const px = cxp + Math.cos(a) * rx * r, pz = czp + Math.sin(a) * rz * r;
-    B.box(0.06, rng.range(0.8, 1.7), 0.06, M.get('foliage'), px, 0.4, pz, { rotY: rng() * 3, rotZ: rng.range(-0.2, 0.2), tile: 0.3 });
+    B.box(0.06, rng.range(0.8, 1.7), 0.06, M.get('foliage'), px, groundHeight(px, pz) + 0.55, pz, { rotY: rng() * 3, rotZ: rng.range(-0.2, 0.2), tile: 0.3 });
   }
 
-  makeWater(world, rx * 2 - 0.6, rz * 2 - 0.6, cxp, -0.05, czp, 0x2a6b62, 0.9);
-  world.water(V(cxp - rx, -1.6, czp - rz), V(cxp + rx, 0, czp + rz), -0.05, 'pond');
+  makeWater(world, rx * 2 - 0.6, rz * 2 - 0.6, cxp, -0.35, czp, 0x2a6b62, 0.9);
+  world.water(V(cxp - rx, -1.0, czp - rz), V(cxp + rx, 0, czp + rz), -0.35, 'pond');
 
   // ── the waterfall cliff at the back of the pond ──
   const wx = cxp, wz = czp + rz + 3.5;

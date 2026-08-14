@@ -13,19 +13,32 @@ const noise = makeNoise2D(31415);
 // House pad: flat ground inside this rectangle (plus a soft skirt).
 const PAD = { x0: -46, x1: 46, z0: -34, z1: 34 };
 
+/** Smooth elliptical hollow — used to dig the pool and the pond out of the lawn. */
+function basin(x, z, cx, cz, rx, rz, depth) {
+  const t = Math.hypot((x - cx) / rx, (z - cz) / rz);
+  if (t >= 1) return 0;
+  return depth * (1 - smoothstep(0.5, 1, t));
+}
+
 export function groundHeight(x, z) {
-  // distance outside the flat pad, 0 → 1 over 40 m
+  let h = 0;
+  // distance outside the flat pad, 0 → 1 over 46 m
   const dx = Math.max(0, Math.max(PAD.x0 - x, x - PAD.x1));
   const dz = Math.max(0, Math.max(PAD.z0 - z, z - PAD.z1));
   const out = Math.hypot(dx, dz);
   const k = smoothstep(0, 46, out);
-  if (k <= 0) return 0;
-
-  const rolling = fbm(noise, x * 0.004, z * 0.004, 4) * 9;
-  const fine = fbm(noise, x * 0.02, z * 0.02, 3) * 1.4;
-  // the ground climbs towards the mountains in the south
-  const rise = smoothstep(60, 260, z) * 42;
-  return (rolling + fine + rise) * k;
+  if (k > 0) {
+    const rolling = fbm(noise, x * 0.004, z * 0.004, 4) * 9;
+    const fine = fbm(noise, x * 0.02, z * 0.02, 3) * 1.4;
+    // the ground climbs towards the mountains in the south
+    const rise = smoothstep(60, 260, z) * 42;
+    h = (rolling + fine + rise) * k;
+  }
+  // hollows so the grass doesn't cap the water
+  h -= basin(x, z, 0, 23, 11.5, 8.5, 3.6);      // swimming pool
+  h -= basin(x, z, 13.5, 22, 4.4, 4.4, 1.6);    // hot tub
+  h -= basin(x, z, -22, 48, 13, 10, 1.5);       // pond
+  return h;
 }
 
 export function buildTerrain(world) {
@@ -61,7 +74,7 @@ export function buildTerrain(world) {
   far.rotateX(-Math.PI / 2);
   const fp = far.attributes.position;
   const colors = new Float32Array(fp.count * 3);
-  const cRock = new THREE.Color(0x5e5b55), cGrass = new THREE.Color(0x47643b), cSnow = new THREE.Color(0xe4ecf3);
+  const cRock = new THREE.Color(0x565349), cGrass = new THREE.Color(0x47643b), cSnow = new THREE.Color(0xe4ecf3);
   const tmp = new THREE.Color();
   for (let i = 0; i < fp.count; i++) {
     const x = fp.getX(i), z = fp.getZ(i);
@@ -76,7 +89,7 @@ export function buildTerrain(world) {
       h += (ridge * 300 + ridge2 * 90) * t * southBias;
     }
     fp.setY(i, h);
-    const snow = smoothstep(195, 330, h);
+    const snow = smoothstep(235, 380, h);
     const rock = smoothstep(30, 120, h);
     tmp.copy(cGrass).lerp(cRock, rock).lerp(cSnow, snow);
     colors[i * 3] = tmp.r; colors[i * 3 + 1] = tmp.g; colors[i * 3 + 2] = tmp.b;
@@ -194,9 +207,10 @@ export class SkySystem {
   sunDirection(hour) {
     // rises in the east, crosses the southern sky, sets in the west
     const t = ((hour - 6) / 12) * Math.PI;         // 0 at sunrise, π at sunset
-    const elev = Math.sin(t) * 1.05;
+    const elev = Math.sin(t) * 1.02;
+    const az = -0.42 + t * (Math.PI + 0.84);       // ENE → south → WNW
     const c = Math.cos(elev);
-    return new THREE.Vector3(Math.cos(t) * c, Math.sin(elev), Math.sin(t) * c).normalize();
+    return new THREE.Vector3(Math.cos(az) * c, Math.sin(elev), Math.sin(az) * c).normalize();
   }
 
   setTime(hour) {
@@ -215,30 +229,30 @@ export class SkySystem {
     this.sun.visible = day > 0.01;
 
     this.moon.position.set(-dir.x * 160, Math.abs(dir.y) * 90 + 40, -dir.z * 160);
-    this.moon.intensity = 0.22 * (1 - day);
+    this.moon.intensity = 1.15 * (1 - day);
 
     // Sky fill is kept deliberately low: without it every interior washes out,
     // and the house is meant to be lit by its own fixtures.
-    this.hemi.intensity = 0.07 + 0.24 * day;
+    this.hemi.intensity = 0.24 + 0.24 * day;
     this.hemi.color.setHex(day > 0.3 ? 0xa8c6e8 : 0x2c3a56);
     this.hemi.groundColor.setHex(0x4a4238);
-    this.ambient.intensity = 0.015 + 0.045 * day;
+    this.ambient.intensity = 0.07 + 0.02 * day;
 
     u.turbidity.value = 2.6 + dusk * 5.5;
     u.rayleigh.value = 1.4 + dusk * 2.6 + (1 - day) * 0.6;
     u.mieCoefficient.value = 0.004 + dusk * 0.016;
 
-    this.engine.renderer.toneMappingExposure = 0.44 + day * 0.30;
+    this.engine.renderer.toneMappingExposure = 0.62 + day * 0.16;
     this.night = day < 0.18;
 
     // haze on the horizon follows the sky
     const fog = this.engine.scene.fog;
     if (fog) {
-      const dayC = 0.7 + day * 0.3;
+      const dayC = 0.62 + day * 0.24;
       fog.color.setRGB(
-        (0.10 + 0.64 * day + dusk * 0.22) * dayC,
-        (0.13 + 0.70 * day + dusk * 0.10) * dayC,
-        (0.22 + 0.71 * day) * dayC,
+        (0.09 + 0.60 * day + dusk * 0.26) * dayC,
+        (0.12 + 0.65 * day + dusk * 0.12) * dayC,
+        (0.20 + 0.70 * day) * dayC,
       );
       this.engine.renderer.setClearColor(fog.color);
     }
@@ -256,7 +270,7 @@ export class SkySystem {
     if (this.envRT) this.envRT.dispose();
     this.envRT = rt;
     this.engine.scene.environment = rt.texture;
-    this.engine.scene.environmentIntensity = 0.12 + clamp(this.dir.y, 0, 1) * 0.30;
+    this.engine.scene.environmentIntensity = 0.18 + clamp(this.dir.y, 0, 1) * 0.32;
   }
 
   update(dt, playerPos, timeScale = 1) {

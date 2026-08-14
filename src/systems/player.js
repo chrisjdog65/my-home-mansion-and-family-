@@ -41,6 +41,7 @@ export class Player {
     this.vehicle = null;
     this.landImpact = 0;
     this.fallSpeed = 0;
+    this.coyote = 0;
     this._v = new THREE.Vector3();
     this._fwd = new THREE.Vector3();
     this._right = new THREE.Vector3();
@@ -151,10 +152,19 @@ export class Player {
     // integrate (sub-stepped so fast movement can't tunnel)
     const steps = Math.min(5, Math.ceil((this.velocity.length() * dt) / 0.28) || 1);
     const h = dt / steps;
+    this.coyote = this.onGround ? 0.18 : Math.max(0, this.coyote - dt);
     for (let i = 0; i < steps; i++) {
+      const bx = this.capsule.start.x, bz = this.capsule.start.z;
       this._v.copy(this.velocity).multiplyScalar(h);
+      const wantX = this._v.x, wantZ = this._v.z;
       this.capsule.translate(this._v);
       this.collide();
+      // if a kerb, threshold or stair nosing ate the movement, step over it
+      const gotX = this.capsule.start.x - bx, gotZ = this.capsule.start.z - bz;
+      const want = Math.hypot(wantX, wantZ);
+      if (want > 1e-4 && Math.hypot(gotX, gotZ) < want * 0.55 && (this.onGround || this.coyote > 0)) {
+        this.tryStepUp(wantX - gotX, wantZ - gotZ);
+      }
     }
 
     // footsteps + head bob
@@ -162,6 +172,36 @@ export class Player {
     this.stepDistance += speedXZ * dt;
     this.bobAmount = damp(this.bobAmount, this.onGround ? clamp(speedXZ / 6, 0, 1) : 0, 8, dt);
     this.bob += dt * speedXZ * 1.9;
+  }
+
+  /**
+   * Lift → move → drop. Capsule-vs-triangle collision alone treats a 20 cm kerb
+   * as a wall, so stairs, thresholds and pool coping need an explicit step.
+   */
+  tryStepUp(dx, dz) {
+    const STEP = 0.52;
+    const oct = this.world.octree;
+    const s0 = this.capsule.start.clone(), e0 = this.capsule.end.clone();
+    const restore = () => { this.capsule.start.copy(s0); this.capsule.end.copy(e0); };
+
+    this.capsule.translate(this._v.set(0, STEP, 0));
+    if (oct.capsuleIntersect(this.capsule)) { restore(); return false; }
+    this.capsule.translate(this._v.set(dx, 0, dz));
+    if (oct.capsuleIntersect(this.capsule)) { restore(); return false; }
+
+    for (let drop = 0; drop <= STEP + 0.05; drop += 0.045) {
+      this.capsule.translate(this._v.set(0, -0.045, 0));
+      const hit = oct.capsuleIntersect(this.capsule);
+      if (hit) {
+        if (hit.normal.y < 0.42) { restore(); return false; }   // landed on a wall, not a step
+        this.capsule.translate(this._v.copy(hit.normal).multiplyScalar(hit.depth + 0.001));
+        this.onGround = true;
+        if (this.velocity.y < 0) this.velocity.y = 0;
+        return true;
+      }
+    }
+    restore();
+    return false;
   }
 
   headroom() {

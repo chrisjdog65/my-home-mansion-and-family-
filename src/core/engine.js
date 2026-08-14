@@ -17,8 +17,8 @@ const GradeShader = {
     tDiffuse: { value: null },
     resolution: { value: new THREE.Vector2(1, 1) },
     sharpness: { value: 0.35 },
-    vignette: { value: 0.32 },
-    contrast: { value: 1.07 },
+    vignette: { value: 0.36 },
+    contrast: { value: 1.13 },
     saturation: { value: 1.12 },
     lift: { value: new THREE.Vector3(0.0, 0.0, 0.002) },
     underwater: { value: 0.0 },
@@ -91,7 +91,7 @@ export class Engine {
     this.renderPass = new RenderPass(this.scene, this.camera);
     this.composer.addPass(this.renderPass);
 
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.34, 0.72, 0.86);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.22, 0.5, 1.05);
     this.composer.addPass(this.bloom);
 
     this.grade = new ShaderPass(GradeShader);

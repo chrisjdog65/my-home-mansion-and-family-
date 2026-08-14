@@ -74,7 +74,7 @@ export class Game {
     await step(0.05, 'Mixing paint and milling timber…', () => {
       this.mats = new Materials(this.engine.renderer);
       this.world = new World(this.engine.scene, this.mats);
-      this.engine.scene.fog = new THREE.Fog(0xbdd3e8, 180, 1500);
+      this.engine.scene.fog = new THREE.Fog(0xbdd3e8, 700, 2600);
     });
 
     await step(0.18, 'Raising four floors…', () => buildMansion(this.world));

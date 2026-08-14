@@ -14,6 +14,19 @@ python3 -m http.server 8080
 Chrome, Edge, Firefox or Safari with WebGL2. Click **Enter the House**, then
 click once more to capture the mouse.
 
+![The approach](screenshots/01-approach.jpg)
+
+| | |
+| --- | --- |
+| ![Great room](screenshots/03-greatroom.jpg) | ![Pool terrace](screenshots/05-pool.jpg) |
+| ![Movie theater](screenshots/08-theater.jpg) | ![Bowling alley](screenshots/07-bowling.jpg) |
+| ![Basketball court](screenshots/06-court.jpg) | ![Gaming room](screenshots/09-gaming.jpg) |
+| ![Foyer gallery](screenshots/02-foyer.jpg) | ![Kitchen](screenshots/04-kitchen.jpg) |
+| ![Back yard and mountains](screenshots/11-mountains.jpg) | ![Dusk](screenshots/12-dusk.jpg) |
+
+*(All rendered in a headless browser on a software rasteriser — a real GPU is
+sharper and runs the lighting at full rate.)*
+
 ---
 
 ## The house

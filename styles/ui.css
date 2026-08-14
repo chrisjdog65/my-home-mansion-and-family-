@@ -56,6 +56,11 @@ h3{font-size:13px; letter-spacing:.18em; text-transform:uppercase; color:var(--g
 #loadtext{color:var(--dim); font-size:12px; letter-spacing:.12em; text-transform:uppercase}
 
 /* ── main menu ───────────────────────────────────────────────── */
+#menu{flex-direction:column; gap:20px}
+.menu-foot{
+  color:var(--dim); font-size:10.5px; letter-spacing:.22em; text-transform:uppercase;
+  text-align:center; opacity:.75;
+}
 .menu-panel{
   display:grid; grid-template-columns:300px 1fr; gap:0;
   width:min(940px,92vw); min-height:min(560px,84vh);
