@@ -127,9 +127,10 @@ function defs(tex) {
 
   return {
     // ── floors
-    oakFloor: () => std({ ...T('oakFloor', { size: 512, strength: 1.6, rough: [0.44, 0.3] }), metalness: 0, roughness: 0.5 }),
-    walnutFloor: () => std({ ...T('walnut', { size: 512, strength: 1.4, rough: [0.5, 0.3] }), roughness: 0.55 }),
-    marble: () => new THREE.MeshPhysicalMaterial({ ...T('marble', { size: 512, strength: 0.7, rough: [0.2, 0.14] }), metalness: 0, roughness: 0.24, clearcoat: 0.3, clearcoatRoughness: 0.14, normalScale: new THREE.Vector2(0.3, 0.3) }),
+    // the two floors you spend the most time looking at get a denser source
+    oakFloor: () => std({ ...T('oakFloor', { size: 768, strength: 1.6, rough: [0.44, 0.3] }), metalness: 0, roughness: 0.5 }),
+    walnutFloor: () => std({ ...T('walnut', { size: 512, strength: 1.4, rough: [0.5, 0.3] }), roughness: 0.58 }),
+    marble: () => new THREE.MeshPhysicalMaterial({ ...T('marble', { size: 768, strength: 0.7, rough: [0.2, 0.14] }), metalness: 0, roughness: 0.24, clearcoat: 0.3, clearcoatRoughness: 0.14, normalScale: new THREE.Vector2(0.3, 0.3) }),
     carpet: () => std({ ...T('carpet', { size: 256, strength: 1.6, rough: [0.94, 0.1] }), roughness: 0.95 }),
     theaterCarpet: () => std({ ...T('theaterCarpet', { size: 256, strength: 1.5, rough: [0.95, 0.08] }), roughness: 0.96 }),
     tile: () => new THREE.MeshPhysicalMaterial({ ...T('tile', { size: 256, strength: 1.4, rough: [0.26, 0.22] }), roughness: 0.3, clearcoat: 0.25, clearcoatRoughness: 0.12, normalScale: new THREE.Vector2(0.6, 0.6) }),
@@ -152,7 +153,9 @@ function defs(tex) {
     stucco: () => std({ ...T('concrete', { size: 256, strength: 1.2, rough: [0.85, 0.15] }), color: 0xe8e1d4, roughness: 0.88 }),
 
     // ── furniture
-    walnut: () => std({ ...T('walnut', { size: 512, strength: 1.2, rough: [0.4, 0.25] }), roughness: 0.44 }),
+    // satin, not lacquered — at roughness 0.44 the grain's normal noise
+    // smeared into a "flowing chocolate" highlight across the stair
+    walnut: () => std({ ...T('walnut', { size: 512, strength: 0.9, rough: [0.52, 0.18] }), roughness: 0.56, normalScale: new THREE.Vector2(0.6, 0.6) }),
     maple: () => std({ ...T('maple', { size: 512, strength: 1.2, rough: [0.45, 0.25] }), roughness: 0.5 }),
     fabric: () => std({ ...T('fabric', { size: 256, strength: 1.2, rough: [0.9, 0.12] }), roughness: 0.92 }),
     leather: () => std({ ...T('leather', { size: 256, strength: 0.85, rough: [0.5, 0.3] }), roughness: 0.52 }),

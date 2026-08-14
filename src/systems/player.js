@@ -10,6 +10,7 @@ const STAND_H = 1.78, CROUCH_H = 1.12, RADIUS = 0.32;
 const EYE_OFFSET = -0.14;                 // eye sits just below the capsule top
 const GRAVITY = 26;
 const UP = new THREE.Vector3(0, 1, 0);
+const SKATE_TOP = 11.5, SKATE_PUSH = 6.2;
 
 export class Player {
   constructor(world, camera, input, settings) {
@@ -45,7 +46,10 @@ export class Player {
     this.coyote = 0;
     this.jumpBuffer = 0;
     this._jumped = false;
+    this.skating = false;
+    this.board = null;
     this._v = new THREE.Vector3();
+    this._v2 = new THREE.Vector3();
     this._fwd = new THREE.Vector3();
     this._right = new THREE.Vector3();
     this._box = new THREE.Box3();
@@ -135,6 +139,39 @@ export class Player {
       this.velocity.y += clamp(depth, -0.6, 1.2) * 5.5 * dt;
       this.velocity.multiplyScalar(Math.max(0, 1 - 1.6 * dt));
       this.onGround = false;
+    } else if (this.skating) {
+      // A board carries its speed: you steer by leaning where you look and
+      // push to build up, so the bowl's transitions trade height for speed
+      // the way they should.
+      const vx = this.velocity.x, vz = this.velocity.z;
+      const spd = Math.hypot(vx, vz);
+      if (this.onGround) {
+        if (spd > 0.35) {
+          const carve = 1 - Math.exp(-2.6 * dt);
+          this.velocity.x += (this._fwd.x * spd - vx) * carve;
+          this.velocity.z += (this._fwd.z * spd - vz) * carve;
+        }
+        if (ax.y > 0.1 && spd < SKATE_TOP) {
+          this.velocity.addScaledVector(this._fwd, SKATE_PUSH * ax.y * dt);
+        } else if (ax.y < -0.1) {                       // drag a foot to slow
+          const b = Math.max(0, 1 - 3.4 * dt);
+          this.velocity.x *= b; this.velocity.z *= b;
+        }
+        if (inp.down('crouch')) {                       // hard brake
+          const b = Math.max(0, 1 - 5.5 * dt);
+          this.velocity.x *= b; this.velocity.z *= b;
+        }
+        const roll = Math.max(0, 1 - 0.16 * dt);        // near-frictionless
+        this.velocity.x *= roll; this.velocity.z *= roll;
+      }
+      if (inp.hit('jump')) this.jumpBuffer = 0.14;
+      if (this.jumpBuffer > 0 && (this.onGround || this.coyote > 0)) {
+        this.velocity.y = 6.6;                          // ollie
+        this.onGround = false;
+        this.coyote = 0;
+        this.jumpBuffer = 0;
+        this._jumped = true;
+      }
     } else {
       const base = this.crouching ? 2.0 : this.sprinting ? 6.4 : 3.6;
       const accel = this.onGround ? 42 : 9;
@@ -154,6 +191,8 @@ export class Player {
         this.coyote = 0;
         this.jumpBuffer = 0;
         this._jumped = true;
+      } else if (this.jumpBuffer > 0 && !this.onGround && this.tryMantle()) {
+        this.jumpBuffer = 0;
       }
     }
     this.jumpBuffer = Math.max(0, this.jumpBuffer - dt);
@@ -187,7 +226,8 @@ export class Player {
     // footsteps + head bob
     const speedXZ = Math.hypot(this.velocity.x, this.velocity.z);
     this.stepDistance += speedXZ * dt;
-    this.bobAmount = damp(this.bobAmount, this.onGround ? clamp(speedXZ / 6, 0, 1) : 0, 8, dt);
+    // no walking bob on a board — at skating speed it's nauseating
+    this.bobAmount = damp(this.bobAmount, this.onGround && !this.skating ? clamp(speedXZ / 6, 0, 1) : 0, 8, dt);
     this.bob += dt * speedXZ * 1.9;
   }
 
@@ -225,6 +265,59 @@ export class Player {
     const c = this.capsule.clone();
     c.end.y = c.start.y - RADIUS + STAND_H - RADIUS;
     return !this.world.octree.capsuleIntersect(c);
+  }
+
+  /** Step onto the board — carried in hand until now. */
+  startSkating(board) {
+    this.skating = true;
+    this.board = board;
+    this.crouching = false;
+  }
+  stopSkating() {
+    this.skating = false;
+    const b = this.board;
+    this.board = null;
+    // shed the speed you were carrying, or you keep sliding on your boots
+    this.velocity.x *= 0.3; this.velocity.z *= 0.3;
+    return b;
+  }
+
+  /**
+   * Jump at a ledge too tall to step onto and you pull yourself up. Only runs
+   * on a jump press against something solid, so it never fires by accident.
+   */
+  tryMantle() {
+    const oct = this.world.octree;
+    const s0 = this.capsule.start.clone(), e0 = this.capsule.end.clone();
+    const restore = () => { this.capsule.start.copy(s0); this.capsule.end.copy(e0); };
+    const reach = this._v.set(this._fwd.x, 0, this._fwd.z).multiplyScalar(0.62);
+    if (reach.lengthSq() < 1e-6) return false;
+
+    // is there actually a wall in front to pull up on?
+    this.capsule.translate(reach);
+    const blocked = oct.capsuleIntersect(this.capsule);
+    restore();
+    if (!blocked || blocked.normal.y > 0.42) return false;
+
+    for (let lift = 0.55; lift <= 1.5; lift += 0.075) {
+      this.capsule.start.set(s0.x, s0.y + lift, s0.z);
+      this.capsule.end.set(e0.x, e0.y + lift, e0.z);
+      if (oct.capsuleIntersect(this.capsule)) continue;      // no headroom yet
+      this.capsule.translate(reach);
+      if (oct.capsuleIntersect(this.capsule)) { restore(); continue; }
+      // there must be something solid to land on just below
+      const probe = this.capsule.clone();
+      probe.translate(this._v2.set(0, -0.14, 0));
+      const floor = oct.capsuleIntersect(probe);
+      if (!floor || floor.normal.y < 0.5) { restore(); continue; }
+      this.velocity.set(0, 0.6, 0);
+      this.onGround = false;
+      this._jumped = true;
+      this.landImpact = 0;
+      return true;
+    }
+    restore();
+    return false;
   }
 
   /**

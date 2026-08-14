@@ -13,7 +13,9 @@ const SETTING_DEFS = [
   { key: 'quality', label: 'Detail', type: 'select', options: [[0, 'Low'], [1, 'Medium'], [2, 'High']] },
   { key: 'shadows', label: 'Shadows', type: 'select', options: [[0, 'Off'], [1, 'Soft'], [2, 'High']] },
   { key: 'bloom', label: 'Bloom', type: 'bool' },
-  { key: 'renderScale', label: 'Render scale', type: 'range', min: 0.5, max: 1.4, step: 0.05, fmt: (v) => `${Math.round(v * 100)}%` },
+  { key: 'sharpness', label: 'Image sharpness', type: 'range', min: 0, max: 1, step: 0.05, fmt: (v) => (v ? v.toFixed(2) : 'off') },
+  { key: 'renderScale', label: 'Render scale', type: 'range', min: 0.5, max: 1.6, step: 0.05, fmt: (v) => `${Math.round(v * 100)}%` },
+  { key: 'grass', label: 'Grass density', type: 'range', min: 0, max: 1, step: 0.05, fmt: (v) => `${Math.round(v * 100)}%` },
   { key: 'volume', label: 'Volume', type: 'range', min: 0, max: 1, step: 0.05, fmt: (v) => `${Math.round(v * 100)}%` },
   { key: 'timeScale', label: 'Time of day speed', type: 'range', min: 0, max: 6, step: 0.25, fmt: (v) => (v ? `${v}×` : 'frozen') },
   { key: 'showFps', label: 'Performance readout', type: 'bool' },
@@ -55,7 +57,30 @@ export class UI {
     this.el.loadbar.style.width = `${Math.round(p * 100)}%`;
     if (text) this.el.loadtext.textContent = text;
   }
-  showLoader(v) { this.el.loader.classList.toggle('hidden', !v); }
+  showLoader(v) {
+    this.el.loader.classList.toggle('hidden', !v);
+    if (!v && this._tipT) { clearInterval(this._tipT); this._tipT = null; }
+  }
+
+  /** Something to read while four floors get built. */
+  startTips() {
+    const tips = [
+      'The house is generated from scratch every time you load it — <b>54 rooms</b>, no two bedrooms furnished quite the same.',
+      'Kaelie, James and Chloie keep their own schedules. Look for them where they<b>&rsquo;d actually be</b> at this hour.',
+      'Pick up the skateboard at the park and press <b>F</b> to drop in. The bowl trades height for speed.',
+      'Every light in the house is a real light — the fireplace, the cinema screen, the RGB in the gaming rooms.',
+      'Scroll the mouse wheel to <b>wind time forward</b>. The mountains are worth seeing at dusk.',
+      'Press <b>H</b> to hide the interface, then <b>P</b> to save a screenshot.',
+      'Both cars drive. The Lambo will get you down the drive a lot faster than the truck.',
+      'Jump at a ledge and you<b>&rsquo;ll pull yourself up</b> — handy around the pool and the skate park.',
+    ];
+    let i = Math.floor(Math.random() * tips.length);
+    const el = $('loadtip');
+    if (!el) return;
+    const show = () => { el.innerHTML = tips[i % tips.length]; i++; };
+    show();
+    this._tipT = setInterval(show, 4200);
+  }
   showMenu(v) { this.el.menu.classList.toggle('hidden', !v); }
   showHud(v) { this.el.hud.classList.toggle('hidden', !v || this.hidden); }
   showPause(v) { this.el.pause.classList.toggle('hidden', !v); }
@@ -138,6 +163,8 @@ export class UI {
       root.appendChild(row);
     }
 
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; gap:10px; margin-top:12px';
     const reset = document.createElement('button');
     reset.className = 'reset-defaults';
     reset.textContent = 'Reset to defaults';
@@ -148,7 +175,35 @@ export class UI {
       this.buildSettings($('settingslist'));
       this.buildSettings($('pause-settings'));
     };
-    root.appendChild(reset);
+    const wipe = document.createElement('button');
+    wipe.className = 'reset-defaults';
+    wipe.textContent = 'Reset progress';
+    wipe.onclick = () => this.onResetProgress?.();
+    row.append(reset, wipe);
+    root.appendChild(row);
+  }
+
+  /** One-time card on a player's first run. */
+  showHint() {
+    const el = document.createElement('div');
+    el.id = 'hint';
+    el.innerHTML = `<h3>Make yourself at home</h3>
+      <div class="hint-grid">
+        <span class="key">WASD</span><b>Walk — hold Shift to run</b>
+        <span class="key">Mouse</span><b>Look around · right button zooms</b>
+        <span class="key">E</span><b>Interact: talk, sit, open, pick things up</b>
+        <span class="key">F</span><b>Get in a car · drop in on the skateboard</b>
+        <span class="key">Space</span><b>Jump — at a ledge you'll pull yourself up</b>
+        <span class="key">Tab</span><b>Journal: family, rooms, objectives</b>
+        <span class="key">L</span><b>Flashlight</b>
+        <span class="key">Wheel</span><b>Wind the time of day forward</b>
+      </div>
+      <small>Click anywhere to start exploring</small>`;
+    document.body.appendChild(el);
+    const close = () => { el.remove(); removeEventListener('keydown', close); };
+    el.onclick = close;
+    addEventListener('keydown', close, { once: true });
+    setTimeout(close, 15000);
   }
 
   /** Keep the two copies of the settings panel in step. */

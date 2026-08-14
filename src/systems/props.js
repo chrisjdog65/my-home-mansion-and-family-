@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { clamp } from '../core/rng.js';
 
 const GRAVITY = 18;   // heavier than life, but a thrown ball still arcs
+const SPLASH = new THREE.Vector3(0, 1, 0);   // marks a water entry to the impact handler
 
 export class Props {
   constructor(world) {
@@ -101,6 +102,24 @@ export class Props {
       p.velocity.y -= GRAVITY * dt;
       // air drag
       p.velocity.multiplyScalar(Math.max(0, 1 - 0.12 * dt));
+
+      // A ball thrown in the pool bobs; a bowling ball goes to the bottom.
+      // Buoyancy is scaled by how dense the object is against water, and by
+      // how much of it is actually under the surface.
+      const water = this.world.inWater(p.pos);
+      if (water) {
+        if (p.buoyancy === undefined) {
+          const density = p.mass / (4.19 * p.radius ** 3);
+          p.buoyancy = clamp(1000 / Math.max(density, 1), 0, 2.3);
+        }
+        const submerged = clamp((water.surfaceY - p.pos.y) / (p.radius * 1.8), 0, 1);
+        p.velocity.y += GRAVITY * p.buoyancy * submerged * dt;
+        p.velocity.multiplyScalar(Math.max(0, 1 - 2.6 * dt));
+        if (!p.inWater && onImpact && p.velocity.lengthSq() > 4) onImpact(p, 2, SPLASH);
+        p.inWater = true;
+      } else if (p.inWater) {
+        p.inWater = false;
+      }
 
       // sub-step so a thrown ball can't pass through a wall between frames
       const steps = Math.min(6, Math.ceil((p.velocity.length() * dt) / (p.radius * 0.8)) || 1);

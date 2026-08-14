@@ -136,7 +136,7 @@ export class Engine {
     this.smaa.enabled = s.quality > 0;
     this.renderer.shadowMap.enabled = s.shadows > 0;
     this.renderer.shadowMap.needsUpdate = true;
-    this.grade.uniforms.sharpness.value = s.quality === 0 ? 0.18 : 0.35;
+    this.grade.uniforms.sharpness.value = s.sharpness ?? 0.35;
     this.resize();
   }
 

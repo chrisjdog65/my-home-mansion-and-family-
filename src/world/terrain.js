@@ -156,7 +156,7 @@ export function buildTerrain(world) {
 
   // ── trees & grass ───────────────────────────────────────────────────────
   plantTrees(world);
-  plantGrass(world);
+  world.grass = plantGrass(world);
 
   return ground;
 }
@@ -228,7 +228,9 @@ export class SkySystem {
     this.sun.shadow.mapSize.set(2048, 2048);
     this.sun.shadow.camera.near = 1;
     this.sun.shadow.camera.far = 260;
-    const S = 70;
+    // A tight frustum is worth more than a big map: 104 m across at 2048 is
+    // 5 cm a texel, where the old 140 m box gave nearly 7.
+    const S = 52;
     Object.assign(this.sun.shadow.camera, { left: -S, right: S, top: S, bottom: -S });
     this.sun.shadow.camera.updateProjectionMatrix();   // the ortho camera never recomputes on its own
     this.sun.shadow.bias = -0.0004;

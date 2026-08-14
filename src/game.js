@@ -12,6 +12,7 @@ import { World } from './world/world.js';
 import { buildMansion } from './world/mansion.js';
 import { furnishAll } from './world/furnish.js';
 import { buildTerrain, SkySystem, groundHeight } from './world/terrain.js';
+import { setGrassDensity } from './world/vegetation.js';
 import { buildBackyard } from './world/backyard.js';
 import { buildTruck, buildLambo, updateVehicle, resetVehicle } from './world/vehicles.js';
 import { buildNav } from './world/nav.js';
@@ -72,12 +73,14 @@ export class Game {
     });
     this.settings.onChange((k) => {
       if (k === 'quality') this.mats?.setQuality(this.settings.quality);
-      if (k === 'shadows') this.applyShadowQuality();
+      if (k === 'shadows' || k === 'quality') this.applyShadowQuality();
+      if (k === 'grass') setGrassDensity(this.world?.grass, this.settings.grass);
     });
   }
 
   // ── build ───────────────────────────────────────────────────────────────
   async load() {
+    this.ui.startTips();
     const step = async (p, text, fn) => {
       this.ui.progress(p, text);
       await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
@@ -132,6 +135,7 @@ export class Game {
       this.flashlight.target.position.set(0, 0, -6);
       this.engine.scene.add(this.engine.camera);
       this.flashlightOn = false;
+      this.buildFocusRing();
       this.setupObjectives();
       this.applyShadowQuality();
       this.mats.setQuality(this.settings.quality);
@@ -145,6 +149,48 @@ export class Game {
     this.wireMenu();
   }
 
+  /**
+   * A soft ring drawn on whatever you are about to interact with. The
+   * crosshair alone never told you *which* of two nearby things E would use.
+   */
+  buildFocusRing() {
+    const S = 64;
+    const c = document.createElement('canvas');
+    c.width = c.height = S;
+    const ctx = c.getContext('2d');
+    ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    for (let i = 0; i < 4; i++) {                 // four corner arcs, not a full ring
+      ctx.arc(S / 2, S / 2, S / 2 - 4, i * Math.PI / 2 + 0.35, (i + 1) * Math.PI / 2 - 0.35);
+      ctx.stroke();
+      ctx.beginPath();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    this.focusRing = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: tex, transparent: true, opacity: 0, depthTest: false, fog: false,
+      color: 0xe8c37a,
+    }));
+    this.focusRing.renderOrder = 900;
+    this.focusRing.scale.setScalar(0.32);
+    this.engine.scene.add(this.focusRing);
+  }
+
+  updateFocusRing(target, dt) {
+    const r = this.focusRing;
+    if (!r) return;
+    const want = target && !this.ui.hidden ? 1 : 0;
+    if (target) {
+      r.position.copy(target.pos || target.eye || r.position);
+      // hold a constant on-screen size whatever the distance
+      const d = r.position.distanceTo(this.engine.camera.position);
+      r.scale.setScalar(clamp(d * 0.075, 0.14, 0.5));
+    }
+    r.material.opacity = damp(r.material.opacity, want, 14, dt);
+    r.visible = r.material.opacity > 0.02;
+  }
+
   applyShadowQuality() {
     const s = this.settings.shadows;
     const r = this.engine.renderer;
@@ -153,8 +199,14 @@ export class Game {
     const typeChanged = r.shadowMap.type !== type;
     r.shadowMap.type = type;
     if (this.sky) {
-      this.sky.sun.shadow.mapSize.setScalar(s > 1 ? 2048 : 1024);
-      if (this.sky.sun.shadow.map) { this.sky.sun.shadow.map.dispose(); this.sky.sun.shadow.map = null; }
+      // 2048 over the tightened 104 m frustum is already 5 cm a texel, better
+      // than the old 140 m box managed — and the shadow pass redraws the whole
+      // estate every frame, so a bigger map is not worth what it costs
+      const size = s > 1 ? 2048 : 1024;
+      if (this.sky.sun.shadow.mapSize.x !== size) {
+        this.sky.sun.shadow.mapSize.setScalar(size);
+        if (this.sky.sun.shadow.map) { this.sky.sun.shadow.map.dispose(); this.sky.sun.shadow.map = null; }
+      }
     }
     // the filter type is baked into every program — recompile or the toggle is inert
     if (typeChanged) {
@@ -261,13 +313,26 @@ export class Game {
   loadSave() {
     try { return JSON.parse(localStorage.getItem('home.save')) || {}; } catch (_) { return {}; }
   }
-  persist() {
+  persist(extra = {}) {
     try {
-      localStorage.setItem('home.save', JSON.stringify({
+      const save = Object.assign(this.loadSave(), {
         done: this.objectives.filter((o) => o.done).map((o) => o.id),
         discovered: [...this.discovered],
-      }));
+      }, extra);
+      if (this.player && this.player.mode === 'walk' && !this.player.skating) {
+        const p = this.player.feet(this._tmp);
+        save.at = [+p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2), +this.player.yaw.toFixed(3)];
+        save.hour = +this.sky.time.toFixed(2);
+      }
+      localStorage.setItem('home.save', JSON.stringify(save));
     } catch (_) { /* private mode */ }
+  }
+  resetProgress() {
+    try { localStorage.removeItem('home.save'); } catch (_) { /* ignore */ }
+    this.discovered.clear();
+    for (const o of this.objectives) o.done = false;
+    this.ui.setObjectives(this.objectives);
+    this.ui.toast('Progress reset', 'Objectives and discovered rooms cleared');
   }
 
   setupObjectives() {
@@ -284,14 +349,19 @@ export class Game {
       o('bowl', 'Drop into the skate bowl', 'Far end of the back yard'),
       o('drive', 'Take the Lamborghini down the drive', 'Press F next to it'),
     ];
-    // progress survives a reload
+    // progress survives a reload — including where you left off standing
     const save = this.loadSave();
     for (const id of save.done || []) {
       const ob = this.objectives.find((x) => x.id === id);
       if (ob) ob.done = true;
     }
     for (const name of save.discovered || []) this.discovered.add(name);
+    if (save.at) this.player.teleport(save.at[0], save.at[1], save.at[2], save.at[3]);
+    if (save.hour !== undefined) { this.sky.setTime(save.hour); this.sky.updateEnv(true); }
     this.ui.setObjectives(this.objectives);
+    this.ui.onResetProgress = () => this.resetProgress();
+    // keep the save fresh without hammering localStorage
+    setInterval(() => { if (this.state === 'play') this.persist(); }, 20000);
   }
 
   complete(id, title) {
@@ -329,8 +399,16 @@ export class Game {
     this.ui.showMenu(false);
     this.ui.showHud(true);
     this.state = 'play';
-    this.input.requestLock();
-    this.ui.toast('Welcome home', 'WASD to move · E to interact');
+    if (matchMedia('(pointer: coarse)').matches) this.input.enableTouch();
+    else this.input.requestLock();
+    const seen = this.loadSave().seenIntro;
+    this.ui.toast('Welcome home', this.input.touch
+      ? 'Left stick to walk · drag the right side to look'
+      : 'WASD to move · E to interact · Tab for the journal');
+    if (!seen) {
+      this.ui.showHint();
+      this.persist({ seenIntro: true });
+    }
   }
 
   pause(v) {
@@ -476,20 +554,49 @@ export class Game {
       this._wasDriving = true;
       this.audio.engine(v.engine.base + Math.abs(v.speed) * v.engine.rev * 6, clamp(Math.abs(v.speed) / v.maxSpeed, 0, 1));
       this.ui.setVehicle(v);
-      if (inp.hit('vehicle')) { P.exitVehicle(); this.audio.stopEngine(); this.ui.setVehicle(null); }
+      if (inp.hit('vehicle')) { P.exitVehicle(); this.audio.stopEngine(); this.ui.setVehicle(null); interactUsed = true; }
       if (v === this.lambo && v.pos.distanceTo(v.home) > 45) this.complete('drive', 'You took the Lambo out');
     } else {
       if (this._wasDriving) { this.audio.stopEngine(); this._wasDriving = false; }
       this.ui.setVehicle(null);
       if (P.mode === 'sit' && (inp.hit('interact') || inp.hit('jump'))) { P.stand(); interactUsed = true; }
     }
+
+    // ── skateboard ──
+    if (inp.hit('vehicle') && P.mode === 'walk' && !interactUsed) {
+      if (P.skating) {
+        const board = P.stopSkating();
+        this.props.grab(board);
+        this.ui.setHeld(board.name);
+        this.ui.toast('Board in hand', 'F to drop in again');
+      } else if (this.props.held?.tag === 'skate') {
+        P.startSkating(this.props.held);
+        this.ui.setHeld(null);
+        this.ui.toast('Rolling', 'W pushes · S drags a foot · Space ollies · F steps off');
+        this.audio.play('roll');
+      }
+    }
+    if (P.skating) {
+      const b = P.board;
+      // the deck rides under your feet, banked into the turn
+      b.pos.copy(P.position).setY(P.position.y - 0.3);
+      b.mesh.rotation.set(0, P.yaw, clamp(-P.lean * 3.2, -0.3, 0.3), 'YXZ');
+      if (P.inWater) { this.props.grab(P.stopSkating()); this.ui.setHeld('skateboard'); }
+    }
     P.syncCamera(dt);
     W.cameraPos = this.engine.camera.position;
 
-    // ── footsteps ──
-    if (P.mode === 'walk' && P.onGround && P.stepDistance - P.lastStep > (P.sprinting ? 2.1 : 1.55)) {
+    // ── footsteps / wheels ──
+    if (P.mode === 'walk' && P.onGround && !P.skating && P.stepDistance - P.lastStep > (P.sprinting ? 2.1 : 1.55)) {
       P.lastStep = P.stepDistance;
       this.audio.play('step', { surface: this.surfaceUnder(), loud: P.sprinting });
+    }
+    if (P.skating && P.onGround) {
+      const spd = Math.hypot(P.velocity.x, P.velocity.z);
+      if (spd > 0.6 && P.stepDistance - P.lastStep > 1.1) {
+        P.lastStep = P.stepDistance;
+        this.audio.noise({ freq: 190 + spd * 26, dur: 0.5, gain: clamp(spd / 60, 0.02, 0.09), q: 0.7, type: 'lowpass' });
+      }
     }
     if (P.landImpact > 0.25 && !this._landed) { this.audio.play('land'); this._landed = true; }
     if (P.landImpact < 0.05) this._landed = false;
@@ -505,12 +612,14 @@ export class Game {
     // ── interaction ──
     // no picking while seated or driving: 'Take a seat' while sat in a
     // recliner (with E actually standing you up) was nonsense
-    const target = this.dialogue || P.mode !== 'walk' ? null : this.interaction.pick();
+    const target = this.dialogue || P.mode !== 'walk' || P.skating ? null : this.interaction.pick();
     const label = this.interaction.labelFor(target);
     let sub = null;
-    if (this.props.held) sub = 'Left click to throw · G to drop';
+    if (P.skating) sub = 'W to push · Space to ollie · F to step off';
+    else if (this.props.held) sub = 'Left click to throw · G to drop';
     else if (P.mode === 'sit') sub = 'E or Space to stand up';
     this.ui.setPrompt(this.dialogue ? null : label, this.dialogue ? null : sub);
+    this.updateFocusRing(target, dt);
 
     if (inp.hit('interact') && target && P.mode === 'walk' && !interactUsed) {
       const sound = this.interaction.use(target, this);
@@ -524,8 +633,9 @@ export class Game {
       this.audio.play('engine');
     }
 
-    // held item
-    if (this.props.held) {
+    // held item (the board is "held" while you ride it, but it lives under
+    // your feet rather than in front of the camera)
+    if (this.props.held && !P.skating) {
       this.props.updateHeld(this.engine.camera, dt);
       if (inp.mouse.leftPressed) {
         const dir = this._tmp.set(0, 0, -1).applyQuaternion(this.engine.camera.quaternion);
@@ -539,14 +649,15 @@ export class Game {
         this.ui.setHeld(null);
       }
     }
-    this.ui.setCrosshairWide(!!this.props.held);
+    this.ui.setCrosshairWide(!!this.props.held && !P.skating);
 
     // ── props & scoring ──
-    this.props.update(dt, (p, impact) => {
+    this.props.update(dt, (p, impact, normal) => {
       // a ball bouncing on the basement court shouldn't sound like it's at
       // your feet from the third floor
       const att = clamp(1.15 - p.pos.distanceTo(P.position) / 26, 0.03, 1);
-      if (p.tag === 'pin') this.audio.play('pin', { gain: att });
+      if (p.inWater) this.audio.play('splash', { gain: att });
+      else if (p.tag === 'pin') this.audio.play('pin', { gain: att });
       else this.audio.play('bounce', { gain: clamp(impact / 8, 0.15, 1) * att });
     }, P.mode === 'walk' ? P.capsule : null, P.velocity);
     this.checkBasket();

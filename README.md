@@ -74,7 +74,12 @@ or give them a hug. Their positions show on the minimap in their own colours.
 Ten objectives track down the left of the screen: greet Kaelie, catch up with
 the kids, light the great-room fire, boot a gaming PC, start movie night, sink
 a basket, knock down all ten pins, get in the pool, drop into the skate bowl,
-and take the Lamborghini down the drive.
+and take the Lamborghini down the drive. Progress and the room you discovered
+last are saved, so closing the tab doesn't cost you anything.
+
+**The skateboard rides.** Pick it up at the park, press **F**, and you're on it:
+push with **W**, drag a foot with **S**, ollie with **Space**. It keeps its
+momentum, so the bowl's transitions trade height for speed the way they should.
 
 ---
 
@@ -84,20 +89,23 @@ and take the Lamborghini down the drive.
 | --- | --- |
 | **W A S D** | Move |
 | **Shift** | Sprint |
-| **Space** | Jump · swim up · brake in a vehicle |
+| **Space** | Jump — at a ledge you'll pull yourself up · swim up · brake in a vehicle |
 | **C / Ctrl** | Crouch · swim down |
 | **E** | Interact — open doors, sit, pick things up, talk, switch things on |
 | **Left mouse** | Throw what you're holding |
 | **Right mouse** | Zoom |
 | **G** | Drop |
-| **F** | Get in / out of a vehicle |
+| **F** | Get in / out of a vehicle · step on and off the skateboard |
+| **L** | Flashlight |
 | **Tab** | Journal |
 | **H** | Hide the HUD (photo mode) |
 | **P** | Save a screenshot |
 | **Mouse wheel** | Scrub the time of day |
 | **Esc** | Pause and settings |
 
-Gamepads work too — left stick moves, right stick looks.
+Gamepads work too — left stick moves, right stick looks. On a phone or tablet
+the game switches to touch: a stick bottom-left, drag the right of the screen to
+look, and jump / use / run buttons.
 
 ---
 
@@ -121,6 +129,8 @@ src/
     input.js          keyboard, mouse look, gamepad, persisted settings
     rng.js            seeded noise and easing helpers
   world/
+    atmosphere.js     stars, the moon and the drifting cloud layer
+    vegetation.js     instanced, wind-swayed grass in one draw call
     plan.js           the floor plan: every room as a rectangle
     mansion.js        slabs, walls, doors, windows, stairs, roof
     build.js          the construction kit — batching, world-space UVs, openings
@@ -165,8 +175,10 @@ A few things worth knowing:
 ## Settings
 
 Esc or the main menu: field of view, sensitivity, invert look, head bob,
-detail, shadows, bloom, render scale, volume, time-of-day speed and a
-performance readout. Settings persist in `localStorage`.
+detail, shadows, bloom, **image sharpness**, render scale, **grass density**,
+volume, time-of-day speed and a performance readout — plus buttons to reset the
+settings or wipe your progress. Everything persists in `localStorage`.
 
 If the frame rate is low, drop **Render scale** to 0.75 and set **Shadows** to
-Soft — that recovers most of the cost.
+Soft — that recovers most of the cost. Render scale above 100% supersamples,
+which is the cheapest way to a crisper image if you have the headroom.

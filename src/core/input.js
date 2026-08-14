@@ -114,6 +114,97 @@ export class Input {
     });
   }
 
+  /**
+   * Phones and tablets get an on-screen stick, a look pad on the right half
+   * of the screen, and three buttons. Pointer lock doesn't exist there, so
+   * without this the game is unplayable on a phone.
+   */
+  enableTouch() {
+    if (this.touch) return;
+    this.touch = { x: 0, y: 0 };
+    this.fallback = true;                 // never ask for pointer lock again
+    document.getElementById('touch')?.classList.remove('hidden');
+
+    const stick = document.getElementById('stick');
+    const nub = document.getElementById('stick-nub');
+    let stickId = null, sx = 0, sy = 0;
+    const R = 46;
+    stick?.addEventListener('touchstart', (e) => {
+      const t = e.changedTouches[0];
+      stickId = t.identifier;
+      const r = stick.getBoundingClientRect();
+      sx = r.left + r.width / 2; sy = r.top + r.height / 2;
+      e.preventDefault();
+    }, { passive: false });
+    const moveStick = (e) => {
+      for (const t of e.changedTouches) {
+        if (t.identifier !== stickId) continue;
+        let dx = t.clientX - sx, dy = t.clientY - sy;
+        const l = Math.hypot(dx, dy);
+        if (l > R) { dx *= R / l; dy *= R / l; }
+        this.touch.x = dx / R; this.touch.y = -dy / R;
+        nub.style.transform = `translate(${dx}px, ${dy}px)`;
+        e.preventDefault();
+      }
+    };
+    stick?.addEventListener('touchmove', moveStick, { passive: false });
+    const endStick = (e) => {
+      for (const t of e.changedTouches) {
+        if (t.identifier !== stickId) continue;
+        stickId = null;
+        this.touch.x = this.touch.y = 0;
+        nub.style.transform = '';
+      }
+    };
+    stick?.addEventListener('touchend', endStick);
+    stick?.addEventListener('touchcancel', endStick);
+
+    // look: drag anywhere on the right half that isn't a control
+    let lookId = null, lx = 0, ly = 0, moved = 0;
+    addEventListener('touchstart', (e) => {
+      if (!this.enabled) return;
+      for (const t of e.changedTouches) {
+        if (lookId !== null || t.clientX < innerWidth * 0.4) continue;
+        if (t.target.closest?.('#touch-buttons, #stick')) continue;
+        lookId = t.identifier; lx = t.clientX; ly = t.clientY; moved = 0;
+      }
+    }, { passive: true });
+    addEventListener('touchmove', (e) => {
+      for (const t of e.changedTouches) {
+        if (t.identifier !== lookId) continue;
+        const dx = t.clientX - lx, dy = t.clientY - ly;
+        lx = t.clientX; ly = t.clientY;
+        moved += Math.abs(dx) + Math.abs(dy);
+        const s = this.settings.sensitivity * 0.0032;
+        this.mouse.dx += dx * s;
+        this.mouse.dy += dy * s * (this.settings.invertY ? -1 : 1);
+      }
+    }, { passive: true });
+    addEventListener('touchend', (e) => {
+      for (const t of e.changedTouches) {
+        if (t.identifier !== lookId) continue;
+        if (moved < 10) this.mouse.leftPressed = true;   // a tap throws / uses
+        lookId = null;
+      }
+    }, { passive: true });
+
+    const hold = (id, action) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const on = (e) => {
+        this.keys.add(action); this.pressed.add(action);
+        el.classList.add('on'); e.preventDefault();
+      };
+      const off = (e) => { this.keys.delete(action); el.classList.remove('on'); e.preventDefault(); };
+      el.addEventListener('touchstart', on, { passive: false });
+      el.addEventListener('touchend', off, { passive: false });
+      el.addEventListener('touchcancel', off, { passive: false });
+    };
+    hold('tb-jump', 'jump');
+    hold('tb-use', 'interact');
+    hold('tb-sprint', 'sprint');
+  }
+
   /** Pointer lock is unavailable — switch to hold-and-drag looking. */
   useFallback() {
     if (this.fallback) return;
@@ -150,6 +241,7 @@ export class Input {
     if (this.down('back')) y -= 1;
     if (this.down('right')) x += 1;
     if (this.down('left')) x -= 1;
+    if (this.touch) { x += this.touch.x; y += this.touch.y; }
     const gp = this.gamepad();
     if (gp) {
       const dz = (v) => (Math.abs(v) < 0.18 ? 0 : v);
@@ -185,6 +277,8 @@ const DEFAULTS = {
   bloom: true,
   renderScale: 1.0,
   quality: 2,          // 0 low, 1 med, 2 high
+  sharpness: 0.35,     // unsharp mask strength in the grade pass
+  grass: 1.0,          // fraction of the grass tufts drawn
   volume: 0.7,
   showFps: false,
   timeScale: 1.0,      // day/night speed multiplier

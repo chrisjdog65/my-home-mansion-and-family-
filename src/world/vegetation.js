@@ -116,10 +116,20 @@ export function plantGrass(world, count = 7000) {
     placed++;
   }
   mesh.count = placed;
+  mesh.userData.placed = placed;
   mesh.instanceMatrix.needsUpdate = true;
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
 
   world.scene.add(mesh);
   world.onUpdate((dt) => { uTime.value += dt; });
   return mesh;
+}
+
+/**
+ * The tufts are scattered in a random order, so simply drawing fewer of them
+ * thins the lawn evenly — a density slider costs nothing at runtime.
+ */
+export function setGrassDensity(mesh, fraction) {
+  if (!mesh) return;
+  mesh.count = Math.round((mesh.userData.placed || 0) * Math.max(0, Math.min(1, fraction)));
 }
