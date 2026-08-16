@@ -175,12 +175,13 @@ export function bed(k, x, y, z, o = {}) {
     k.p(b, s * w * 0.27, 0.72, -d / 2 + 0.52, 0.32, 0.32, 0.12, M.paint(o.cushion ?? 0x9aa8b4, 0.95, 'bedcushion'), 0.4);
   }
   k.pc(b, 0, 0.35, 0, w + 0.2, 0.7, d + 0.2);
-  // you can lie on it.  The seat sits down at the foot so standing up steps
-  // you off the end of the frame instead of into the middle of it.
-  const [sx, sz] = k.L(0, d / 2 - 0.35, x, z, b.r);
+  // You can lie on it.  Standing up steps you the way you are facing, and the
+  // bed is boxed in on three sides — nightstands at the head, a bench at the
+  // foot — so the seat goes in the foot corner and faces off the open side.
+  const [sx, sz] = k.L(w / 2 - 0.3, d / 2 - 0.35, x, z, b.r);
   k.world.addInteract({
     pos: new THREE.Vector3(sx, y + 0.8, sz), radius: 1.9, label: o.seatLabel || 'Lie down',
-    kind: 'seat', seat: { x: sx, y: y + 0.36, z: sz, rotY: b.r },
+    kind: 'seat', seat: { x: sx, y: y + 0.36, z: sz, rotY: b.r + Math.PI / 2 },
   });
   return b;
 }

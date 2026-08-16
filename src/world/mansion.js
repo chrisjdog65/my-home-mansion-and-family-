@@ -2,7 +2,7 @@
 // The mansion shell: slabs, walls, doors, windows, stairs, roof.
 // ───────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
-import { wallWithOpenings, stairs, railing, planarUV, boxMesh } from './build.js';
+import { wallWithOpenings, panelize, stairs, railing, planarUV, boxMesh } from './build.js';
 import {
   HOUSE, CORR, NORTH, SOUTH, WALL_T, FLOORS, FLOOR_ROOMS,
   SLAB_HOLES, GLASS_SPANS,
@@ -669,6 +669,28 @@ function buildRoomWalls(world, R, F, wallCol, matTrim, cuts) {
       }
     }
 
+    // A double-height room's side walls carry on up past the storey above,
+    // but the openings punched into them came from *this* floor's doors — so
+    // at the gallery level above they are solid, and the upper corridor is
+    // walled off wherever it crosses. That is what sealed the second floor
+    // into a 12 m box at the top of the grand stair.
+    if (R.tall && (side === 'w' || side === 'e')) {
+      const up = FLOORS[FLOORS.indexOf(F) + 1];
+      if (up) {
+        const b0 = Math.max(from, up.key === 'basement' ? -1.6 : CORR.z0);
+        const b1 = Math.min(to, up.key === 'basement' ? 1.6 : CORR.z1);
+        if (b1 - b0 > 1.2) {
+          const mid = (b0 + b1) / 2;
+          const o = {
+            x: -(mid - cz(R)), w: b1 - b0 - 0.1,
+            y0: up.y - y + 0.05, y1: Math.min(up.y - y + 2.7, h - 0.2),
+          };
+          openings.push(o);
+          colOpenings.push(o);
+        }
+      }
+    }
+
     // A wall on the gallery band has no room behind it, so painting both faces
     // in the room's colour hangs the Gaming Room's near-black in the corridor.
     // Two back-to-back leaves instead — one collider still covers the pair.
@@ -746,24 +768,13 @@ function trimRun(B, mat, px, pz, len, rotY, cy, th, td, openings, reaches) {
 }
 
 function wallColliders(world, px, pz, len, h, t, openings, rotY, baseY) {
-  const cuts = openings
-    .map((o) => ({ a: o.x - o.w / 2, b: o.x + o.w / 2, y0: o.y0 ?? 0, y1: o.y1 }))
-    .sort((p, q) => p.a - q.a);
-  const half = len / 2;
-  const put = (x0, x1, y0, y1) => {
-    if (x1 - x0 < 0.02 || y1 - y0 < 0.02) return;
+  // same 2-D subtraction the visible wall uses, so collision can never seal
+  // an opening the eye can see through
+  for (const [x0, x1, y0, y1] of panelize(len, h, openings)) {
+    if (x1 - x0 < 0.02 || y1 - y0 < 0.02) continue;
     const lx = (x0 + x1) / 2;
     world.collider(x1 - x0, y1 - y0, t, px + Math.cos(rotY) * lx, baseY + (y0 + y1) / 2, pz - Math.sin(rotY) * lx, rotY);
-  };
-  let cursor = -half;
-  for (const c of cuts) {
-    const a = Math.max(-half, c.a), b = Math.min(half, c.b);
-    if (a > cursor) put(cursor, a, 0, h);
-    put(a, b, 0, Math.min(c.y0, h));            // spandrel below a window
-    put(a, b, Math.min(c.y1, h), h);            // header above the opening
-    cursor = Math.max(cursor, b);
   }
-  if (cursor < half) put(cursor, half, 0, h);
 }
 
 // ── doors ──────────────────────────────────────────────────────────────────

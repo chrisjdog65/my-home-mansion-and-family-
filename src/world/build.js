@@ -139,31 +139,56 @@ export function boxMesh(w, h, d, mat, x, y, z, opts = {}) {
  * openings: [{ x: centreOffset, w, y0, y1 }]
  */
 export function wallWithOpenings(batch, mat, cx, cz, len, height, thick, openings = [], rotY = 0, tile = 2, baseY = 0) {
-  const cuts = openings
-    .map((o) => ({ a: o.x - o.w / 2, b: o.x + o.w / 2, y0: o.y0 ?? 0, y1: o.y1 ?? 2.1 }))
-    .sort((p, q) => p.a - q.a);
-
-  const half = len / 2;
-  const put = (x0, x1, y0, y1) => {
-    if (x1 - x0 < 0.004 || y1 - y0 < 0.004) return;
-    const w = x1 - x0, h = y1 - y0;
+  for (const [x0, x1, y0, y1] of panelize(len, height, openings)) {
     const lx = (x0 + x1) / 2;           // local along-wall centre
-    const wx = cx + Math.cos(rotY) * lx;
-    const wz = cz - Math.sin(rotY) * lx;
-    batch.box(w, h, thick, mat, wx, baseY + (y0 + y1) / 2, wz, { rotY, tile });
-  };
-
-  // full-height strips between the openings
-  let cursor = -half;
-  for (const c of cuts) {
-    const a = Math.max(-half, c.a), b = Math.min(half, c.b);
-    if (a > cursor) put(cursor, a, 0, height);
-    // above / below the opening
-    put(a, b, 0, Math.min(c.y0, height));
-    put(a, b, Math.min(c.y1, height), height);
-    cursor = Math.max(cursor, b);
+    batch.box(x1 - x0, y1 - y0, thick, mat,
+      cx + Math.cos(rotY) * lx, baseY + (y0 + y1) / 2, cz - Math.sin(rotY) * lx, { rotY, tile });
   }
-  if (cursor < half) put(cursor, half, 0, height);
+}
+
+/**
+ * A wall face is a rectangle with holes in it, so cut it like one: split on
+ * every opening edge in both axes and keep the cells no opening covers,
+ * merging each row back into runs so the box count stays where it was.
+ *
+ * The previous sweep walked the openings left to right and filled the wall
+ * *above* and *below* each one all the way to the wall's own top and bottom.
+ * With one opening per column that is right; with two stacked — a ground
+ * floor archway and the gallery passing through the same wall a storey up —
+ * each one's fill sealed the other, which is what walled the second floor in
+ * at the top of the grand stair.
+ *
+ * @returns {Array<[x0,x1,y0,y1]>} panels in wall-local coordinates
+ */
+export function panelize(len, height, openings = []) {
+  const half = len / 2;
+  const cl = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const cuts = openings.map((o) => ({
+    a: cl(o.x - o.w / 2, -half, half), b: cl(o.x + o.w / 2, -half, half),
+    y0: cl(o.y0 ?? 0, 0, height), y1: cl(o.y1 ?? 2.1, 0, height),
+  })).filter((o) => o.b - o.a > 0.004 && o.y1 - o.y0 > 0.004);
+  if (!cuts.length) return [[-half, half, 0, height]];
+
+  const xs = [...new Set([-half, half, ...cuts.flatMap((c) => [c.a, c.b])])].sort((p, q) => p - q);
+  const ys = [...new Set([0, height, ...cuts.flatMap((c) => [c.y0, c.y1])])].sort((p, q) => p - q);
+
+  const out = [];
+  for (let j = 0; j < ys.length - 1; j++) {
+    const y0 = ys[j], y1 = ys[j + 1];
+    if (y1 - y0 < 0.004) continue;
+    const my = (y0 + y1) / 2;
+    let runFrom = null;
+    for (let i = 0; i < xs.length - 1; i++) {
+      const x0 = xs[i], x1 = xs[i + 1];
+      const mx = (x0 + x1) / 2;
+      const solid = x1 - x0 > 0.004 &&
+        !cuts.some((c) => mx > c.a && mx < c.b && my > c.y0 && my < c.y1);
+      if (solid && runFrom === null) runFrom = x0;
+      if (!solid && runFrom !== null) { out.push([runFrom, x0, y0, y1]); runFrom = null; }
+    }
+    if (runFrom !== null) out.push([runFrom, xs[xs.length - 1], y0, y1]);
+  }
+  return out;
 }
 
 /** Straight run of stairs along +Z, `steps` risers of `rise` × `run`. */

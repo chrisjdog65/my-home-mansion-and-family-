@@ -400,7 +400,9 @@ function bedroom(k, R, rng) {
   if (lb) laundryBasket(k, lb[0], R.y, lb[1], { rotY: lb[2] });
 
   // walls: a picture on each side wall, a clock, a shelf, a leaning mirror
-  for (const [ws, zo] of [['w', -2.2], ['e', 2.6]]) {
+  // the west picture hangs down at the window end — the kids' bookshelf backs
+  // onto that wall a couple of metres further in
+  for (const [ws, zo] of [['w', -3.4], ['e', 2.6]]) {
     const sp = wallSpot(k, R, ws, R.z + inward * zo, 0.65);
     if (sp) artwork(k, sp[0], R.y + 2.0, sp[1], rng.range(0.8, 1.15), rng.range(0.6, 0.85), sp[2], pal.art);
   }
@@ -408,7 +410,7 @@ function bedroom(k, R, rng) {
   if (cs) wallClock(k, cs[0], R.y + 2.12, cs[1], cs[2], { hour: rng.int(1, 12), minute: rng.int(0, 55) });
   const sh = wallSpot(k, R, 'e', R.z + inward * 0.4, 0.7, { inset: 0.14 });
   if (sh) wallShelf(k, sh[0], R.y + 1.55, sh[1], { rotY: sh[2], w: 1.1 });
-  const mi = wallSpot(k, R, 'w', R.z + inward * 3.4, 0.6, { inset: 0.2 });
+  const mi = owner ? null : wallSpot(k, R, 'w', R.z + inward * 3.4, 0.6, { inset: 0.2 });
   if (mi && rng.chance(0.6)) tallMirror(k, mi[0], R.y, mi[1], { rotY: mi[2], lean: true, h: 1.7, frame: M.get('walnut') });
   // sconces on the side walls (never the window wall — the panes start at
   // 0.95 m and a sconce would hang in the middle of one)
@@ -432,9 +434,10 @@ function bedroom(k, R, rng) {
 // James: sports gear, posters, a desk he actually works at.
 function jamesRoom(k, R, rng, C) {
   const { inward, wallZ, farSide } = C;
-  const sp = wallSpot(k, R, 'w', R.z + inward * 3.2, 0.7, { inset: 0.12 });
+  // the west wall reads clock, trophies, kit — each in its own metre of wall
+  const sp = wallSpot(k, R, 'w', R.z + inward * 4.2, 0.7, { inset: 0.12 });
   if (sp) sportsRack(k, sp[0], R.y + 1.7, sp[1], { rotY: sp[2], w: 1.1 });
-  const tr = wallSpot(k, R, 'w', R.z + inward * 1.4, 0.7, { inset: 0.13 });
+  const tr = wallSpot(k, R, 'w', R.z + inward * 2.4, 0.7, { inset: 0.13 });
   if (tr) trophyShelf(k, tr[0], R.y + 1.75, tr[1], { rotY: tr[2], w: 1.2 });
   // posters down the side wall — the door wall is dresser, television and
   // wardrobe from end to end, and a poster behind a telly is no poster
@@ -627,8 +630,9 @@ function greatRoom(k, R, rng) {
   // ── detailing ────────────────────────────────────────────────────────────
   // a layered rug under the seating, and the sofa table behind it
   rug(k, R.x - 1.6, R.y + 0.01, R.z + 0.9, 3.0, 2.2, 0x5d5346);
-  consoleTable(k, R.x - 2.2, R.y, R.z + 2.15, { w: 2.6, d: 0.42, rotY: Math.PI });
-  dressTop(k, R.x - 2.2, R.y + 0.91, R.z + 2.15, rng, { rotY: Math.PI, w: 2.0, kinds: ['photo', 'vase', 'books'] });
+  // clear of the metre you step into when you get up off the sectional
+  consoleTable(k, R.x - 2.2, R.y, R.z + 2.7, { w: 2.6, d: 0.42, rotY: Math.PI });
+  dressTop(k, R.x - 2.2, R.y + 0.91, R.z + 2.7, rng, { rotY: Math.PI, w: 2.0, kinds: ['photo', 'vase', 'books'] });
   sideTable(k, R.x - 4.3, R.y, R.z + 1.2, { w: 0.6, lamp: true });
   sideTable(k, R.x + 3.0, R.y, R.z + 0.4, { w: 0.6, lamp: true });
   floorLamp(k, R.x + 3.1, R.y, R.z - 1.6, { h: 1.6 });
@@ -676,8 +680,8 @@ function familyRoom(k, R, rng) {
   // ── detailing ────────────────────────────────────────────────────────────
   railRound(k, R);
   rug(k, R.x, R.y + 0.01, R.z + 1.6, 2.6, 1.8, 0x574d42);
-  consoleTable(k, R.x, R.y, R.z + 3.35, { w: 2.4, d: 0.4, rotY: Math.PI });
-  dressTop(k, R.x, R.y + 0.91, R.z + 3.35, rng, { rotY: Math.PI, w: 1.8 });
+  consoleTable(k, R.x, R.y, R.z + 3.9, { w: 2.4, d: 0.4, rotY: Math.PI });
+  dressTop(k, R.x, R.y + 0.91, R.z + 3.9, rng, { rotY: Math.PI, w: 1.8 });
   sideTable(k, R.x - 1.9, R.y, R.z + 2.6, { w: 0.55, lamp: true });
   sideTable(k, R.x + 1.9, R.y, R.z + 2.6, { w: 0.55, lamp: true });
   floorLamp(k, R.x + 3.4, R.y, R.z + 2.0, { h: 1.55 });
@@ -1026,15 +1030,20 @@ function mud(k, R, rng) {
 
 function storage(k, R, rng) {
   const M = k.M;
+  // the run goes on the wall *opposite* the door: on the south-half rooms the
+  // door is on the north wall, and a 2.6 m rack of shelving across it walled
+  // the room off from the corridor
+  const doorSide = (R.def?.doors || [])[0]?.side;
+  const shelfZ = doorSide === 'n' ? R.z + R.d / 2 - 0.4 : R.z - R.d / 2 + 0.4;
   for (let s = 0; s < 4; s++) {
-    k.box(R.w - 1.2, 0.06, 0.5, M.get('steel'), R.x, R.y + 0.45 + s * 0.62, R.z - R.d / 2 + 0.4, { tile: 0.6 });
+    k.box(R.w - 1.2, 0.06, 0.5, M.get('steel'), R.x, R.y + 0.45 + s * 0.62, shelfZ, { tile: 0.6 });
     for (let i = 0; i < 6; i++) {
       if (!rng.chance(0.75)) continue;
       k.box(0.5, 0.4, 0.4, M.paint(rng.pick([0xb08968, 0xddb892, 0xa8b2bb, 0xcfd8c9]), 0.85, 'crate'),
-        R.x - (R.w - 2.4) / 2 + i * ((R.w - 2.4) / 5), R.y + 0.68 + s * 0.62, R.z - R.d / 2 + 0.4, { tile: 0.3 });
+        R.x - (R.w - 2.4) / 2 + i * ((R.w - 2.4) / 5), R.y + 0.68 + s * 0.62, shelfZ, { tile: 0.3 });
     }
   }
-  k.world.collider(R.w - 1.2, 2.6, 0.5, R.x, R.y + 1.3, R.z - R.d / 2 + 0.4);
+  k.world.collider(R.w - 1.2, 2.6, 0.5, R.x, R.y + 1.3, shelfZ);
 
   // ── detailing ────────────────────────────────────────────────────────────
   // a second run of shelving down whichever side wall is solid, jars on it
@@ -1052,12 +1061,12 @@ function storage(k, R, rng) {
     k.col(0.55, 2.0, 3.2, sp[0], R.y + 1.0, sp[1]);
   }
   // step ladder and a broom at the shelved end, well away from the door
-  const lx = R.x - R.w / 2 + 0.9, lz = R.z - R.d / 2 + 1.9;
+  const lx = R.x - R.w / 2 + 0.9, lz = shelfZ + (doorSide === 'n' ? -1.5 : 1.5);
   for (const s of [-1, 1]) k.box(0.06, 1.7, 0.06, M.get('maple'), lx + s * 0.22, R.y + 0.85, lz, { rotZ: s * 0.06, tile: 0.3 });
   for (let i = 0; i < 4; i++) k.box(0.5, 0.04, 0.16, M.get('maple'), lx, R.y + 0.3 + i * 0.4, lz, { tile: 0.2 });
   k.col(0.6, 1.7, 0.3, lx, R.y + 0.85, lz);
-  k.box(0.05, 1.4, 0.05, M.get('maple'), R.x + R.w / 2 - 0.6, R.y + 0.7, R.z - R.d / 2 + 1.9, { rotZ: 0.12, tile: 0.2 });
-  k.box(0.3, 0.1, 0.12, M.paint(0x6b5330, 0.9, 'broom'), R.x + R.w / 2 - 0.52, R.y + 0.06, R.z - R.d / 2 + 1.9, { tile: 0.2 });
+  k.box(0.05, 1.4, 0.05, M.get('maple'), R.x + R.w / 2 - 0.6, R.y + 0.7, lz, { rotZ: 0.12, tile: 0.2 });
+  k.box(0.3, 0.1, 0.12, M.paint(0x6b5330, 0.9, 'broom'), R.x + R.w / 2 - 0.52, R.y + 0.06, lz, { tile: 0.2 });
   const wb = wallSpot(k, R, R.z < 0 ? 's' : 'n', R.x - R.w / 2 + 0.8, 0.3, { windows: true, inset: 0.3, pad: 0.5 });
   if (wb) wastebasket(k, wb[0], R.y, wb[1], { w: 0.34, h: 0.5, metal: true });
 }

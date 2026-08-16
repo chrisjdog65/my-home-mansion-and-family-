@@ -26765,25 +26765,51 @@ function boxMesh(w, h, d2, mat, x, y, z, opts = {}) {
   return mesh(g, mat, x, y, z, opts);
 }
 function wallWithOpenings(batch, mat, cx2, cz2, len, height, thick, openings = [], rotY = 0, tile = 2, baseY = 0) {
-  const cuts = openings.map((o) => ({ a: o.x - o.w / 2, b: o.x + o.w / 2, y0: o.y0 ?? 0, y1: o.y1 ?? 2.1 })).sort((p, q) => p.a - q.a);
-  const half = len / 2;
-  const put = (x0, x1, y0, y1) => {
-    if (x1 - x0 < 4e-3 || y1 - y0 < 4e-3) return;
-    const w = x1 - x0, h = y1 - y0;
+  for (const [x0, x1, y0, y1] of panelize(len, height, openings)) {
     const lx = (x0 + x1) / 2;
-    const wx = cx2 + Math.cos(rotY) * lx;
-    const wz = cz2 - Math.sin(rotY) * lx;
-    batch.box(w, h, thick, mat, wx, baseY + (y0 + y1) / 2, wz, { rotY, tile });
-  };
-  let cursor = -half;
-  for (const c of cuts) {
-    const a = Math.max(-half, c.a), b = Math.min(half, c.b);
-    if (a > cursor) put(cursor, a, 0, height);
-    put(a, b, 0, Math.min(c.y0, height));
-    put(a, b, Math.min(c.y1, height), height);
-    cursor = Math.max(cursor, b);
+    batch.box(
+      x1 - x0,
+      y1 - y0,
+      thick,
+      mat,
+      cx2 + Math.cos(rotY) * lx,
+      baseY + (y0 + y1) / 2,
+      cz2 - Math.sin(rotY) * lx,
+      { rotY, tile }
+    );
   }
-  if (cursor < half) put(cursor, half, 0, height);
+}
+function panelize(len, height, openings = []) {
+  const half = len / 2;
+  const cl = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const cuts = openings.map((o) => ({
+    a: cl(o.x - o.w / 2, -half, half),
+    b: cl(o.x + o.w / 2, -half, half),
+    y0: cl(o.y0 ?? 0, 0, height),
+    y1: cl(o.y1 ?? 2.1, 0, height)
+  })).filter((o) => o.b - o.a > 4e-3 && o.y1 - o.y0 > 4e-3);
+  if (!cuts.length) return [[-half, half, 0, height]];
+  const xs = [.../* @__PURE__ */ new Set([-half, half, ...cuts.flatMap((c) => [c.a, c.b])])].sort((p, q) => p - q);
+  const ys = [.../* @__PURE__ */ new Set([0, height, ...cuts.flatMap((c) => [c.y0, c.y1])])].sort((p, q) => p - q);
+  const out = [];
+  for (let j = 0; j < ys.length - 1; j++) {
+    const y0 = ys[j], y1 = ys[j + 1];
+    if (y1 - y0 < 4e-3) continue;
+    const my = (y0 + y1) / 2;
+    let runFrom = null;
+    for (let i = 0; i < xs.length - 1; i++) {
+      const x0 = xs[i], x1 = xs[i + 1];
+      const mx = (x0 + x1) / 2;
+      const solid = x1 - x0 > 4e-3 && !cuts.some((c) => mx > c.a && mx < c.b && my > c.y0 && my < c.y1);
+      if (solid && runFrom === null) runFrom = x0;
+      if (!solid && runFrom !== null) {
+        out.push([runFrom, x0, y0, y1]);
+        runFrom = null;
+      }
+    }
+    if (runFrom !== null) out.push([runFrom, xs[xs.length - 1], y0, y1]);
+  }
+  return out;
 }
 function railing(world, matPost, matRail, cx2, y, cz2, len, rotY = 0, h = 1.05, spacing = 0.9) {
   const batch = world.static;
@@ -27676,6 +27702,24 @@ function buildRoomWalls(world, R, F, wallCol, matTrim, cuts) {
         registerDoor(world, R, F, side, c.dr, px3, pz2, rotY, local);
       }
     }
+    if (R.tall && (side === "w" || side === "e")) {
+      const up = FLOORS[FLOORS.indexOf(F) + 1];
+      if (up) {
+        const b0 = Math.max(from, up.key === "basement" ? -1.6 : CORR.z0);
+        const b1 = Math.min(to, up.key === "basement" ? 1.6 : CORR.z1);
+        if (b1 - b0 > 1.2) {
+          const mid = (b0 + b1) / 2;
+          const o = {
+            x: -(mid - cz(R)),
+            w: b1 - b0 - 0.1,
+            y0: up.y - y + 0.05,
+            y1: Math.min(up.y - y + 2.7, h - 0.2)
+          };
+          openings.push(o);
+          colOpenings.push(o);
+        }
+      }
+    }
     const onCorridor = side === "s" && Math.abs(R.z1 - cor0) < 0.2 || side === "n" && Math.abs(R.z0 - cor1) < 0.2;
     if (onCorridor) {
       const q = WALL_T / 4;
@@ -27749,22 +27793,11 @@ function trimRun(B2, mat, px3, pz2, len, rotY, cy, th, td, openings, reaches) {
   if (cursor < half) put(cursor, half);
 }
 function wallColliders(world, px3, pz2, len, h, t, openings, rotY, baseY) {
-  const cuts = openings.map((o) => ({ a: o.x - o.w / 2, b: o.x + o.w / 2, y0: o.y0 ?? 0, y1: o.y1 })).sort((p, q) => p.a - q.a);
-  const half = len / 2;
-  const put = (x0, x1, y0, y1) => {
-    if (x1 - x0 < 0.02 || y1 - y0 < 0.02) return;
+  for (const [x0, x1, y0, y1] of panelize(len, h, openings)) {
+    if (x1 - x0 < 0.02 || y1 - y0 < 0.02) continue;
     const lx = (x0 + x1) / 2;
     world.collider(x1 - x0, y1 - y0, t, px3 + Math.cos(rotY) * lx, baseY + (y0 + y1) / 2, pz2 - Math.sin(rotY) * lx, rotY);
-  };
-  let cursor = -half;
-  for (const c of cuts) {
-    const a = Math.max(-half, c.a), b = Math.min(half, c.b);
-    if (a > cursor) put(cursor, a, 0, h);
-    put(a, b, 0, Math.min(c.y0, h));
-    put(a, b, Math.min(c.y1, h), h);
-    cursor = Math.max(cursor, b);
   }
-  if (cursor < half) put(cursor, half, 0, h);
 }
 function registerDoor(world, R, F, side, dr, px3, pz2, rotY, local) {
   if (dr.w > 1.6) return;
@@ -28546,13 +28579,13 @@ function bed(k, x, y, z, o = {}) {
     k.p(b, s * w * 0.27, 0.72, -d2 / 2 + 0.52, 0.32, 0.32, 0.12, M.paint(o.cushion ?? 10135732, 0.95, "bedcushion"), 0.4);
   }
   k.pc(b, 0, 0.35, 0, w + 0.2, 0.7, d2 + 0.2);
-  const [sx, sz] = k.L(0, d2 / 2 - 0.35, x, z, b.r);
+  const [sx, sz] = k.L(w / 2 - 0.3, d2 / 2 - 0.35, x, z, b.r);
   k.world.addInteract({
     pos: new Vector3(sx, y + 0.8, sz),
     radius: 1.9,
     label: o.seatLabel || "Lie down",
     kind: "seat",
-    seat: { x: sx, y: y + 0.36, z: sz, rotY: b.r }
+    seat: { x: sx, y: y + 0.36, z: sz, rotY: b.r + Math.PI / 2 }
   });
   return b;
 }
@@ -31008,7 +31041,7 @@ function bedroom(k, R, rng) {
   if (bin) wastebasket(k, bin[0], R.y, bin[1], { color: pal.rug });
   const lb = wallSpot(k, R, "w", R.z + inward * 3.6, 0.3, { windows: true, inset: 0.3, pad: 0.5 });
   if (lb) laundryBasket(k, lb[0], R.y, lb[1], { rotY: lb[2] });
-  for (const [ws, zo] of [["w", -2.2], ["e", 2.6]]) {
+  for (const [ws, zo] of [["w", -3.4], ["e", 2.6]]) {
     const sp = wallSpot(k, R, ws, R.z + inward * zo, 0.65);
     if (sp) artwork(k, sp[0], R.y + 2, sp[1], rng.range(0.8, 1.15), rng.range(0.6, 0.85), sp[2], pal.art);
   }
@@ -31016,7 +31049,7 @@ function bedroom(k, R, rng) {
   if (cs) wallClock(k, cs[0], R.y + 2.12, cs[1], cs[2], { hour: rng.int(1, 12), minute: rng.int(0, 55) });
   const sh = wallSpot(k, R, "e", R.z + inward * 0.4, 0.7, { inset: 0.14 });
   if (sh) wallShelf(k, sh[0], R.y + 1.55, sh[1], { rotY: sh[2], w: 1.1 });
-  const mi = wallSpot(k, R, "w", R.z + inward * 3.4, 0.6, { inset: 0.2 });
+  const mi = owner ? null : wallSpot(k, R, "w", R.z + inward * 3.4, 0.6, { inset: 0.2 });
   if (mi && rng.chance(0.6)) tallMirror(k, mi[0], R.y, mi[1], { rotY: mi[2], lean: true, h: 1.7, frame: M.get("walnut") });
   for (const s of [-1, 1]) {
     const sp = wallSpot(k, R, s < 0 ? "w" : "e", R.z + inward * (s < 0 ? -0.8 : -3.2), 0.25);
@@ -31035,9 +31068,9 @@ function bedroom(k, R, rng) {
 }
 function jamesRoom(k, R, rng, C) {
   const { inward, wallZ, farSide } = C;
-  const sp = wallSpot(k, R, "w", R.z + inward * 3.2, 0.7, { inset: 0.12 });
+  const sp = wallSpot(k, R, "w", R.z + inward * 4.2, 0.7, { inset: 0.12 });
   if (sp) sportsRack(k, sp[0], R.y + 1.7, sp[1], { rotY: sp[2], w: 1.1 });
-  const tr = wallSpot(k, R, "w", R.z + inward * 1.4, 0.7, { inset: 0.13 });
+  const tr = wallSpot(k, R, "w", R.z + inward * 2.4, 0.7, { inset: 0.13 });
   if (tr) trophyShelf(k, tr[0], R.y + 1.75, tr[1], { rotY: tr[2], w: 1.2 });
   for (let i = 0; i < 3; i++) {
     const sp2 = wallSpot(k, R, "e", R.z + inward * (-1.2 - i * 0.8), 0.4);
@@ -31204,8 +31237,8 @@ function greatRoom(k, R, rng) {
   k.world.spot("greatRoom", R.x - 1, R.y, R.z + 0.6);
   k.world.spot("fireplaceSeat", R.x - 2.2, R.y, R.z + 1.2);
   rug(k, R.x - 1.6, R.y + 0.01, R.z + 0.9, 3, 2.2, 6116166);
-  consoleTable(k, R.x - 2.2, R.y, R.z + 2.15, { w: 2.6, d: 0.42, rotY: Math.PI });
-  dressTop(k, R.x - 2.2, R.y + 0.91, R.z + 2.15, rng, { rotY: Math.PI, w: 2, kinds: ["photo", "vase", "books"] });
+  consoleTable(k, R.x - 2.2, R.y, R.z + 2.7, { w: 2.6, d: 0.42, rotY: Math.PI });
+  dressTop(k, R.x - 2.2, R.y + 0.91, R.z + 2.7, rng, { rotY: Math.PI, w: 2, kinds: ["photo", "vase", "books"] });
   sideTable(k, R.x - 4.3, R.y, R.z + 1.2, { w: 0.6, lamp: true });
   sideTable(k, R.x + 3, R.y, R.z + 0.4, { w: 0.6, lamp: true });
   floorLamp(k, R.x + 3.1, R.y, R.z - 1.6, { h: 1.6 });
@@ -31243,8 +31276,8 @@ function familyRoom(k, R, rng) {
   k.world.spot("familyRoom", R.x, R.y, R.z + 1.6);
   railRound(k, R);
   rug(k, R.x, R.y + 0.01, R.z + 1.6, 2.6, 1.8, 5721410);
-  consoleTable(k, R.x, R.y, R.z + 3.35, { w: 2.4, d: 0.4, rotY: Math.PI });
-  dressTop(k, R.x, R.y + 0.91, R.z + 3.35, rng, { rotY: Math.PI, w: 1.8 });
+  consoleTable(k, R.x, R.y, R.z + 3.9, { w: 2.4, d: 0.4, rotY: Math.PI });
+  dressTop(k, R.x, R.y + 0.91, R.z + 3.9, rng, { rotY: Math.PI, w: 1.8 });
   sideTable(k, R.x - 1.9, R.y, R.z + 2.6, { w: 0.55, lamp: true });
   sideTable(k, R.x + 1.9, R.y, R.z + 2.6, { w: 0.55, lamp: true });
   floorLamp(k, R.x + 3.4, R.y, R.z + 2, { h: 1.55 });
@@ -31568,8 +31601,10 @@ function mud(k, R, rng) {
 }
 function storage(k, R, rng) {
   const M = k.M;
+  const doorSide = (R.def?.doors || [])[0]?.side;
+  const shelfZ = doorSide === "n" ? R.z + R.d / 2 - 0.4 : R.z - R.d / 2 + 0.4;
   for (let s = 0; s < 4; s++) {
-    k.box(R.w - 1.2, 0.06, 0.5, M.get("steel"), R.x, R.y + 0.45 + s * 0.62, R.z - R.d / 2 + 0.4, { tile: 0.6 });
+    k.box(R.w - 1.2, 0.06, 0.5, M.get("steel"), R.x, R.y + 0.45 + s * 0.62, shelfZ, { tile: 0.6 });
     for (let i = 0; i < 6; i++) {
       if (!rng.chance(0.75)) continue;
       k.box(
@@ -31579,12 +31614,12 @@ function storage(k, R, rng) {
         M.paint(rng.pick([11569512, 14530706, 11055803, 13621449]), 0.85, "crate"),
         R.x - (R.w - 2.4) / 2 + i * ((R.w - 2.4) / 5),
         R.y + 0.68 + s * 0.62,
-        R.z - R.d / 2 + 0.4,
+        shelfZ,
         { tile: 0.3 }
       );
     }
   }
-  k.world.collider(R.w - 1.2, 2.6, 0.5, R.x, R.y + 1.3, R.z - R.d / 2 + 0.4);
+  k.world.collider(R.w - 1.2, 2.6, 0.5, R.x, R.y + 1.3, shelfZ);
   const sp = wallSpot(k, R, "w", R.z + 1, 1.6, { inset: 0.32, pad: 0.6 }) || wallSpot(k, R, "e", R.z + 1, 1.6, { inset: 0.32, pad: 0.6 });
   if (sp) {
     for (let s = 0; s < 3; s++) {
@@ -31605,12 +31640,12 @@ function storage(k, R, rng) {
     }
     k.col(0.55, 2, 3.2, sp[0], R.y + 1, sp[1]);
   }
-  const lx = R.x - R.w / 2 + 0.9, lz = R.z - R.d / 2 + 1.9;
+  const lx = R.x - R.w / 2 + 0.9, lz = shelfZ + (doorSide === "n" ? -1.5 : 1.5);
   for (const s of [-1, 1]) k.box(0.06, 1.7, 0.06, M.get("maple"), lx + s * 0.22, R.y + 0.85, lz, { rotZ: s * 0.06, tile: 0.3 });
   for (let i = 0; i < 4; i++) k.box(0.5, 0.04, 0.16, M.get("maple"), lx, R.y + 0.3 + i * 0.4, lz, { tile: 0.2 });
   k.col(0.6, 1.7, 0.3, lx, R.y + 0.85, lz);
-  k.box(0.05, 1.4, 0.05, M.get("maple"), R.x + R.w / 2 - 0.6, R.y + 0.7, R.z - R.d / 2 + 1.9, { rotZ: 0.12, tile: 0.2 });
-  k.box(0.3, 0.1, 0.12, M.paint(7033648, 0.9, "broom"), R.x + R.w / 2 - 0.52, R.y + 0.06, R.z - R.d / 2 + 1.9, { tile: 0.2 });
+  k.box(0.05, 1.4, 0.05, M.get("maple"), R.x + R.w / 2 - 0.6, R.y + 0.7, lz, { rotZ: 0.12, tile: 0.2 });
+  k.box(0.3, 0.1, 0.12, M.paint(7033648, 0.9, "broom"), R.x + R.w / 2 - 0.52, R.y + 0.06, lz, { tile: 0.2 });
   const wb = wallSpot(k, R, R.z < 0 ? "s" : "n", R.x - R.w / 2 + 0.8, 0.3, { windows: true, inset: 0.3, pad: 0.5 });
   if (wb) wastebasket(k, wb[0], R.y, wb[1], { w: 0.34, h: 0.5, metal: true });
 }
