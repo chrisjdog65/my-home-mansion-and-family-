@@ -68,7 +68,8 @@ export const ACTIVITIES = [
   {
     id: 'picnic', label: 'Hang out at the picnic area', ask: 'Sit outside for a bit?',
     who: ['kaelie', 'james', 'chloie'],
-    node: 'out_picnic', spot: 'picnic', opts: { pose: 'sit', tag: 'picnic' },
+    // the bench is 2.5 cm taller than a dining chair, so lift them onto it
+    node: 'out_picnic', spot: 'picnicSeatA', opts: { pose: 'dine', tag: 'picnic', dy: 0.03 },
     meet: 'Meet {name} at the picnic table', day: [8, 20],
     yes: { kaelie: 'Grab the blanket, it gets cold up here.', james: 'Only if we can eat outside.', chloie: 'Can I bring my drawing things?' },
     stay: 100,
@@ -154,8 +155,17 @@ export function offeredTo(game, member) {
 export class Together {
   constructor(game) {
     this.game = game;
+    this.activities = ACTIVITIES;
     this.current = null;      // { act, member, phase, timer }
     this._v = new THREE.Vector3();
+  }
+
+  /** What this person could be asked to do right now. */
+  offered(member) { return offeredTo(this.game, member); }
+
+  /** The place an activity would happen, for anyone who needs to know. */
+  placeOf(act, member) {
+    return this.game.world.spots[spotFor(act, member)] || this.game.world.navIndex?.get(nodeFor(act, member));
   }
 
   /** Where the pair are meeting, for the HUD tracker. */

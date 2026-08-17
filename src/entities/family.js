@@ -502,13 +502,35 @@ export class FamilyMember {
     const s = this.spec.schedule;
     let pick = s[s.length - 1];
     for (const e of s) if (hour >= e[0]) pick = e;
+    // told there had been enough screens for today: they sulk off somewhere
+    // else instead of queueing into another match
+    if (this.groundedNow && pick[1] === 'r_Gaming Room') return this.sulkInstead(hour);
     return pick;
+  }
+
+  /**
+   * Where a grounded child goes when the gaming room is off the table.  The
+   * two entries are built once and handed back the same way a schedule entry
+   * is — `update()` compares them by identity to decide whether to re-route.
+   */
+  sulkInstead(hour) {
+    if (!this._sulk) {
+      this._sulk = {
+        room: [0, `r_${this.spec.name}'s Room`, 'sulking about the console',
+          { off: [0, 1.2], pose: 'sulk', tag: 'sulk' }],
+        down: [0, 'r_Family Room', 'in a mood about the console',
+          { spot: 'familyRoom', pose: 'sulk', tag: 'sulk' }],
+      };
+    }
+    return (hour >= 20 || hour < 8) ? this._sulk.room : this._sulk.down;
   }
 
   /** Where in the room the activity actually happens. */
   anchorFor(opts, node) {
     const s = opts.spot ? this.world.spots?.[opts.spot] : null;
-    const base = s ? s.pos : node?.pos;
+    // `at` places them on an exact point — a named chair at the table, say,
+    // rather than somewhere near a room's spot
+    const base = opts.at || (s ? s.pos : node?.pos);
     if (!base) return null;
     const p = base.clone();
     if (opts.off) { p.x += opts.off[0]; p.z += opts.off[1]; }

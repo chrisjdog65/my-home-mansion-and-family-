@@ -122,7 +122,54 @@ const POSES = {
   read: { hipY: 0.55, torsoX: 0.1, hip: -1.4, knee: 1.44, ankle: 0.16, spread: 0.05, splay: 0.06, armX: -0.92, elbow: -1.3, armZ: 0.18, headX: 0.12 },
   // crouched down over something on the ground
   crouch: { hipY: 0.42, torsoX: 0.24, hip: -1.15, knee: 1.75, ankle: -0.4, spread: 0.08, splay: 0.16, armX: -0.7, elbow: -0.9, armZ: 0.18, headX: 0.1 },
+
+  // ── together: the family poses ──
+  // Riding in a car.  Authored with the rig's origin *on the seat cushion* —
+  // family.js parks a passenger there and the car carries them — so hipY here
+  // is only the pelvis above the cushion, not a height off the ground.  The
+  // seat is raked, so the back goes back and the knees come up.
+  passenger: { hipY: 0.10, torsoX: -0.13, hip: -1.30, knee: 1.16, ankle: 0.12, spread: 0.07, splay: 0.03, armX: -0.06, elbow: -1.22, armZ: -0.05, wrist: 0.18, headX: 0.02 },
+  // mid-delivery: down over the front foot, ball arm behind (see the stagger
+  // in update() — the pose only sets the depth of the crouch)
+  bowl: { drop: 0.02, torsoX: 0.55, torsoZ: -0.07, hip: -0.42, knee: 0.85, ankle: -0.42, spread: 0.03, splay: 0.03, armX: 0.5, elbow: -0.3, armZ: 0.16, headX: 0.30 },
+  // both arms up — a goal, a strike, a birthday
+  cheer: { torsoX: -0.07, hip: -0.04, knee: 0.1, spread: 0.05, armX: -2.72, elbow: -0.28, armZ: 0.40, headX: -0.14 },
+  // at a table with a plate in front of them: forearms on the cloth
+  dine: { hipY: 0.55, torsoX: 0.11, hip: -1.42, knee: 1.44, ankle: 0.18, spread: 0.05, splay: 0.03, armX: -0.55, elbow: -1.02, armZ: 0.10, headX: 0.10 },
+  // hunched over a desk, pencil moving, head down over the page
+  homework: { hipY: 0.54, torsoX: 0.34, hip: -1.48, knee: 1.52, ankle: 0.22, spread: 0.04, splay: 0.02, armX: -0.76, elbow: -1.10, armZ: 0.09, headX: 0.52 },
+  // glass up — one arm raised, the other easy
+  toast: { torsoX: -0.02, hip: -0.03, knee: 0.08, armX: -0.2, elbow: -0.35, armZ: 0.10, headX: -0.06 },
+  // told off: shoulders in, arms folded, chin on chest
+  sulk: { drop: 0.012, torsoX: 0.20, hip: -0.07, knee: 0.17, spread: 0.0, armX: -0.38, elbow: -2.00, armZ: -0.30, headX: 0.32 },
+  // leaning in over the cake, hands down on the table edge
+  blow: { drop: 0.01, torsoX: 0.45, hip: -0.22, knee: 0.30, ankle: -0.12, spread: 0.04, armX: -0.60, elbow: -0.60, armZ: 0.14, headX: 0.42 },
 };
+
+// Poses where the hips are parked on something: these people turn their head
+// and twist at the waist to look at you rather than getting up and rounding on
+// you, and setPose() reports them through `sitting` the way it always has.
+const SEATED = new Set(['sit', 'lounge', 'perch', 'desk', 'floor', 'read', 'dine', 'homework', 'passenger']);
+
+// ── expression ─────────────────────────────────────────────────────────────
+// A mood is a handful of numbers laid over whatever the body is doing.  Every
+// one is a delta on the rest face, they all blend, and a mood persists until it
+// is set again — nobody snaps out of being told off.
+//   curl  mouth corners, +up / −down      brow  brow height
+//   angle brow angle, +inner-down (cross) lid   eyelid, +closed / −wide
+//   head  head pitch, +chin down          tilt  head roll
+//   lean  torso pitch                     open  jaw
+const MOODS = {
+  neutral:   { curl: 0.00, brow: 0.00, angle: 0.00, lid: 0.00, head: 0.00, tilt: 0.00, lean: 0.00, open: 0.00 },
+  happy:     { curl: 0.60, brow: 0.30, angle: -0.06, lid: 0.12, head: -0.05, tilt: 0.05, lean: -0.02, open: 0.10 },
+  sad:       { curl: -0.50, brow: 0.24, angle: -0.30, lid: 0.32, head: 0.20, tilt: 0.09, lean: 0.06, open: 0.00 },
+  cross:     { curl: -0.34, brow: -0.45, angle: 0.36, lid: 0.26, head: 0.06, tilt: 0.00, lean: 0.03, open: 0.00 },
+  surprised: { curl: 0.10, brow: 0.95, angle: -0.08, lid: -0.34, head: -0.08, tilt: 0.03, lean: -0.05, open: 0.50 },
+  tired:     { curl: -0.14, brow: -0.06, angle: -0.16, lid: 0.58, head: 0.16, tilt: 0.11, lean: 0.05, open: 0.06 },
+};
+
+/** How far the neck alone will turn before the shoulders start to help. */
+const NECK_YAW = 1.02;
 
 // Sole extents in the ankle's frame — see the pelvis solve in update().
 const FOOT_TOE = 0.166;
@@ -345,12 +392,15 @@ export class Character {
         w.add(sph(0.0034, 6, 5), eyeW, { x: s * eyeX + 0.005, y: eyeY + 0.005, z: 0.0885 });
       }
       w.flush();
+      // iris and pupil are kept as their own (already merged) meshes so the
+      // eyes can slide a couple of millimetres in their sockets — that is the
+      // whole of the eye rig, and it costs nothing
       const ir = new Bin(this.head);
       for (const s of [-1, 1]) ir.add(cyl(0.0092, 0.0092, 0.005, 10), irisM, { x: s * eyeX, y: eyeY, z: 0.0845, rx: Math.PI / 2 });
-      ir.flush();
+      this.iris = ir.flush(irisM);
       const pu = new Bin(this.head);
       for (const s of [-1, 1]) pu.add(cyl(0.0044, 0.0044, 0.005, 8), pupilM, { x: s * eyeX, y: eyeY, z: 0.0865, rx: Math.PI / 2 });
-      pu.flush();
+      this.pupil = pu.flush(pupilM);
 
       // upper lids on their own pivots, so the blink actually closes them
       this.lids = [];
@@ -365,16 +415,23 @@ export class Character {
         this.lids.push(g);
       }
 
-      // brows on a shared pivot so they can lift as one
+      // Brows on a shared pivot so they can lift as one, and one pivot per side
+      // inside it so a mood can angle them — inner ends down is cross, inner
+      // ends up is sad, and no face works without that.  Two little meshes
+      // where there was one: the same triangles, split at the seam.
       this.browG = new THREE.Group();
       this.head.add(this.browG);
-      const brow = new Bin(this.browG);
       const ba = spec.browAngle ?? 0.12;
+      this.brows = [];
       for (const s of [-1, 1]) {
-        brow.add(box(0.050 * fw, 0.0115, 0.018), hairM,
-          { x: s * (eyeX + 0.002), y: eyeY + 0.033, z: eyeZ + 0.008, rz: -s * ba, rx: -0.2 });
+        const g = new THREE.Group();
+        g.position.set(s * (eyeX + 0.002), eyeY + 0.033, eyeZ + 0.008);
+        this.browG.add(g);
+        const brow = new Bin(g);
+        brow.add(box(0.050 * fw, 0.0115, 0.018), hairM, { rz: -s * ba, rx: -0.2 });
+        brow.flush();
+        this.brows.push({ g, side: s });
       }
-      brow.flush();
       this.browY = 0;
 
       // mouth: lips proud of the face, a soft line between them that curls up
@@ -388,11 +445,21 @@ export class Character {
       const smile = spec.smile ?? 0.3;
       const line = new Bin(this.head);
       line.add(box(0.030, 0.005, 0.012), mouthM, { y: mx, z: mz + 0.004 });
-      for (const s of [-1, 1]) {
-        line.add(box(0.017, 0.005, 0.012), mouthM,
-          { x: s * 0.0215, y: mx + smile * 0.008, z: mz + 0.003, rz: -s * smile });
-      }
       line.flush();
+      // The corners come off the merged line onto pivots of their own — again
+      // the same triangles, just no longer welded to the middle of the mouth.
+      // A face with a fixed mouth line cannot be happy, and the corners are
+      // the cheapest 4 mm of expression in the whole rig.
+      this.corners = [];
+      for (const s of [-1, 1]) {
+        const g = new THREE.Group();
+        g.position.set(s * 0.0215, mx + smile * 0.008, mz + 0.003);
+        this.head.add(g);
+        const cb = new Bin(g);
+        cb.add(box(0.017, 0.005, 0.012), mouthM, { rz: -s * smile });
+        cb.flush();
+        this.corners.push({ g, side: s, x: g.position.x, y: g.position.y });
+      }
       this.lipBot = new THREE.Group();
       this.lipBotY = mx - 0.011;
       this.lipBot.position.set(0, this.lipBotY, mz);
@@ -513,7 +580,9 @@ export class Character {
         b.add(capg(0.013, 0.028), skin, { x: -s * 0.031, y: -0.036, z: 0.012, rz: s * 0.5, rx: -0.3 });  // thumb
         hand = b.flush(skin);
       }
-      this.arms.push({ sh, el, wrist: wr, hand, side: s });
+      // shY / lift: the shoulder rides up its own height for a shrug — the one
+      // gesture the rig cannot fake with the arms alone
+      this.arms.push({ sh, el, wrist: wr, hand, side: s, shY: sh.position.y, lift: 0 });
     }
 
     // ── legs ───────────────────────────────────────────────────────────────
@@ -570,6 +639,11 @@ export class Character {
     }
 
     world.addProp(this.root);
+    // Where they hang when nobody has picked them up.  If the root turns up
+    // under a different parent — a car, say — position and heading stop being
+    // world-space and everything that aims at the player has to go through the
+    // world matrix instead.  See _carried().
+    this._baseParent = this.root.parent;
 
     // ── state ──────────────────────────────────────────────────────────────
     this.pos = this.root.position;
@@ -597,6 +671,42 @@ export class Character {
     this._gazeX = 0;
     this._prevHeading = 0;
     this._bank = 0;
+    // neck kept off the transform so gestures can add to it without the damp
+    // reading its own output back a frame later
+    this._neckX = 0;
+    this._neckY = 0;
+    this._neckZ = 0;
+    this._twist = 0;                     // shoulders helping the gaze round
+    this._eyeU = 0;                      // eyes in their sockets: left/right,
+    this._eyeV = 0;                      // and up/down
+    this.mood = 'neutral';
+    this._moodT = MOODS.neutral;
+    this._mood = { ...MOODS.neutral };   // blended, never snapped
+    // which way this one tips their head — everybody tilting the same way
+    // reads as a puppet show
+    this._tilt = spec.name.charCodeAt(0) % 2 ? 1 : -1;
+    // the non-arm half of a gesture, damped in and out on its own
+    this._gb = { lean: 0, head: 0, yaw: 0, tilt: 0, brow: 0, angle: 0, curl: 0, lid: 0, open: 0, puff: 0 };
+  }
+
+  /** True while somebody else's transform is carrying them (a car seat). */
+  _carried() { return !!this.root.parent && this.root.parent !== this._baseParent; }
+
+  /**
+   * Hand the rig to another object — a vehicle, a lift — keeping the pose.
+   * `pos`/`heading` become local to that parent from here on; everything that
+   * needs world space (gaze, eyePos) goes through the world matrix instead.
+   */
+  attachTo(parent) {
+    if (!parent || this.root.parent === parent) return this;
+    parent.add(this.root);
+    return this;
+  }
+
+  /** Put them back in the world at large. */
+  detach() {
+    if (this._baseParent && this.root.parent !== this._baseParent) this._baseParent.add(this.root);
+    return this;
   }
 
   /**
@@ -610,8 +720,7 @@ export class Character {
     if (!POSES[p]) p = 'stand';
     if (p === this.pose) return;
     this.pose = p;
-    this.sitting = p === 'sit' || p === 'desk' || p === 'read' || p === 'lounge'
-      || p === 'floor' || p === 'perch';
+    this.sitting = SEATED.has(p);
   }
 
   playGesture(name, time = 1.6) {
@@ -619,6 +728,30 @@ export class Character {
     this.gestureT = time;
     this.gestureDur = Math.max(0.2, time);
   }
+
+  /**
+   * Expression.  One of happy | neutral | sad | cross | surprised | tired, and
+   * it holds until it is set again — being pleased with someone should outlast
+   * the sentence you said it in.  Everything blends, so it is safe to call on
+   * any frame.
+   */
+  setMood(name) {
+    const m = MOODS[name] ? name : 'neutral';
+    this.mood = m;
+    this._moodT = MOODS[m];
+    return this;
+  }
+
+  /** Mouth moves while this is on.  `speaking` stays writable for old callers. */
+  setSpeaking(on) { this.speaking = !!on; return this; }
+
+  /**
+   * Look at the player (or anything else) — pass null to let them go back to
+   * looking about the room.  A seated character answers with their head and
+   * eyes and only then their shoulders, so walking past a sofa does not spin
+   * anyone round; see the gaze block in update().
+   */
+  lookAtPlayer(p) { this.lookAt = p || null; return this; }
 
   // ── animation ────────────────────────────────────────────────────────────
   update(dt, t, playerPos) {
@@ -648,6 +781,30 @@ export class Character {
       p[k] = damp(p[k], tgt[k], 7, dt);
     }
     this.poseW = damp(this.poseW, standing ? 0 : 1, 6, dt);
+
+    // mood blend — six numbers easing towards the face they are wearing
+    const md = this._mood;
+    for (const k in md) md[k] = damp(md[k], this._moodT[k], 4, dt);
+
+    // Gesture weight and clock.  `gk` runs 0→1 across the gesture; the body
+    // half of it is damped in and out separately so it does not pop off the
+    // frame the gesture expires.
+    const gk = this.gestureDur > 0 ? clamp(1 - this.gestureT / this.gestureDur, 0, 1) : 1;
+    this.gestureW = damp(this.gestureW, this.gesture ? 1 : 0, 9, dt);
+    const G = this._gb;
+    const gtb = this.gesture ? this.gestureBody(this.gesture, gk, t) : null;
+    for (const k in G) G[k] = damp(G[k], gtb && gtb[k] ? gtb[k] * this.gestureW : 0, 16, dt);
+
+    // Where they actually are.  Parented to a car, `pos` and `heading` are the
+    // seat, not the world, so anything aimed at the player reads the matrix.
+    let wx = this.pos.x, wy = this.pos.y, wz = this.pos.z, wyaw = this.heading;
+    if (this._carried()) {
+      this.root.rotation.y = this.heading;
+      this.root.updateWorldMatrix(true, false);
+      const m = this.root.matrixWorld.elements;
+      wx = m[12]; wy = m[13]; wz = m[14];
+      wyaw = Math.atan2(m[8], m[10]);
+    }
 
     // idle: a slow, two-rate weight shift plus breathing
     const it = t * 0.21 + this.seed;
@@ -683,9 +840,19 @@ export class Character {
       const iHip = p.hip + load * 0.035;
       const iKnee = p.knee + Math.max(0, -load) * 0.10;
 
-      const hipX = lerp(iHip, gHip, w);
-      const kneeX = Math.max(0, lerp(iKnee, gKnee, w));
-      const ankX = lerp(p.ankle, gAnk, w);
+      let hipX = lerp(iHip, gHip, w);
+      let kneeX = Math.max(0, lerp(iKnee, gKnee, w));
+      let ankX = lerp(p.ankle, gAnk, w);
+      // A staggered stance is the one thing the symmetric pose fields cannot
+      // say.  The bowler's front foot slides out and the back leg trails up on
+      // its toe; both are tuned to hang the same distance below the hip joint,
+      // so the pelvis solve below leaves neither foot in the air.
+      if (this.pose === 'bowl') {
+        const q = this.poseW;
+        hipX += (side > 0 ? 0.55 : -0.36) * q;
+        kneeX = Math.max(0, kneeX + (side > 0 ? 0.08 : 0.10) * q);
+        ankX += (side > 0 ? 0.65 : 0) * q;
+      }
       Lg.hip.rotation.x = hipX;
       Lg.hip.rotation.z = side * (p.spread + p.splay) + shift * 0.02 * side;
       Lg.hip.rotation.y = side * p.splay * 0.8;
@@ -724,7 +891,7 @@ export class Character {
 
     // ── torso ──
     const lean = clamp(spd * 0.05, 0, 0.11) * w;
-    this.torso.rotation.x = p.torsoX + lean + breath * 0.006;
+    this.torso.rotation.x = p.torsoX + lean + breath * 0.006 + md.lean + G.lean;
     // shoulders counter-rotate against the pelvis (hips rotation is inherited,
     // so this has to cancel it first)
     this.torso.rotation.y = -Math.sin(ph) * 0.31 * w;
@@ -735,16 +902,29 @@ export class Character {
     }
 
     // ── head ──
-    let gazeY = 0, gazeX = 0;
+    // aimY/aimX are where they would like to be looking; gazeY/gazeX are what
+    // the neck will take, twist is what the shoulders lend it, and whatever is
+    // still left over the eyes cover.
+    let gazeY = 0, gazeX = 0, aimY = 0, aimX = 0, twist = 0;
     if (this.lookAt) {
-      const dx = this.lookAt.x - this.pos.x, dz = this.lookAt.z - this.pos.z;
-      const want = wrapPi(Math.atan2(dx, dz) - this.heading);
-      gazeY = clamp(want, -1.15, 1.15);
-      const dy = this.lookAt.y - (this.pos.y + this.eyeY * this.S);
+      const dx = this.lookAt.x - wx, dz = this.lookAt.z - wz;
+      const want = wrapPi(Math.atan2(dx, dz) - wyaw);
+      const dy = this.lookAt.y - (wy + this.eyeY * this.S);
       const dist = Math.max(0.6, Math.hypot(dx, dz));
-      gazeX = clamp(-Math.atan2(dy, dist), -0.5, 0.5);
-      // past the neck's limit they turn the shoulders too
-      this.torso.rotation.y += clamp((want - gazeY) * 0.55, -0.45, 0.45) * (1 - w);
+      // Nobody cranes round to look behind themselves: past about 140° they let
+      // it go rather than pinning at the limit and staring out of the corner of
+      // one eye — and it fades, so someone walking behind a chair doesn't flip
+      // their head from one shoulder to the other.
+      const reach = clamp((2.5 - Math.abs(want)) / 0.55, 0, 1);
+      aimY = want * reach;
+      aimX = clamp(-Math.atan2(dy, dist), -0.5, 0.5) * reach;
+      gazeY = clamp(aimY, -NECK_YAW, NECK_YAW);
+      gazeX = aimX;
+      // Past the neck's limit the shoulders come round.  A seated character
+      // cannot step round — family.js leaves their heading alone on the sofa —
+      // so they twist further at the waist, and the twist is damped either way
+      // so no one snaps about as you cross the room.
+      twist = clamp((aimY - gazeY) * (this.sitting ? 0.9 : 0.55), -0.6, 0.6) * (1 - w);
     } else {
       // idle look-around: hold a direction for a few seconds, then pick another
       this._gazeT -= dt;
@@ -753,19 +933,34 @@ export class Character {
         this._gazeY = (Math.random() - 0.5) * (Math.random() < 0.3 ? 1.7 : 0.7);
         this._gazeX = (Math.random() - 0.5) * 0.34;
       }
-      gazeY = this._gazeY * (1 - w * 0.7);
-      gazeX = this._gazeX * (1 - w * 0.7);
+      aimY = gazeY = this._gazeY * (1 - w * 0.7);
+      aimX = gazeX = this._gazeX * (1 - w * 0.7);
     }
-    this.neck.rotation.y = damp(this.neck.rotation.y, gazeY, 6, dt);
+    this._twist = damp(this._twist, twist, this.sitting ? 3.5 : 5.5, dt);
+    this.torso.rotation.y += this._twist;
+
+    this._neckY = damp(this._neckY, gazeY, 6, dt);
     // the head stays level: it undoes the torso's pitch and the walk's bob
-    const levelX = -this.torso.rotation.x * 0.8 + p.headX;
-    this.neck.rotation.x = damp(this.neck.rotation.x, clamp(levelX + gazeX, -0.7, 0.8), 7, dt);
-    this.neck.rotation.z = damp(this.neck.rotation.z, -gazeY * 0.12 + shift * 0.02, 5, dt);
+    const levelX = -this.torso.rotation.x * 0.8 + p.headX + md.head;
+    // a talker moves their head a little; a still one is a mannequin
+    const chat = this.speaking ? Math.sin(t * 2.7 + this.seed) * 0.035 : 0;
+    this._neckX = damp(this._neckX, clamp(levelX + gazeX + chat, -0.7, 0.8), 7, dt);
+    this._neckZ = damp(this._neckZ, -gazeY * 0.12 + shift * 0.02 + md.tilt * this._tilt, 5, dt);
+    // the gesture's head motion rides on top, undamped, so a nod is a nod
+    this.neck.rotation.set(this._neckX + G.head, this._neckY + G.yaw, this._neckZ + G.tilt * this._tilt);
     this.neck.position.y = 0.475 + breath * 0.003;
 
+    // the eyes take up whatever the neck and shoulders have not covered yet,
+    // which also means they lead every turn by a few frames
+    this._eyeU = damp(this._eyeU, clamp(aimY - this._neckY - this._twist, -0.55, 0.55), 12, dt);
+    this._eyeV = damp(this._eyeV, clamp(aimX - (this._neckX - levelX), -0.4, 0.4), 12, dt);
+    if (this.iris) {
+      const ex = this._eyeU * 0.011, ey = -this._eyeV * 0.009;
+      this.iris.position.set(ex, ey, 0);
+      if (this.pupil) this.pupil.position.set(ex, ey, 0);
+    }
+
     // ── arms ──
-    const gk = this.gestureDur > 0 ? clamp(1 - this.gestureT / this.gestureDur, 0, 1) : 1;
-    this.gestureW = damp(this.gestureW, this.gesture ? 1 : 0, 9, dt);
     for (const A of this.arms) {
       const ap = ph + (A.side > 0 ? 0 : Math.PI);        // opposes the leg on that side
       let x = lerp(p.armX, 0.42 * Math.sin(ap) + 0.05, w);
@@ -773,6 +968,11 @@ export class Character {
       let el = lerp(p.elbow, -0.2 - 0.5 * Math.max(0, -Math.sin(ap)) - 0.1 * Math.max(0, Math.sin(ap)), w);
       let wr = p.wrist;
       let wz = 0;
+      // Shoulder roll.  Nothing needed it until folded arms did: flexing an
+      // elbow only ever swings the forearm forward, so without rolling the
+      // upper arm inwards first, "arms crossed" comes out as "hands out in
+      // front".  Everything else leaves it at zero, as it has always been.
+      let sy = 0;
 
       // pose flourishes: a swimmer strokes, a cook stirs, a shooter sets
       if (this.pose === 'swim') {
@@ -786,21 +986,62 @@ export class Character {
         z = A.side * (0.12 + Math.sin(t * 2.6) * 0.05);
       } else if (this.pose === 'shoot') {
         x = -1.85 + Math.sin(t * 0.8 + A.side) * 0.05;
+      } else if (this.pose === 'bowl') {
+        // ball arm back behind the hip, the other one out as a counterweight
+        const sw = Math.sin(t * 1.35 + this.seed);
+        if (A.side > 0) { x = 0.92 + sw * 0.26; z = A.side * 0.10; el = -0.20; wr = -0.2; }
+        else { x = -0.62 - sw * 0.10; z = A.side * 0.48; el = -0.55; }
+      } else if (this.pose === 'cheer') {
+        x = -2.72 + Math.sin(t * 3.0 + A.side) * 0.11;
+        z = A.side * (0.40 + Math.sin(t * 2.3 + A.side) * 0.06);
+        el = -0.28;
+      } else if (this.pose === 'toast') {
+        // glass up by the ear, elbow out — a raised glass, not a raised hand
+        if (A.side > 0) { x = -1.30 + Math.sin(t * 1.1 + this.seed) * 0.035; z = A.side * 0.34; el = -1.90; wr = -0.15; }
+        else { x = -0.16; z = A.side * 0.12; el = -0.42; }
+      } else if (this.pose === 'homework') {
+        if (A.side > 0) {                                  // the writing hand
+          x = -0.76 + Math.sin(t * 5.4) * 0.035;
+          z = A.side * (0.09 + Math.sin(t * 5.4 + 1.1) * 0.04);
+          el = -1.06 + Math.cos(t * 5.4) * 0.05;
+          wr = 0.16;
+        } else { x = -0.70; z = -A.side * 0.05; el = -1.18; wr = 0.10; }   // holds the page
+      } else if (this.pose === 'sulk') {
+        // folded arms: rolled in, and one forearm sits in front of the other
+        x = A.side > 0 ? -0.42 : -0.30;
+        el = A.side > 0 ? -1.70 : -1.55;
+        z = 0;
+        sy = -A.side * 1.2;
+        wr = -0.25;
+      } else if (this.pose === 'blow') {
+        x = -0.60; z = A.side * 0.14; el = -0.60 + Math.sin(t * 0.9 + A.side) * 0.02;
+      } else if (this.pose === 'dine') {
+        el += Math.sin(t * 1.7 + A.side * 1.4) * 0.035;
+        z = A.side * (p.armZ - 0.03);                      // forearms in, hands nearly meeting
+      } else if (this.pose === 'passenger') {
+        // hands in the lap; the car does the rest of the moving
+        el += Math.sin(t * 1.1 + A.side) * 0.02;
+        z = A.side * p.armZ - A.side * 0.03;
       } else if (this.pose === 'read' || this.pose === 'desk') {
         el += Math.sin(t * 3.1 + A.side * 1.4) * 0.03;
       }
 
       const g = this.gesture ? this.gestureArm(A, this.gesture, gk, t) : null;
+      const gw = this.gestureW;
       if (g) {
-        const gw = this.gestureW;
         x = lerp(x, g.x, gw);
         z = lerp(z, g.z, gw);
         el = lerp(el, g.el, gw);
         wr = lerp(wr, g.wr || 0, gw);
         wz = lerp(0, g.wz || 0, gw);
+        sy = lerp(sy, g.sy || 0, gw);
       }
+      // shoulders ride up for a shrug — the joint has nowhere else to say it
+      A.lift = damp(A.lift, g && g.ly ? g.ly * gw : 0, 12, dt);
+      A.sh.position.y = A.shY + A.lift;
 
       A.sh.rotation.x = damp(A.sh.rotation.x, x, 14, dt);
+      A.sh.rotation.y = damp(A.sh.rotation.y, sy, 14, dt);
       A.sh.rotation.z = damp(A.sh.rotation.z, z, 14, dt);
       A.el.rotation.x = damp(A.el.rotation.x, el, 14, dt);
       A.wrist.rotation.x = damp(A.wrist.rotation.x, wr, 16, dt);
@@ -831,23 +1072,39 @@ export class Character {
       const u = 1 - this.blink / 0.15;                 // 0 → 1 across the blink
       close = u < 0.4 ? u / 0.4 : 1 - (u - 0.4) / 0.6;
     }
-    const lidRest = -0.2 + clamp(gazeX, -0.3, 0.3) * 0.5;
+    // tired eyes sit half shut, a surprised pair opens wide, and the blink
+    // still closes them the whole way from wherever they were
+    const lidRest = clamp(-0.2 + clamp(gazeX, -0.3, 0.3) * 0.5 + (md.lid + G.lid) * 0.6, -0.5, 1.0);
     for (const g of this.lids) g.rotation.x = lerp(lidRest, 1.42, close);
 
     if (this.browG) {
-      const raise = (this.speaking ? 0.35 : 0)
-        + (this.gesture === 'wave' || this.gesture === 'cheer' ? 0.7 : 0) * this.gestureW;
+      const raise = md.brow + G.brow + (this.speaking ? 0.3 : 0);
       this.browY = damp(this.browY, raise, 8, dt);
       this.browG.position.y = this.browY * 0.006;
       this.browG.rotation.x = -this.browY * 0.12;
+      // the angle is the difference between cross and sad, and it is all in
+      // which end of the brow drops
+      const ang = md.angle + G.angle;
+      if (this.brows) for (const b of this.brows) b.g.rotation.z = b.side * ang;
     }
     if (this.lipBot) {
-      const open = this.speaking
+      const speak = this.speaking
         ? clamp(0.42 + Math.sin(t * 17.3) * 0.34 + Math.sin(t * 9.7 + 1.2) * 0.24, 0, 1)
         : 0;
+      const open = clamp(Math.max(speak, md.open + G.open), 0, 1);
       this._mouth = damp(this._mouth, open, 22, dt);
       this.lipBot.position.y = this.lipBotY - this._mouth * 0.016;
       this.lipBot.rotation.x = this._mouth * 0.5;
+    }
+    if (this.corners) {
+      // curl is the mood's mouth; puff pulls the corners in for a blow
+      const curl = clamp(md.curl + G.curl, -1, 1);
+      const puff = G.puff;
+      for (const c of this.corners) {
+        c.g.rotation.z = c.side * curl * 0.55;
+        c.g.position.x = c.x - c.side * puff * 0.006;
+        c.g.position.y = c.y + curl * 0.004 - puff * 0.0015;
+      }
     }
 
     this.root.rotation.y = this.heading;
@@ -910,7 +1167,108 @@ export class Character {
         if (!lead) return { x: -0.1, z: s * 0.14, el: -0.2 };
         return { x: 0.8 - Math.sin(k * Math.PI) * 2.6, z: s * 0.1, el: -0.12 };
       }
+      // ── together: the family gestures ──
+      case 'blowout': {
+        // hands stay by the cake; the lungs are in gestureBody()
+        return { x: -0.62, z: s * 0.15, el: -0.95, wr: 0.15 };
+      }
+      case 'applaud': {
+        // wider and faster than a clap, out in front of the chest where it can
+        // be seen — up any higher and the hands sit over the face
+        const c = Math.abs(Math.sin(t * 8.2));
+        return { x: -0.76, z: -s * (0.28 + c * 0.24), el: -1.22, wr: -0.3 };
+      }
+      case 'facepalm': {
+        if (!lead) return { x: -0.14, z: s * 0.1, el: -0.5 };
+        const up = clamp(k / 0.28, 0, 1);
+        return { x: -1.55 * up, z: -s * 0.62 * up, el: -2.0 * up, wr: -0.4 };
+      }
+      case 'shrug': {
+        // elbows pinned in, palms turned out, shoulders up — `ly` is the lift
+        const up = k < 0.3 ? k / 0.3 : k < 0.72 ? 1 : Math.max(0, 1 - (k - 0.72) / 0.28);
+        return { x: -0.18, z: s * (0.14 + 0.30 * up), el: -1.25 * up - 0.2, wr: 0.55 * up, wz: -s * 0.5 * up, ly: 0.024 * up };
+      }
+      case 'handover': {
+        // both hands out, palms up: here, this is for you
+        const ext = clamp(k / 0.4, 0, 1);
+        return { x: -0.62 - 0.50 * ext, z: s * 0.06, el: -1.15 + 0.45 * ext, wr: 0.2 + 0.3 * ext };
+      }
+      case 'write': {
+        if (!lead) return { x: -0.70, z: -s * 0.05, el: -1.18, wr: 0.1 };
+        const c = t * 6.4;
+        return {
+          x: -0.76 + Math.sin(c) * 0.045,
+          z: s * (0.09 + Math.sin(c * 0.5 + 1.1) * 0.05),
+          el: -1.06 + Math.cos(c) * 0.06,
+          wr: 0.16 + Math.sin(c * 2) * 0.05,
+        };
+      }
+      case 'sulk': {
+        // folded: rolled in at the shoulder, one forearm in front of the other
+        return { x: lead ? -0.42 : -0.30, z: 0, sy: -s * 1.2, el: lead ? -1.70 : -1.55, wr: -0.25 };
+      }
       case 'nod':
+      case 'shake':
+      default:
+        return null;                          // head-only: the arms keep the pose
+    }
+  }
+
+  /**
+   * The half of a gesture that isn't in the arms — a lean, a nod, a shake, a
+   * face.  Same `k` 0→1 as gestureArm(); every field is optional and is added
+   * on top of the pose and the mood, weighted by the gesture's blend:
+   *   lean torso pitch   head neck pitch   yaw neck yaw   tilt head roll
+   *   brow lift   angle brow angle   curl mouth   lid eyelids   open jaw
+   *   puff pursed lips
+   */
+  gestureBody(name, k, t) {
+    const env = Math.sin(Math.PI * clamp(k, 0, 1));       // in and out over the beat
+    switch (name) {
+      case 'blowout': {
+        // lean in over the candles, one big puff, then back with the news
+        const inn = k < 0.32 ? k / 0.32 : k < 0.62 ? 1 : Math.max(0, 1 - (k - 0.62) / 0.3);
+        const puff = k > 0.34 && k < 0.66 ? Math.sin(((k - 0.34) / 0.32) * Math.PI) : 0;
+        return {
+          lean: inn * 0.34, head: inn * 0.12, brow: puff * 0.45,
+          puff, open: puff * 0.22, curl: (1 - inn) * 0.5, lid: puff * 0.25,
+        };
+      }
+      case 'nod':
+        return { head: 0.05 * env + Math.sin(k * TAU * 2.1) * 0.17 * env, brow: 0.25 * env, curl: 0.25 * env };
+      case 'shake':
+        return { yaw: Math.sin(k * TAU * 2.3) * 0.30 * env, brow: -0.1 * env, curl: -0.12 * env };
+      case 'shrug': {
+        const up = k < 0.3 ? k / 0.3 : k < 0.72 ? 1 : Math.max(0, 1 - (k - 0.72) / 0.28);
+        return { head: -0.05 * up, tilt: 0.13 * up, brow: 0.8 * up, curl: 0.2 * up, lean: -0.03 * up };
+      }
+      case 'facepalm': {
+        const up = clamp(k / 0.28, 0, 1);
+        return { lean: 0.1 * up, head: 0.26 * up, brow: -0.35 * up, angle: 0.22 * up, curl: -0.3 * up, lid: 0.55 * up };
+      }
+      case 'sulk':
+        return { lean: 0.14, head: 0.26, brow: -0.2, angle: 0.28, curl: -0.45, lid: 0.25 };
+      case 'handover':
+        return { lean: 0.09, head: 0.08, curl: 0.3, brow: 0.2 };
+      case 'write':
+        return { lean: 0.05, head: 0.16, lid: 0.15 };
+      case 'applaud':
+        return { head: -0.06, brow: 0.45, curl: 0.5, open: 0.15 };
+      case 'clap':
+        return { brow: 0.25, curl: 0.35 };
+      case 'cheer':
+        return { head: -0.18, brow: 0.65, curl: 0.55, open: 0.4, lean: -0.05 };
+      case 'wave':
+        return { brow: 0.5, curl: 0.45 };
+      case 'hug':
+        return { head: 0.06, lid: 0.35, curl: 0.5, tilt: 0.08 };
+      case 'highfive':
+        return { brow: 0.4, curl: 0.45, head: -0.04 };
+      case 'point':
+        return { brow: 0.3, curl: 0.2 };
+      case 'swing':
+      case 'shoot':
+        return { brow: 0.15, lid: 0.2 * env };
       default:
         return null;
     }
@@ -923,6 +1281,12 @@ export class Character {
    */
   eyePos(out = new THREE.Vector3()) {
     const above = (this.eyeY - this.hipBase) * Math.cos(this._cur.pitch || 0);
-    return out.set(this.pos.x, this.pos.y + (this.hips.position.y + above) * this.S, this.pos.z);
+    const h = (this.hips.position.y + above) * this.S;
+    // riding in a car, the root is the seat: go out through the world matrix
+    if (this._carried()) {
+      this.root.updateWorldMatrix(true, false);
+      return out.set(0, h, 0).applyMatrix4(this.root.matrixWorld);
+    }
+    return out.set(this.pos.x, this.pos.y + h, this.pos.z);
   }
 }

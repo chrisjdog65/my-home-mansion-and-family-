@@ -4,7 +4,7 @@
 // for anything you can bump into).
 // ───────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
-import { boxMesh, mesh } from './build.js';
+import { Batcher, boxMesh, mesh } from './build.js';
 import { makeRng } from '../core/rng.js';
 
 export class Kit {
@@ -758,6 +758,69 @@ export function range(k, x, y, z, o = {}) {
   k.pc(b, 0, 0.45, 0, 1.1, 0.95, 0.68);
 }
 
+// ── cooking together ───────────────────────────────────────────────────────
+// Two people at one island need two jobs going at once: a board and the
+// recipe at one end, the bowl and the utensils at the other.  All of it sits
+// on a worktop that already carries a collider, so none of it adds one.
+
+/** A stockpot with its lid on, stood on a burner. */
+export function cookPot(k, x, y, z, o = {}) {
+  const M = k.M, w = o.w ?? 0.28, h = o.h ?? 0.17;
+  const body = o.mat || M.get('steel');
+  k.box(w, h, w, body, x, y + h / 2, z, { tile: 0.2 });
+  k.box(w + 0.02, 0.02, w + 0.02, body, x, y + h + 0.01, z, { tile: 0.2 });
+  k.box(0.05, 0.035, 0.05, M.get('blackMetal'), x, y + h + 0.035, z, { tile: 0.1 });
+  for (const s of [-1, 1]) {
+    k.box(0.05, 0.025, 0.03, M.get('blackMetal'), x + s * (w / 2 + 0.025), y + h * 0.72, z, { tile: 0.1 });
+  }
+}
+
+/** The crock of wooden spoons that stands beside every hob. */
+export function utensilCrock(k, x, y, z, o = {}) {
+  const M = k.M, n = o.n ?? 5, lean = 0.16;
+  k.box(0.13, 0.19, 0.13, M.paint(o.color ?? 0xd8cfbe, 0.5, 'crock'), x, y + 0.095, z, { tile: 0.15 });
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2, cx = Math.cos(a), cz = Math.sin(a);
+    k.box(0.022, 0.32, 0.022, M.get('maple'), x + cx * 0.04, y + 0.3, z + cz * 0.04,
+      { rotZ: -cx * lean, rotX: cz * lean, tile: 0.1 });
+    // the business end — a spoon bowl on the odd ones, a spatula on the rest
+    k.box(i % 2 ? 0.05 : 0.07, 0.055, i % 2 ? 0.03 : 0.06, M.get('maple'),
+      x + cx * 0.066, y + 0.455, z + cz * 0.066, { tile: 0.1 });
+  }
+}
+
+/** Mixing bowl, already half full — the other half of cooking together. */
+export function mixingBowl(k, x, y, z, o = {}) {
+  const s = o.scale ?? 1, M = k.M;
+  const glaze = M.paint(o.color ?? 0xdfe3e8, 0.45, `mixbowl${o.color ?? 0}`);
+  k.box(0.2 * s, 0.05 * s, 0.2 * s, glaze, x, y + 0.025 * s, z, { tile: 0.15 });
+  k.box(0.28 * s, 0.08 * s, 0.28 * s, glaze, x, y + 0.09 * s, z, { tile: 0.15 });
+  k.box(0.24 * s, 0.02 * s, 0.24 * s, M.paint(o.batter ?? 0xf0e2c0, 0.75, 'batter'), x, y + 0.125 * s, z, { tile: 0.15 });
+  if (o.spoon !== false) {
+    k.box(0.024, 0.26 * s, 0.024, M.get('maple'), x + 0.1 * s, y + 0.22 * s, z - 0.03 * s,
+      { rotZ: -0.55, rotX: 0.16, tile: 0.1 });
+  }
+}
+
+/** A board mid-job: some of the veg still whole, some of it in slices. */
+export function choppingBoard(k, x, y, z, o = {}) {
+  const M = k.M, b = B(x, y, z, o.rotY || 0);
+  const w = o.w ?? 0.44, d = o.d ?? 0.32;
+  k.p(b, 0, 0.015, 0, w, 0.03, d, o.board || M.get('maple'), 0.3);
+  if (o.veg === false) return b;
+  const veg = [0xd4762c, 0x6ab04c, 0xd0342c, 0xf0e6c8];        // carrot, pepper, tomato, onion
+  for (let i = 0; i < veg.length; i++) {
+    k.p(b, -w / 2 + 0.09 + i * ((w - 0.18) / 3), 0.055, 0.05 - (i % 2) * 0.09, 0.055, 0.05, 0.13,
+      M.solid(veg[i], 0.6), 0.1);
+  }
+  for (let i = 0; i < 4; i++) {                                  // slices off the end
+    k.p(b, w / 2 - 0.05 - i * 0.04, 0.04, -d / 2 + 0.07, 0.032, 0.018, 0.055, M.solid(veg[0], 0.6), 0.1);
+  }
+  k.p(b, 0.03, 0.036, d / 2 - 0.05, 0.2, 0.012, 0.03, M.get('chrome'), 0.1);     // knife
+  k.p(b, -0.15, 0.041, d / 2 - 0.05, 0.09, 0.022, 0.026, M.get('blackMetal'), 0.1);
+  return b;
+}
+
 // ── bathroom ───────────────────────────────────────────────────────────────
 export function vanity(k, x, y, z, o = {}) {
   const b = B(x, y, z, o.rotY || 0), M = k.M;
@@ -847,10 +910,10 @@ const _bs = new THREE.Vector3(1, 1, 1);
  * merged static batch.  A Group of fourteen leaf planes per pot is fourteen
  * draw calls of nothing, and this house has forty pots in it.
  */
-function batched(k, geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) {
+function batched(k, geo, mat, x, y, z, rx = 0, ry = 0, rz = 0, s = 1) {
   _be.set(rx, ry, rz);
   _bq.setFromEuler(_be);
-  _bm.compose(_bp.set(x, y, z), _bq, _bs);
+  _bm.compose(_bp.set(x, y, z), _bq, _bs.set(s, s, s));
   k.B.add(geo, mat, _bm);
 }
 
@@ -1218,6 +1281,211 @@ export function boardGame(k, x, y, z, o = {}) {
   }
 }
 
+// ── the table laid ─────────────────────────────────────────────────────────
+// Dinner is an event, so the table has to be layable: these are the pieces
+// furnish.js batches into one group it can put out and clear away again.
+
+/**
+ * One place at the table.  `rotY` is the diner's own facing — the same value
+ * the chair's seat carries — so the knife always lands on their right hand
+ * whichever side of the table they are sitting.
+ */
+export function placeSetting(k, x, y, z, o = {}) {
+  const M = k.M, b = B(x, y, z, o.rotY || 0);
+  const china = M.paint(o.china ?? 0xf7f5f0, 0.32, 'china');
+  const steel = M.get('chrome');
+  k.p(b, 0, 0.007, 0, 0.26, 0.014, 0.26, china, 0.2);            // dinner plate
+  k.p(b, 0, 0.019, -0.01, 0.17, 0.012, 0.17, china, 0.2);        // side plate on top
+  k.p(b, 0.19, 0.006, 0, 0.022, 0.012, 0.17, steel, 0.1);        // fork, left hand
+  k.p(b, -0.19, 0.006, 0, 0.022, 0.012, 0.17, steel, 0.1);       // knife, right hand
+  k.p(b, -0.19, 0.055, 0.19, 0.06, 0.11, 0.06, M.get('glass'), 0.1);
+  k.p(b, 0.21, 0.014, 0.17, 0.11, 0.026, 0.13, M.paint(o.napkin ?? 0xd7e3e8, 0.94, 'napkin'), 0.2);
+  return b;
+}
+
+/** A serving dish for the middle of the table; `lid: false` leaves it open. */
+export function servingDish(k, x, y, z, o = {}) {
+  const M = k.M, w = o.w ?? 0.34, d = o.d ?? 0.24;
+  const china = M.paint(o.china ?? 0xf7f5f0, 0.32, 'china');
+  k.box(w, 0.05, d, china, x, y + 0.025, z, { rotY: o.rotY || 0, tile: 0.2 });
+  k.box(w - 0.06, 0.045, d - 0.06, M.paint(o.food ?? 0xc9873f, 0.75, 'servingfood'), x, y + 0.07, z,
+    { rotY: o.rotY || 0, tile: 0.2 });
+  if (o.lid !== false) {
+    k.box(w - 0.02, 0.06, d - 0.02, china, x, y + 0.1, z, { rotY: o.rotY || 0, tile: 0.2 });
+    k.box(0.05, 0.035, 0.05, M.get('gold'), x, y + 0.145, z, { tile: 0.1 });
+  }
+}
+
+/** Water jug — body, lip and handle, with something in it. */
+export function jug(k, x, y, z, o = {}) {
+  const M = k.M, b = B(x, y, z, o.rotY || 0), s = o.scale ?? 1;
+  const gl = o.mat || M.get('glass');
+  k.p(b, 0, 0.11 * s, 0, 0.14 * s, 0.22 * s, 0.14 * s, gl, 0.15);
+  k.p(b, 0, 0.085 * s, 0, 0.115 * s, 0.15 * s, 0.115 * s, M.paint(o.fill ?? 0xe8a33d, 0.4, 'juice'), 0.15);
+  k.p(b, 0, 0.235 * s, 0.07 * s, 0.09 * s, 0.03 * s, 0.05 * s, gl, 0.1);          // lip
+  k.p(b, 0, 0.15 * s, -0.1 * s, 0.02 * s, 0.13 * s, 0.025 * s, gl, 0.1);          // handle
+  for (const oy of [0.09, 0.21]) k.p(b, 0, oy * s, -0.08 * s, 0.02 * s, 0.02 * s, 0.05 * s, gl, 0.1);
+}
+
+/**
+ * A book lying open: two leaves either side of a spine.  `stand: true` props
+ * it up on a rest instead — the recipe book on the kitchen island rather than
+ * the exercise book on a child's desk.  On a stand the pages tilt back along
+ * +z, so whoever is reading it stands on the -z side of `rotY`.
+ */
+export function openBook(k, x, y, z, o = {}) {
+  const M = k.M, r = o.rotY || 0, w = o.w ?? 0.17, d = o.d ?? 0.23;
+  const tilt = o.stand ? (o.tilt ?? -0.85) : 0;
+  const lift = o.stand ? 0.11 : 0;
+  const page = M.paint(0xf7f5ee, 0.85, 'page');
+  const cover = M.paint(o.color ?? 0x2f4f6b, 0.7, `cover${o.color ?? 0}`);
+  // the whole book turns about its own X axis, so a stand only changes `tilt`
+  const put = (oy, oz, bw, bh, bd, mat, rz = 0) => {
+    const c = Math.cos(tilt), s2 = Math.sin(tilt);
+    const wy = y + lift + oy * c - oz * s2, wo = oy * s2 + oz * c;
+    k.box(bw, bh, bd, mat, x + Math.sin(r) * wo, wy, z + Math.cos(r) * wo,
+      { rotY: r, rotX: tilt, rotZ: rz, tile: 0.15 });
+  };
+  put(0.004, 0, w * 2 + 0.02, 0.014, d, cover);
+  for (const s of [-1, 1]) put(0.017, 0, w, 0.012, d - 0.02, page, s * 0.05);
+  for (const s of [-1, 1]) {
+    k.box(w * 0.9, 0.004, d - 0.06, M.solid(0xdfd9cc, 0.9),
+      x + Math.sin(r) * (0.026 * Math.sin(tilt)) + Math.cos(r) * s * (w / 2 + 0.005),
+      y + lift + 0.026 * Math.cos(tilt), z + Math.cos(r) * (0.026 * Math.sin(tilt)) - Math.sin(r) * s * (w / 2 + 0.005),
+      { rotY: r, rotX: tilt, tile: 0.1 });                        // ruled lines, faintly
+  }
+  if (o.stand) {                                                  // the rest it leans on
+    k.box(w * 1.5, 0.02, 0.2, M.get('maple'), x, y + 0.01, z, { rotY: r, tile: 0.15 });
+    k.box(w * 1.5, 0.09, 0.02, M.get('maple'), x - Math.sin(r) * 0.095, y + 0.045,
+      z - Math.cos(r) * 0.095, { rotY: r, tile: 0.15 });
+  }
+}
+
+// ── the birthday kit ───────────────────────────────────────────────────────
+// Party colours, shared by everything in the box so the whole kit merges into
+// a handful of materials.
+const PARTY = [0xe23b57, 0xf5c518, 0x2f81ff, 0x6ab04c, 0xe86fa8];
+// one roughness for the lot: every party colour then shares a material, and
+// the whole kit merges down to a handful of draws when it goes up
+const PARTY_R = 0.85;
+
+/** Two tiers, icing and a ring of lit candles. */
+export function cake(k, x, y, z, o = {}) {
+  const M = k.M, n = o.candles ?? 8;
+  const ice = M.paint(o.icing ?? 0xf6e7f0, 0.55, 'icing');
+  const sponge = M.paint(0x8a5b3a, 0.85, 'sponge');
+  k.box(0.36, 0.02, 0.36, M.paint(0xe8e4db, 0.3, 'cakestand'), x, y + 0.01, z, { tile: 0.2 });
+  k.box(0.3, 0.07, 0.3, sponge, x, y + 0.055, z, { tile: 0.2 });
+  k.box(0.31, 0.03, 0.31, ice, x, y + 0.105, z, { tile: 0.2 });
+  k.box(0.19, 0.06, 0.19, sponge, x, y + 0.15, z, { tile: 0.2 });
+  k.box(0.2, 0.025, 0.2, ice, x, y + 0.192, z, { tile: 0.2 });
+  const flame = M.emissive(0xffb347, 2.4);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2, cx = x + Math.cos(a) * 0.07, cz = z + Math.sin(a) * 0.07;
+    k.box(0.014, 0.09, 0.014, M.solid(PARTY[i % PARTY.length], PARTY_R), cx, y + 0.25, cz, { tile: 0.1 });
+    k.box(0.02, 0.035, 0.02, flame, cx, y + 0.312, cz, { tile: 0.1 });
+  }
+}
+
+/** A cluster on strings, tied to whatever is at (x, y). */
+export function balloons(k, x, y, z, o = {}) {
+  const M = k.M, n = o.n ?? 5, h = o.h ?? 1.1;
+  const geo = new THREE.SphereGeometry(0.15, 10, 7);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + 0.4, spread = 0.16 + (i % 2) * 0.12;
+    const bx = x + Math.cos(a) * spread, bz = z + Math.sin(a) * spread;
+    const by = y + h + (i % 3) * 0.15, s = 0.9 + (i % 2) * 0.16;
+    const col = M.solid(PARTY[(i + (o.seed ?? 0)) % PARTY.length], PARTY_R);
+    batched(k, geo, col, bx, by, bz, 0, 0, 0, s);
+    k.box(0.03, 0.04, 0.03, col, bx, by - 0.15 * s, bz, { tile: 0.1 });       // neck
+    // the string, leaned so it meets the knot the cluster is tied by
+    const dy = (by - 0.17 * s) - y;
+    k.box(0.008, dy, 0.008, M.solid(0xe8e2d6, 0.9), (x + bx) / 2, y + dy / 2, (z + bz) / 2,
+      { rotZ: -Math.atan2(bx - x, dy), rotX: Math.atan2(bz - z, dy), tile: 0.1 });
+  }
+  geo.dispose();
+}
+
+/** A swag of flags: cord sagging between two points, pennants hung off it. */
+export function bunting(k, x, y, z, len, o = {}) {
+  const M = k.M, n = o.n ?? 12, sag = o.sag ?? 0.3, r = o.rotY || 0;
+  const cord = M.solid(0xe8e2d6, 0.9);
+  const at = (t) => -Math.sin(Math.PI * t) * sag;
+  for (let i = 0; i < n; i++) {
+    const t0 = i / n, t1 = (i + 1) / n;
+    const ox0 = (t0 - 0.5) * len, ox1 = (t1 - 0.5) * len;
+    const y0 = at(t0), y1 = at(t1);
+    const [cx, cz] = k.L((ox0 + ox1) / 2, 0, x, z, r);
+    k.box(Math.hypot(ox1 - ox0, y1 - y0), 0.012, 0.012, cord, cx, y + (y0 + y1) / 2, cz,
+      { rotY: r, rotZ: Math.atan2(y1 - y0, ox1 - ox0), tile: 0.1 });
+    k.box(0.13, 0.17, 0.008, M.solid(PARTY[i % PARTY.length], PARTY_R), cx, y + (y0 + y1) / 2 - 0.09, cz,
+      { rotY: r, tile: 0.12 });
+  }
+}
+
+/** A stack of wrapped presents, ribboned both ways with a bow on the top one. */
+export function presents(k, x, y, z, o = {}) {
+  const M = k.M, n = o.n ?? 3, rib = M.solid(0xf6e7c8, 0.6);
+  let yy = y;
+  for (let i = 0; i < n; i++) {
+    const w = (o.w ?? 0.34) * (1 - i * 0.2), h = 0.14 - i * 0.02, d = w * 0.78;
+    const r = (o.rotY || 0) + (i % 2 ? 0.22 : -0.16);
+    const col = PARTY[(i + (o.seed ?? 0)) % PARTY.length];
+    k.box(w, h, d, M.paint(col, 0.7, `wrap${col}`), x, yy + h / 2, z, { rotY: r, tile: 0.25 });
+    k.box(w + 0.006, h + 0.006, 0.035, rib, x, yy + h / 2, z, { rotY: r, tile: 0.1 });
+    k.box(0.035, h + 0.006, d + 0.006, rib, x, yy + h / 2, z, { rotY: r, tile: 0.1 });
+    yy += h;
+    if (i === n - 1) {                                            // the bow, on top
+      for (const s of [-1, 1]) k.box(0.09, 0.04, 0.05, rib, x + Math.cos(r) * s * 0.05, yy + 0.02, z - Math.sin(r) * s * 0.05, { rotY: r, tile: 0.1 });
+      k.box(0.04, 0.05, 0.04, rib, x, yy + 0.025, z, { rotY: r, tile: 0.1 });
+    }
+  }
+  return yy;
+}
+
+/** A paper hat — stood up on the table, or `lying` on its side beside a plate. */
+export function partyHat(k, x, y, z, o = {}) {
+  const M = k.M, col = M.solid(o.color ?? PARTY[0], PARTY_R);
+  const cone = new THREE.ConeGeometry(0.06, 0.18, 8, 1, true);
+  if (o.lying) batched(k, cone, col, x, y + 0.06, z, 0, 0, Math.PI / 2);
+  else batched(k, cone, col, x, y + 0.09, z);
+  cone.dispose();
+}
+
+/** A paper cup, for the squash. */
+export function paperCup(k, x, y, z, o = {}) {
+  const M = k.M, col = M.solid(o.color ?? PARTY[1], PARTY_R);
+  const cup = new THREE.CylinderGeometry(0.037, 0.027, 0.095, 8, 1, true);
+  batched(k, cup, col, x, y + 0.048, z);
+  cup.dispose();
+  k.box(0.06, 0.01, 0.06, M.paint(0xe8a33d, 0.5, 'squash'), x, y + 0.075, z, { tile: 0.1 });
+}
+
+/** Painted cloth with lettering on it, tacked flat to the plaster. */
+export function banner(k, x, y, z, o = {}) {
+  const M = k.M, w = o.w ?? 2.4, h = o.h ?? 0.46, r = o.rotY || 0;
+  const text = (o.text || 'HAPPY BIRTHDAY').toUpperCase();
+  const mat = panelMaterial(M, `banner:${text}`, 512, 96, (c, cw, ch) => {
+    c.fillStyle = '#f6efe1'; c.fillRect(0, 0, cw, ch);
+    const cols = ['#e23b57', '#f5c518', '#2f81ff', '#6ab04c', '#e86fa8'];
+    for (let i = 0; i < 16; i++) {                                // a pennant border
+      c.fillStyle = cols[i % cols.length];
+      c.fillRect(i * (cw / 16) + 1, 0, cw / 16 - 2, 9);
+      c.fillRect(i * (cw / 16) + 1, ch - 9, cw / 16 - 2, 9);
+    }
+    c.fillStyle = '#b3352a';
+    c.font = 'bold 44px Georgia, "Times New Roman", serif';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillText(text, cw / 2, ch / 2 + 2);
+  }, { roughness: 0.9 });
+  k.box(w, h, 0.014, mat, x, y, z, { rotY: r });
+  for (const s of [-1, 1]) {
+    k.box(0.035, 0.035, 0.02, M.get('gold'), x + Math.cos(r) * s * (w / 2 - 0.07), y + h / 2 - 0.05,
+      z - Math.sin(r) * s * (w / 2 - 0.07), { rotY: r, tile: 0.1 });
+  }
+}
+
 // ── kids' rooms ────────────────────────────────────────────────────────────
 export function toyBox(k, x, y, z, o = {}) {
   const b = B(x, y, z, o.rotY || 0), M = k.M, rng = k.rng;
@@ -1282,6 +1550,108 @@ export function trophyShelf(k, x, y, z, o = {}) {
     k.p(b, ox, 0.12 * s + 0.05, 0, 0.04, 0.1 * s, 0.04, gold, 0.2);
     k.p(b, ox, 0.22 * s + 0.05, 0, 0.13 * s, 0.13 * s, 0.1 * s, gold, 0.2);
   }
+}
+
+// ── homework corners ───────────────────────────────────────────────────────
+/** A pot of pencils; `crayon` makes them the fat bright ones an eight-year-old
+ *  works in. */
+export function pencilPot(k, x, y, z, o = {}) {
+  const M = k.M, n = o.n ?? 6, lean = 0.13;
+  const hues = o.crayon
+    ? [0xd0342c, 0x2f81ff, 0xf0b429, 0x6ab04c, 0xe86fa8, 0x8a5b9a]
+    : [0xf0b429, 0x2f4f6b, 0x8c3b3b, 0x3f5c3a, 0x6b5330, 0x2b2b2b];
+  k.box(0.09, 0.11, 0.09, M.paint(o.color ?? 0x9aa8b4, 0.5, 'pencilpot'), x, y + 0.055, z, { tile: 0.12 });
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2, cx = Math.cos(a), cz = Math.sin(a);
+    const t = o.crayon ? 0.016 : 0.01;
+    k.box(t, 0.17, t, M.solid(hues[i % hues.length], 0.6), x + cx * 0.022, y + 0.14, z + cz * 0.022,
+      { rotZ: -cx * lean, rotX: cz * lean, tile: 0.08 });
+  }
+}
+
+/** School bag, dropped by the desk the second they got in. */
+export function schoolBag(k, x, y, z, o = {}) {
+  const M = k.M, b = B(x, y, z, o.rotY || 0);
+  const w = o.w ?? 0.34, h = o.h ?? 0.42, d = o.d ?? 0.22;
+  const col = o.color ?? 0x2f4f6b;
+  const cloth = M.paint(col, 0.9, `bag${col}`);
+  const trim = M.paint(shade(col, 0.7), 0.9, `bagtrim${col}`);
+  k.p(b, 0, h / 2, 0, w, h, d, cloth, 0.3);
+  k.p(b, 0, h * 0.3, d / 2 + 0.02, w - 0.08, h * 0.42, 0.05, trim, 0.25);        // front pocket
+  k.p(b, 0, h - 0.03, 0.02, w - 0.06, 0.06, d + 0.04, trim, 0.25);               // flap
+  k.p(b, 0, h * 0.5, d / 2 + 0.045, 0.05, 0.04, 0.02, M.get('chrome'), 0.1);     // buckle
+  for (const s of [-1, 1]) k.p(b, s * (w / 2 - 0.07), h * 0.55, -d / 2 - 0.02, 0.05, h * 0.7, 0.04, trim, 0.25);
+  k.pc(b, 0, h / 2, 0, w + 0.06, h, d + 0.1);
+  return b;
+}
+
+/**
+ * A tablet left flat on the desk — dark glass, nothing playing.  Given an
+ * `owner` it becomes that child's screen: its own hideable group, published on
+ * `world.consoles` so a parent can take it away like anything else.
+ */
+export function tablet(k, x, y, z, o = {}) {
+  const M = k.M, r = o.rotY || 0, w = o.w ?? 0.19, d = o.d ?? 0.26;
+  if (!o.owner) {
+    k.box(w, 0.012, d, M.get('blackMetal'), x, y + 0.006, z, { rotY: r, tile: 0.1 });
+    k.box(w - 0.02, 0.004, d - 0.025, M.get('carGlass'), x, y + 0.014, z, { rotY: r, tile: 0.1 });
+    return null;
+  }
+  const grp = new THREE.Group();
+  grp.name = 'tablet';
+  const prev = k.B;
+  k.B = new Batcher('tablet');
+  const b = B(x, y, z, r);
+  try {
+    k.p(b, 0, 0.006, 0, w, 0.012, d, M.get('blackMetal'), 0.1);
+    k.p(b, 0, 0.014, 0, w - 0.02, 0.004, d - 0.025, M.get('carGlass'), 0.1);
+  } finally {
+    k.B.flush(grp);
+    k.B = prev;
+  }
+  k.world.addProp(grp);
+  screenTime(k.world).push({ mesh: grp, pos: new THREE.Vector3(x, y, z), room: o.room || null, owner: o.owner });
+  return grp;
+}
+
+/** The list of screens a parent can take away. */
+function screenTime(world) {
+  return world.consoles || (world.consoles = []);
+}
+
+/**
+ * A games console and its controller, sat on a shelf.  Screen time is the one
+ * thing in this house a parent takes away, so it is a group of its own — the
+ * game hides it and puts it back — and every one is published on
+ * `world.consoles` with where it lives and, if it is a child's own, whose.
+ */
+export function gamesConsole(k, x, y, z, o = {}) {
+  const M = k.M, b = B(x, y, z, o.rotY || 0);
+  const grp = new THREE.Group();
+  grp.name = 'console';
+  const prev = k.B;
+  k.B = new Batcher('console');
+  try {
+    const shell = M.paint(0x1b1f25, 0.4, 'consoleshell');
+    const trim = M.get('darkPlastic');
+    k.p(b, 0, 0.05, 0, 0.36, 0.1, 0.26, shell, 0.25);                  // body
+    k.p(b, 0, 0.102, -0.03, 0.3, 0.014, 0.16, trim, 0.2);              // vent
+    k.p(b, 0, 0.05, 0.132, 0.2, 0.012, 0.02, M.get('chrome'), 0.1);    // disc slot
+    k.p(b, 0.14, 0.062, 0.133, 0.022, 0.022, 0.012, M.emissive(o.led ?? 0x4fc3f7, 1.8), 0.1);
+    const cx = o.padAt ?? 0.31;                                        // the pad, dropped beside it
+    k.p(b, cx, 0.022, 0, 0.15, 0.044, 0.09, trim, 0.15);
+    for (const s of [-1, 1]) k.p(b, cx + s * 0.08, 0.022, 0.05, 0.07, 0.044, 0.1, trim, 0.15);
+    for (const s of [-1, 1]) k.p(b, cx + s * 0.04, 0.05, -0.012, 0.03, 0.016, 0.03, M.get('chrome'), 0.1);
+    k.p(b, cx, 0.047, 0.03, 0.05, 0.012, 0.03, M.emissive(0xffffff, 0.5), 0.1);
+  } finally {
+    k.B.flush(grp);
+    k.B = prev;
+  }
+  k.world.addProp(grp);
+  screenTime(k.world).push({
+    mesh: grp, pos: new THREE.Vector3(x, y, z), room: o.room || null, owner: o.owner || null,
+  });
+  return grp;
 }
 
 /** Dressing table: a slim desk under a mirror, with its own stool. */

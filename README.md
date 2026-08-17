@@ -91,17 +91,22 @@ they were doing, walk there and meet you:
 
 ### Being a parent
 
-The kids can be told **that's enough screens for today** — the console goes
-away until tomorrow, they sulk about it, and they stop drifting to the gaming
-room. Give it back whenever you like. You can also tell them you're proud of
-them, which lands rather better.
+The kids can be told **that's enough screens for today**. Their own screens —
+James's console on his shelf, the tablet each of them keeps on their desk —
+disappear until tomorrow, and instead of drifting off to the gaming room they
+sulk about it in the family room, or in their own room once it's late. The
+gaming rooms themselves stay open; those belong to everyone. Give the screens
+back whenever you like. You can also tell them you're proud of them, which
+lands rather better.
 
 ### Birthdays
 
 Everyone has one, on their own day of the month. When it comes round you'll be
 told at midnight; find them, wish them happy birthday, and the dining hall gets
-bunting, balloons, a banner and a cake with candles while the whole family sits
-down together.
+bunting, balloons, a banner and a cake with candles. The whole family sits down
+at the table — one to a chair, with whoever's birthday it is at the place
+nearest the cake — and once everyone's settled they blow the candles out to a
+round of applause.
 
 The journal (**Tab**) tracks the day, whose birthday is coming, what each of
 them is doing right now, and how close you've got to each of them.
@@ -183,9 +188,10 @@ src/
     player.js         capsule physics, stairs, crouch, swimming, sitting
     props.js          grabbable, throwable, bouncing objects
     interaction.js    what you're looking at and what E does to it
-    lights.js         200 declared lights, 10 real ones
+    lights.js         hundreds of declared lights, ten or fourteen real ones
     screenfx.js       animated canvas content for every screen in the house
-    audio.js          procedural WebAudio — footsteps, water, fire, engines
+    audio.js          procedural WebAudio — footsteps, water, fire, engines, music
+    together.js       the things you and the family go and do together
   entities/
     character.js      jointed procedural humans with a walk cycle
     family.js         Kaelie, James, Chloie: schedules, routes, dialogue
@@ -203,8 +209,10 @@ A few things worth knowing:
   the player is a `Capsule`, props are spheres, and doors and cars are dynamic
   rotated boxes tested separately.
 - **Lighting** is deliberately low on sky fill — the house is lit by its own
-  fixtures, and only the ten nearest of the ~220 declared lights are ever real
-  GPU lights.
+  fixtures, and only the ten or so nearest of the several hundred declared
+  lights are ever real GPU lights. The pool's size never changes, because in
+  three.js the visible point-light count is baked into every shader program
+  and letting it fluctuate would recompile them mid-frame.
 - **No image files.** Wood, marble, stone, carpet, tile, grass and the rest are
   drawn into 2D canvases, and their normal and roughness maps are derived from
   a height field with a Sobel pass.

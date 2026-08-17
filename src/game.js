@@ -511,7 +511,8 @@ export class Game {
         opts.splice(1, 0, {
           label: `Wish ${member.name} happy birthday`,
           action: () => {
-            member.char.playGesture?.('blowout', 2.6);
+            member.char.setMood?.('happy');
+            member.char.playGesture?.('nod', 1.6);
             show(`${member.name} beams at you.`);
             this.throwParty(member.id);
           },
@@ -520,9 +521,9 @@ export class Game {
 
       // the kids get the parenting options
       if (kid) {
-        if (this.grounded[member.id] > this.day - 1) {
+        if (this.isGrounded(member.id)) {
           opts.push({
-            label: 'Give the console back',
+            label: member.id === 'james' ? 'Give the console back' : 'Give the tablet back',
             action: () => { this.ungroundChild(member); show(`${member.name}: “Thanks, Dad. Sorry about earlier.”`); },
           });
         } else {
@@ -594,19 +595,21 @@ export class Game {
     return null;
   }
 
-  /** Screen time is over: the console goes in the cupboard until tomorrow. */
+  /** Is this child's screen time taken away right now? */
+  isGrounded(id) {
+    return (this.grounded[id] || 0) > this.day - 1;
+  }
+
+  /**
+   * Screen time is over: their own screens go in the cupboard until tomorrow.
+   * The gaming rooms are the whole family's, so those stay where they are —
+   * what changes is that the child stops drifting off to them.
+   */
   applyGrounding() {
-    const on = [];
     for (const c of this.world.consoles || []) {
-      const who = c.room && c.room.includes('James') ? 'james' : null;
-      const off = who ? (this.grounded[who] || 0) > this.day - 1 : false;
-      c.mesh.visible = !off;
-      if (off) on.push(who);
+      if (c.owner) c.mesh.visible = !this.isGrounded(c.owner);
     }
-    // a grounded child stops going to the gaming room
-    for (const f of this.family || []) {
-      f.groundedNow = (this.grounded[f.id] || 0) > this.day - 1;
-    }
+    for (const f of this.family || []) f.groundedNow = this.isGrounded(f.id);
   }
 
   groundChild(member, days = 1) {
@@ -623,18 +626,48 @@ export class Game {
     delete this.grounded[member.id];
     this.applyGrounding();
     member.char.setMood?.('happy');
-    this.ui.toast(`${member.name} gets their console back`, 'All forgiven');
+    this.ui.toast(`${member.name} gets their screens back`, 'All forgiven');
     this.addBond(member.id, 1);
+  }
+
+  /**
+   * Sit the family down at the table, one to a chair.  `head` gets the place
+   * nearest the cake — that is the birthday chair — and the rest fill in
+   * around, leaving the last laid place for you.
+   */
+  seatFamily(tag, doing, head = null) {
+    const set = this.world.diningSet;
+    const seats = set ? set.seats.slice(0, 4) : [];
+    if (set) set.group.visible = true;
+    if (!seats.length) {                                   // no table: stand near it
+      for (const f of this.family) {
+        f.sendTo('r_Dining Hall', { spot: 'dining', pose: 'dine', tag }, doing);
+      }
+      return;
+    }
+    const cake = this.world.party?.cakeSpot;
+    const order = seats.slice();
+    if (head && cake) {
+      order.sort((a, b) => a.pos.distanceToSquared(cake) - b.pos.distanceToSquared(cake));
+    }
+    // the birthday one first, then everybody else in the order they come
+    const queue = head
+      ? [this.family.find((f) => f.id === head), ...this.family.filter((f) => f.id !== head)]
+      : this.family.slice();
+    queue.forEach((f, i) => {
+      const seat = order[i % order.length];
+      f?.sendTo('r_Dining Hall',
+        { spot: 'dining', at: seat.pos, face: seat.rotY, pose: 'dine', tag }, doing);
+    });
+    // three of the four laid places are taken; the last one is yours, and it
+    // carries the same "Sit down" interactable every chair in the house does
   }
 
   /** Everyone to the dining table. */
   callFamilyToDinner() {
-    for (const f of this.family) {
-      f.sendTo('r_Dining Hall', { spot: 'dining', pose: 'dine', tag: 'table' }, 'sitting down to eat');
-    }
+    this.seatFamily('table', 'sitting down to eat');
     this.dinnerUntil = this.time + 180;
     this.ui.toast('Dinner is ready', 'Everyone to the dining hall');
-    this.world.diningSet?.group && (this.world.diningSet.group.visible = true);
   }
 
   /** Decorations up, everyone to the table, cake on it. */
@@ -642,14 +675,19 @@ export class Game {
     const who = this.family.find((f) => f.id === forId);
     if (!who) return;
     this.world.party?.show?.(true);
-    for (const f of this.family) {
-      f.sendTo('r_Dining Hall', { spot: 'dining', pose: 'dine', tag: 'party' }, `celebrating ${who.name}'s birthday`);
-    }
+    this.seatFamily('party', `celebrating ${who.name}'s birthday`, forId);
     this.partyFor = forId;
     this.partyUntil = this.time + 300;
     this.ui.toast(`Happy birthday, ${who.name}`, 'Everyone is in the dining hall');
     this.addBond(forId, 3);
     this.audio.play('chime');
+    // they blow the candles out once everyone has sat down
+    setTimeout(() => {
+      if (this.partyFor !== forId) return;
+      who.char.setMood?.('happy');
+      who.char.playGesture?.('blowout', 2.6);
+      for (const f of this.family) if (f !== who) f.char.playGesture?.('applaud', 2.6);
+    }, 9000);
   }
 
   updateFamilyLife(dt) {

@@ -238,7 +238,9 @@ const ROOM_LIGHT = {
   great:     { color: 0xffdcb4, i: 17, per: 27, cap: 6, wash: 0xffd0a0, wi: 4.6, g: WARM },
   family:    { color: 0xffdcb4, i: 15, per: 27, cap: 5, wash: 0xffd0a0, wi: 4.4, g: WARM },
   library:   { color: 0xffd6a4, i: 13, per: 30, cap: 4, wash: 0xffc890, wi: 4.4, g: WARM },
-  dining:    { color: 0xffdcb0, i: 14, per: 28, cap: 4, wash: 0xffcf9e, wi: 4.4, g: WARM },
+  // the dining hall is nearly as big as the great room and painted far darker,
+  // so it needs the same number of fittings, not a small room's four
+  dining:    { color: 0xffdcb0, i: 16, per: 22, cap: 6, wash: 0xffcf9e, wi: 5.0, g: WARM },
   foyer:     { color: 0xffe2bc, i: 15, per: 30, cap: 6, wash: 0xffd8ae, wi: 4.2, g: WARM },
   stairhall: { color: 0xffe2bc, i: 14, per: 30, cap: 6, wash: 0xffd8ae, wi: 4.2, g: WARM },
   // work surfaces and mirrors want it cooler and brighter than the sitting rooms

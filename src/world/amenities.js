@@ -4,7 +4,7 @@
 // ───────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { boxMesh, mesh } from './build.js';
-import { Kit, barstool, panelMaterial, segRow, wallClock } from './furniture.js';
+import { Kit, barstool, gamesConsole, panelMaterial, segRow, wallClock } from './furniture.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
@@ -543,6 +543,16 @@ export function gamingRoom(k, R, id) {
   world.addProp(gtv);
   const gScreen = { mesh: gtv, mat: tvMat, on: false, kind: 'tv' };
   world.screens.push(gScreen);
+
+  // media unit under the TV, with the console on it.  Screen time is a thing
+  // that gets taken away, so the console is its own hideable group and every
+  // one in the house is published on `world.consoles`.
+  const plX = x - R.w / 2 + 0.42;
+  B.box(0.5, 0.46, 1.7, M.paint(0x14171d, 0.5, 'mediaunit'), plX, y + 0.23, z, { tile: 0.5 });
+  B.box(0.56, 0.05, 1.76, M.get('blackMetal'), plX, y + 0.48, z, { tile: 0.4 });
+  B.box(0.44, 0.03, 1.5, M.emissive(rgb[id % 4], 0.9), plX + 0.04, y + 0.02, z, { tile: 0.3 });
+  world.collider(0.56, 0.52, 1.76, plX, y + 0.26, z);
+  gamesConsole(k, plX, y + 0.505, z - 0.25, { rotY: Math.PI / 2, room: R.name, led: rgb[id % 4] });
 
   const powerOn = () => {
     const on = !screens[0].on;

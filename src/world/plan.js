@@ -38,7 +38,7 @@ export const GROUND_ROOMS = [
     name: 'Grand Foyer', x0: -6, x1: 6, z0: HOUSE.z0, z1: CORR.z1, floor: 'marble', wall: 0xe9e3d7,
     doors: [d('w', 5.4, 4.0), d('e', 5.4, 4.0)], type: 'foyer', open: true, tall: true,
   },
-  { name: 'Dining Hall', ...N(6, 17), floor: 'walnutFloor', wall: 0x5b4a4f, doors: [d('s', 0, 2.6), d('w', 0, 1.6)], type: 'dining' },
+  { name: 'Dining Hall', ...N(6, 17), floor: 'walnutFloor', wall: 0x6b565c, doors: [d('s', 0, 2.6), d('w', 0, 1.6)], type: 'dining' },
   { name: "Butler's Pantry", ...N(17, 21), floor: 'tile', wall: 0xdad2c3, doors: [d('s', 0, 1.0)], type: 'pantry' },
   { name: 'Garage', ...N(21, 30), floor: 'polishedConcrete', wall: 0xbfc4c8, doors: [d('s', 0, 1.1), d('w', 0, 1.1)], type: 'garage', garageDoors: true },
 

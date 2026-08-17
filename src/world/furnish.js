@@ -10,6 +10,7 @@
 // ───────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { makeRng } from '../core/rng.js';
+import { Batcher } from './build.js';
 import {
   Kit, bed, bunkBed, nightstand, dresser, wardrobe, bookshelf, desk, officeChair,
   diningChair, sofa, sectional, armchair, coffeeTable, rug, tv, tvUnit, fireplace,
@@ -20,8 +21,13 @@ import {
   wallShelf, tallMirror, poster, bookStack, magazines, vase, fruitBowl, photoFrame,
   wastebasket, laundryBasket, umbrellaStand, coatHooks, radio, boardGame, toyBox,
   softToy, canopy, sportsRack, trophyShelf, dressingTable, wallClock,
+  // family life: the table laid, the birthday box, homework and cooking
+  placeSetting, servingDish, jug, openBook, cake, balloons, bunting, presents,
+  partyHat, paperCup, banner, pencilPot, schoolBag, tablet, gamesConsole,
+  cookPot, utensilCrock, mixingBowl, choppingBoard,
 } from './furniture.js';
 import { theater, bowling, court, gym, gamingRoom, laundry, garage, workshop } from './amenities.js';
+import { groundHeight } from './terrain.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
@@ -38,6 +44,8 @@ export function furnishAll(world) {
   const rng = makeRng(4242);
   k.openings = collectOpenings(world);
   k.bounds = houseBounds(world);
+  // the consoles register themselves as they are built, from two files
+  world.consoles = world.consoles || [];
   let gamingId = 0;
 
   for (const R of world.rooms) {
@@ -79,7 +87,43 @@ export function furnishAll(world) {
       plant(k, px, R.y, R.z + R.d / 2 - 0.9, rng.range(0.9, 1.3));
     }
   }
+  outdoorSpots(world);
   return k;
+}
+
+/**
+ * Set dressing that is switched on and off — a laid table, a party — is
+ * merged into a group of its own instead of the house-wide static batch: the
+ * kit writes into a private Batcher, so the whole set is a handful of draw
+ * calls that one `visible` flag turns off.
+ */
+function grouped(k, name, build) {
+  const grp = new THREE.Group();
+  grp.name = name;
+  const prev = k.B;
+  k.B = new Batcher(name);
+  try {
+    build(grp);
+  } finally {
+    k.B.flush(grp);
+    k.B = prev;
+  }
+  k.world.addProp(grp);
+  return grp;
+}
+
+/**
+ * Places outdoors the family sits at together.  backyard.js builds the picnic
+ * tables (and their seats) after this pass runs, but the slab is levelled
+ * ground at a height the terrain function already knows, so the spots can be
+ * published here — facing across the table, which is the way you sit at one.
+ */
+function outdoorSpots(world) {
+  const cx = 22, cz = 40, y = groundHeight(cx, cz) + 0.12;   // matches picnicArea()
+  const tx = cx - 2.4;                                       // the western of the two tables
+  world.spot('picnicSeatA', tx - 1.05, y, cz, { rotY: Math.PI / 2 });
+  world.spot('picnicSeatB', tx + 1.05, y, cz, { rotY: -Math.PI / 2 });
+  world.spot('picnicTable', tx, y, cz);
 }
 
 // ── doorways, walls, seeds ─────────────────────────────────────────────────
@@ -459,7 +503,49 @@ function jamesRoom(k, R, rng, C) {
   const kx = R.x + R.w / 2 - 1.4;
   k.box(0.1, 0.28, 0.1, k.M.solid(0xe8e4db, 0.5), kx + 0.2, R.y + 0.9, wallZ + inward * 0.4, { tile: 0.2 });
   k.box(0.26, 0.05, 0.05, k.M.solid(0xd0342c, 0.5), kx + 0.2, R.y + 0.86, wallZ + inward * 0.4, { tile: 0.2 });
-  k.world.spot('jamesDesk', kx, R.y, wallZ + inward * 1.3);
+  // homework happens at that desk, so give him the things to do it with
+  homeworkDesk(k, R, 'james', inward, wallZ);
+  // a football, left where he kicked his bag off
+  const foot = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 9), k.M.solid(0xf2f0ea, 0.7));
+  foot.position.set(kx - 1.7, R.y + 0.11, wallZ + inward * 1.0);
+  k.world.addProp(foot);
+  // the console on a shelf on the far wall — the one thing in this room a
+  // parent takes away, so it goes up as its own hideable object
+  const cs = wallSpot(k, R, 'w', R.z + inward * 0.7, 0.62, { inset: 0.16 });
+  if (cs) {
+    wallShelf(k, cs[0], R.y + 1.15, cs[1], { rotY: cs[2], w: 1.2, d: 0.3, items: 0 });
+    gamesConsole(k, cs[0] + 0.02 * Math.sin(cs[2]), R.y + 1.175, cs[1] + 0.02 * Math.cos(cs[2]),
+      { rotY: cs[2], room: R.name, owner: 'james', led: 0x2f6fb5 });
+  }
+}
+
+/**
+ * The homework corner.  bedroom() already stands the desk under the window
+ * and the chair in front of it — the chair carries the seat interactable —
+ * and this is what is on and around it.  The chair's position is published so
+ * the game can sit a child down at it and help with the spellings.
+ */
+function homeworkDesk(k, R, owner, inward, wallZ) {
+  const kx = R.x + R.w / 2 - 1.4;                 // matches the desk in bedroom()
+  const dz = wallZ + inward * 0.55;               // the desk's own centre
+  const ty = R.y + 0.765;                         // and its top
+  const face = inward > 0 ? Math.PI : 0;          // the way a child at it looks
+  const small = owner === 'chloie';
+  openBook(k, kx + 0.02, ty, dz + inward * 0.12, { rotY: face, color: small ? 0x8d5ea8 : 0x2f4f6b });
+  pencilPot(k, kx + 0.24, ty, dz + inward * 0.14, { crayon: small, color: small ? 0xe86fa8 : 0x9aa8b4 });
+  if (small) {
+    // her own drawings taped over the desk: this end of the window wall is
+    // solid plaster — the room's one pane is away at the other end of it
+    for (let i = 0; i < 3; i++) {
+      poster(k, kx - 0.3 + i * 0.44, R.y + 1.62 + (i % 2) * 0.44, wallZ + inward * 0.1,
+        { rotY: face + Math.PI, w: 0.3, h: 0.38, seed: 60 + i, hue: 0.78 + i * 0.07 });
+    }
+  }
+  // each of them has a screen of their own on the desk — hers instead of a
+  // console, his alongside one — and it is the thing that gets taken away
+  tablet(k, kx - 0.26, ty, dz + inward * 0.1, { rotY: face, owner, room: R.name });
+  schoolBag(k, kx - 0.95, R.y, dz + inward * 0.45, { rotY: face, color: small ? 0xb56fa8 : 0x2f6fb5 });
+  k.world.spot(`${owner}Desk`, kx, R.y, wallZ + inward * 1.3, { rotY: face });
 }
 
 // Chloie: canopy, soft toys, drawings taped to the wall.
@@ -493,6 +579,8 @@ function chloieRoom(k, R, rng, C) {
   softToy(k, tx, R.y + 0.47, tz, { scale: 0.7, color: 0xf0b429 });
   // fairy lights strung above the window
   k.box(Math.min(3.4, R.w - 2), 0.03, 0.03, k.M.emissive(0xffe0b0, 1.2), R.x, R.y + 2.5, wallZ + inward * 0.16, { tile: 0.2 });
+  // she does her homework here too — crayons rather than a tablet
+  homeworkDesk(k, R, 'chloie', inward, wallZ);
   k.world.spot('chloiePlay', tx, R.y, tz);
 }
 
@@ -777,6 +865,21 @@ function kitchen(k, R, rng) {
   if (cl) wallClock(k, cl[0], R.y + 2.4, cl[1], cl[2], { hour: 8, minute: 15, d: 0.4 });
   const ar = wallSpot(k, R, 'n', R.x - 3.4, 0.8);
   if (ar) artwork(k, ar[0], R.y + 2.0, ar[1], 1.0, 0.7, ar[2], 0x6b5b45);
+
+  // ── cooking together ─────────────────────────────────────────────────────
+  // Two of you at one island: the board and the recipe at the east end, the
+  // bowl and the utensils at the west, the sink between them.  The barstools
+  // are on the south face, so the cooks work the north one — which is where
+  // the runner is, and where there is 1.6 m between them.
+  const ix = R.x - 0.6, iz = R.z - 1.0, iy = R.y + 0.95;       // the island worktop
+  choppingBoard(k, ix + 0.85, iy, iz + 0.25, { rotY: 0 });
+  openBook(k, ix + 1.3, iy, iz - 0.25, { rotY: 0, stand: true, color: 0x8c3b3b, w: 0.16 });
+  mixingBowl(k, ix - 1.25, iy, iz + 0.3, { color: 0xdfe3e8 });
+  utensilCrock(k, ix - 1.55, iy, iz - 0.3, {});
+  // something on the hob: a front burner of the range, which faces the room
+  cookPot(k, R.x + 1.5, R.y + 0.96, backZ - 0.16, {});
+  k.world.spot('cookA', ix - 0.9, R.y, iz - 1.35, { rotY: 0 });
+  k.world.spot('cookB', ix + 0.7, R.y, iz - 1.35, { rotY: 0 });
   void rng;
 }
 
@@ -788,12 +891,24 @@ function dining(k, R, rng) {
   k.p(b, 0, 0.74, 0, 3.0, 0.08, 1.3, M.get('walnut'), 1.2);
   for (const [ox, oz] of [[-1.3, -0.5], [1.3, -0.5], [-1.3, 0.5], [1.3, 0.5]]) k.p(b, ox, 0.37, oz, 0.12, 0.74, 0.12, M.get('walnut'), 0.5);
   k.pc(b, 0, 0.4, 0, 3.0, 0.8, 1.3);
+  // Every chair carries its own seat interactable (diningChair does that), and
+  // the whole ring is collected for `world.diningSet.seats` — the four middle
+  // places first, because those are the four that get laid.
+  const laid = [], spare = [];
   for (let i = 0; i < 4; i++) {
-    diningChair(k, R.x - 1.1 + i * 0.73, R.y, R.z - 1.05, { rotY: 0 });
-    diningChair(k, R.x - 1.1 + i * 0.73, R.y, R.z + 1.05, { rotY: Math.PI });
+    const cx = R.x - 1.1 + i * 0.73;
+    for (const s of [-1, 1]) {
+      const rotY = s < 0 ? 0 : Math.PI;                 // always facing the table
+      diningChair(k, cx, R.y, R.z + s * 1.05, { rotY });
+      (i === 1 || i === 2 ? laid : spare).push({ pos: V(cx, R.y, R.z + s * 1.05), rotY });
+    }
   }
-  diningChair(k, R.x - 1.9, R.y, R.z, { rotY: -Math.PI / 2 });
-  diningChair(k, R.x + 1.9, R.y, R.z, { rotY: Math.PI / 2 });
+  // the two carvers, turned in: at ∓π/2 they sat looking at the wall
+  for (const s of [-1, 1]) {
+    const rotY = s < 0 ? Math.PI / 2 : -Math.PI / 2;
+    diningChair(k, R.x + s * 1.9, R.y, R.z, { rotY });
+    spare.push({ pos: V(R.x + s * 1.9, R.y, R.z), rotY });
+  }
   // centrepiece + chandelier
   vase(k, R.x, R.y + 0.78, R.z, { scale: 1.2, color: 0xc9d4cb });
   for (let i = 0; i < 3; i++) {
@@ -842,6 +957,88 @@ function dining(k, R, rng) {
   dressWindows(k, R, 'n', 0xa8b2bb, 3.0);
   plant(k, R.x + R.w / 2 - 1.2, R.y, R.z - R.d / 2 + 1.4, 1.5);
   wastebasket(k, R.x - R.w / 2 + 0.9, R.y, R.z - R.d / 2 + 1.0, {});
+
+  // ── the family sits down ─────────────────────────────────────────────────
+  layTable(k, R, laid, spare);
+  partyKit(k, R, cab);
+}
+
+/**
+ * The table laid.  Four places — the middle chair either side, which is where
+ * four people actually sit — plus what goes down the middle of the table.  It
+ * all lives in one group so the game can lay the table and clear it again.
+ */
+function layTable(k, R, laid, spare) {
+  const ty = R.y + 0.78;                                  // the top of the table
+  const grp = grouped(k, 'diningSet', () => {
+    for (const s of laid) {
+      // a setting sits 0.63 m in front of its chair, the way that chair faces
+      placeSetting(k, s.pos.x + Math.sin(s.rotY) * 0.63, ty, s.pos.z + Math.cos(s.rotY) * 0.63,
+        { rotY: s.rotY, napkin: 0xc9d4cb });
+    }
+    // down the centre, clear of the vase at the middle and the cake's corner
+    jug(k, R.x - 1.15, ty, R.z, {});
+    servingDish(k, R.x - 0.72, ty, R.z, { food: 0xc9873f });
+    servingDish(k, R.x + 0.72, ty, R.z, { w: 0.3, d: 0.22, food: 0x6b7a54, lid: false });
+  });
+  k.world.diningSet = { group: grp, seats: [...laid, ...spare] };
+}
+
+/**
+ * The birthday box.  Nobody wants bunting up all year, so the whole party is
+ * one hidden group the game raises and strikes.  Nothing in it stands on the
+ * floor — the cake and the presents sit on furniture that already carries a
+ * collider, the rest is overhead — so it adds no collision of its own.
+ */
+function partyKit(k, R, cab) {
+  const ty = R.y + 0.78;
+  const cakeAt = V(R.x + 1.18, ty, R.z);
+  const grp = grouped(k, 'party', () => {
+    // two swags across the room, either side of the chandelier
+    for (const s of [-1, 1]) bunting(k, R.x, R.y + 2.95, R.z + s * 2.3, R.w - 0.5, { n: 14, sag: 0.34 });
+    // a cluster tied to the back of each carver chair
+    for (const s of [-1, 1]) balloons(k, R.x + s * 2.1, R.y + 1.05, R.z, { n: 5, h: 1.05, seed: s < 0 ? 0 : 2 });
+    // the banner goes on the pantry wall, which is the one this room looks
+    // down; failing that, high on the facade above the window heads
+    const wall = wallSpot(k, R, 'e', R.z, 1.3, { inset: 0.05 });
+    if (wall) banner(k, wall[0], R.y + 2.2, wall[1], { rotY: wall[2], w: 2.4 });
+    else {
+      const nw = wallSpot(k, R, 'n', R.x, 1.3, { windows: true, inset: 0.05 });
+      if (nw) banner(k, nw[0], R.y + 3.1, nw[1], { rotY: nw[2], w: 2.4 });
+    }
+    // the cake, at the end of the table nobody is sitting at
+    cake(k, cakeAt.x, ty, cakeAt.z, { candles: 8 });
+    // hats and cups: one of each per laid place, the spare hats at the ends
+    for (let i = 0; i < 4; i++) {
+      const px = R.x - 0.37 + (i % 2) * 0.73, s = i < 2 ? -1 : 1;
+      // the cup goes above the fork — the setting's own glass has the other side
+      paperCup(k, px - s * 0.19, ty, R.z + s * 0.23, { color: [0xe23b57, 0xf5c518, 0x2f81ff, 0x6ab04c][i] });
+      partyHat(k, px, ty, R.z + s * 0.6, { color: [0xf5c518, 0xe86fa8, 0x6ab04c, 0xe23b57][i], lying: i % 2 === 0 });
+    }
+    for (const s of [-1, 1]) partyHat(k, R.x - 1.34, ty, R.z + s * 0.45, { color: 0x2f81ff, lying: s < 0 });
+    // presents on the serving cabinet, or on the sideboard if there isn't one
+    if (cab) {
+      presents(k, cab[0], R.y + 0.885, cab[1] - 0.78, { rotY: cab[2], n: 3 });
+      presents(k, cab[0], R.y + 0.885, cab[1] + 0.8, { rotY: cab[2], n: 1, w: 0.26, seed: 2 });
+    } else {
+      presents(k, R.x - 0.95, R.y + 0.9, R.z - R.d / 2 + 0.5, { n: 3 });
+    }
+  });
+  grp.visible = false;
+  // eight candles are a real light source: a small warm pool that only burns
+  // while the cake is out
+  const candlelight = k.world.addLight({
+    pos: V(cakeAt.x, ty + 0.34, cakeAt.z),
+    color: 0xffb96a, intensity: 1.7, distance: 2.8, on: false,
+  });
+  k.world.party = {
+    group: grp,
+    cakeSpot: cakeAt,
+    show(on) {
+      grp.visible = on !== false;
+      candlelight.on = grp.visible;
+    },
+  };
 }
 
 function library(k, R, rng) {

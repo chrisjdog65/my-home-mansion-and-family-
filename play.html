@@ -27007,7 +27007,7 @@ var GROUND_ROOMS = [
     open: true,
     tall: true
   },
-  { name: "Dining Hall", ...N(6, 17), floor: "walnutFloor", wall: 5982799, doors: [d("s", 0, 2.6), d("w", 0, 1.6)], type: "dining" },
+  { name: "Dining Hall", ...N(6, 17), floor: "walnutFloor", wall: 7034460, doors: [d("s", 0, 2.6), d("w", 0, 1.6)], type: "dining" },
   { name: "Butler's Pantry", ...N(17, 21), floor: "tile", wall: 14340803, doors: [d("s", 0, 1)], type: "pantry" },
   { name: "Garage", ...N(21, 30), floor: "polishedConcrete", wall: 12567752, doors: [d("s", 0, 1.1), d("w", 0, 1.1)], type: "garage", garageDoors: true },
   { name: "Great Room", ...S(-30, -18), floor: "oakFloor", wall: 15130320, doors: [d("n", 4.4, 2.6)], type: "great", tall: true, glassSouth: true },
@@ -27278,7 +27278,9 @@ var ROOM_LIGHT = {
   great: { color: 16768180, i: 17, per: 27, cap: 6, wash: 16765088, wi: 4.6, g: WARM },
   family: { color: 16768180, i: 15, per: 27, cap: 5, wash: 16765088, wi: 4.4, g: WARM },
   library: { color: 16766628, i: 13, per: 30, cap: 4, wash: 16763024, wi: 4.4, g: WARM },
-  dining: { color: 16768176, i: 14, per: 28, cap: 4, wash: 16764830, wi: 4.4, g: WARM },
+  // the dining hall is nearly as big as the great room and painted far darker,
+  // so it needs the same number of fittings, not a small room's four
+  dining: { color: 16768176, i: 16, per: 22, cap: 6, wash: 16764830, wi: 5, g: WARM },
   foyer: { color: 16769724, i: 15, per: 30, cap: 6, wash: 16767150, wi: 4.2, g: WARM },
   stairhall: { color: 16769724, i: 14, per: 30, cap: 6, wash: 16767150, wi: 4.2, g: WARM },
   // work surfaces and mirrors want it cooler and brighter than the sitting rooms
@@ -29188,6 +29190,88 @@ function range(k, x, y, z, o = {}) {
   });
   k.pc(b, 0, 0.45, 0, 1.1, 0.95, 0.68);
 }
+function cookPot(k, x, y, z, o = {}) {
+  const M = k.M, w = o.w ?? 0.28, h = o.h ?? 0.17;
+  const body = o.mat || M.get("steel");
+  k.box(w, h, w, body, x, y + h / 2, z, { tile: 0.2 });
+  k.box(w + 0.02, 0.02, w + 0.02, body, x, y + h + 0.01, z, { tile: 0.2 });
+  k.box(0.05, 0.035, 0.05, M.get("blackMetal"), x, y + h + 0.035, z, { tile: 0.1 });
+  for (const s of [-1, 1]) {
+    k.box(0.05, 0.025, 0.03, M.get("blackMetal"), x + s * (w / 2 + 0.025), y + h * 0.72, z, { tile: 0.1 });
+  }
+}
+function utensilCrock(k, x, y, z, o = {}) {
+  const M = k.M, n = o.n ?? 5, lean = 0.16;
+  k.box(0.13, 0.19, 0.13, M.paint(o.color ?? 14208958, 0.5, "crock"), x, y + 0.095, z, { tile: 0.15 });
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2, cx2 = Math.cos(a), cz2 = Math.sin(a);
+    k.box(
+      0.022,
+      0.32,
+      0.022,
+      M.get("maple"),
+      x + cx2 * 0.04,
+      y + 0.3,
+      z + cz2 * 0.04,
+      { rotZ: -cx2 * lean, rotX: cz2 * lean, tile: 0.1 }
+    );
+    k.box(
+      i % 2 ? 0.05 : 0.07,
+      0.055,
+      i % 2 ? 0.03 : 0.06,
+      M.get("maple"),
+      x + cx2 * 0.066,
+      y + 0.455,
+      z + cz2 * 0.066,
+      { tile: 0.1 }
+    );
+  }
+}
+function mixingBowl(k, x, y, z, o = {}) {
+  const s = o.scale ?? 1, M = k.M;
+  const glaze = M.paint(o.color ?? 14672872, 0.45, `mixbowl${o.color ?? 0}`);
+  k.box(0.2 * s, 0.05 * s, 0.2 * s, glaze, x, y + 0.025 * s, z, { tile: 0.15 });
+  k.box(0.28 * s, 0.08 * s, 0.28 * s, glaze, x, y + 0.09 * s, z, { tile: 0.15 });
+  k.box(0.24 * s, 0.02 * s, 0.24 * s, M.paint(o.batter ?? 15786688, 0.75, "batter"), x, y + 0.125 * s, z, { tile: 0.15 });
+  if (o.spoon !== false) {
+    k.box(
+      0.024,
+      0.26 * s,
+      0.024,
+      M.get("maple"),
+      x + 0.1 * s,
+      y + 0.22 * s,
+      z - 0.03 * s,
+      { rotZ: -0.55, rotX: 0.16, tile: 0.1 }
+    );
+  }
+}
+function choppingBoard(k, x, y, z, o = {}) {
+  const M = k.M, b = B(x, y, z, o.rotY || 0);
+  const w = o.w ?? 0.44, d2 = o.d ?? 0.32;
+  k.p(b, 0, 0.015, 0, w, 0.03, d2, o.board || M.get("maple"), 0.3);
+  if (o.veg === false) return b;
+  const veg = [13923884, 6991948, 13644844, 15787720];
+  for (let i = 0; i < veg.length; i++) {
+    k.p(
+      b,
+      -w / 2 + 0.09 + i * ((w - 0.18) / 3),
+      0.055,
+      0.05 - i % 2 * 0.09,
+      0.055,
+      0.05,
+      0.13,
+      M.solid(veg[i], 0.6),
+      0.1
+    );
+  }
+  for (let i = 0; i < 4; i++) {
+    k.p(b, w / 2 - 0.05 - i * 0.04, 0.04, -d2 / 2 + 0.07, 0.032, 0.018, 0.055, M.solid(veg[0], 0.6), 0.1);
+  }
+  k.p(b, 0.03, 0.036, d2 / 2 - 0.05, 0.2, 0.012, 0.03, M.get("chrome"), 0.1);
+  k.p(b, -0.15, 0.041, d2 / 2 - 0.05, 0.09, 0.022, 0.026, M.get("blackMetal"), 0.1);
+  return b;
+}
 function vanity(k, x, y, z, o = {}) {
   const b = B(x, y, z, o.rotY || 0), M = k.M;
   const w = o.w || 1.5;
@@ -29270,10 +29354,10 @@ var _be = new Euler();
 var _bq = new Quaternion();
 var _bp = new Vector3();
 var _bs = new Vector3(1, 1, 1);
-function batched(k, geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) {
+function batched(k, geo, mat, x, y, z, rx = 0, ry = 0, rz = 0, s = 1) {
   _be.set(rx, ry, rz);
   _bq.setFromEuler(_be);
-  _bm.compose(_bp.set(x, y, z), _bq, _bs);
+  _bm.compose(_bp.set(x, y, z), _bq, _bs.set(s, s, s));
   k.B.add(geo, mat, _bm);
 }
 function artwork(k, x, y, z, w, h, rotY, color) {
@@ -29651,6 +29735,231 @@ function boardGame(k, x, y, z, o = {}) {
     );
   }
 }
+function placeSetting(k, x, y, z, o = {}) {
+  const M = k.M, b = B(x, y, z, o.rotY || 0);
+  const china = M.paint(o.china ?? 16250352, 0.32, "china");
+  const steel = M.get("chrome");
+  k.p(b, 0, 7e-3, 0, 0.26, 0.014, 0.26, china, 0.2);
+  k.p(b, 0, 0.019, -0.01, 0.17, 0.012, 0.17, china, 0.2);
+  k.p(b, 0.19, 6e-3, 0, 0.022, 0.012, 0.17, steel, 0.1);
+  k.p(b, -0.19, 6e-3, 0, 0.022, 0.012, 0.17, steel, 0.1);
+  k.p(b, -0.19, 0.055, 0.19, 0.06, 0.11, 0.06, M.get("glass"), 0.1);
+  k.p(b, 0.21, 0.014, 0.17, 0.11, 0.026, 0.13, M.paint(o.napkin ?? 14148584, 0.94, "napkin"), 0.2);
+  return b;
+}
+function servingDish(k, x, y, z, o = {}) {
+  const M = k.M, w = o.w ?? 0.34, d2 = o.d ?? 0.24;
+  const china = M.paint(o.china ?? 16250352, 0.32, "china");
+  k.box(w, 0.05, d2, china, x, y + 0.025, z, { rotY: o.rotY || 0, tile: 0.2 });
+  k.box(
+    w - 0.06,
+    0.045,
+    d2 - 0.06,
+    M.paint(o.food ?? 13207359, 0.75, "servingfood"),
+    x,
+    y + 0.07,
+    z,
+    { rotY: o.rotY || 0, tile: 0.2 }
+  );
+  if (o.lid !== false) {
+    k.box(w - 0.02, 0.06, d2 - 0.02, china, x, y + 0.1, z, { rotY: o.rotY || 0, tile: 0.2 });
+    k.box(0.05, 0.035, 0.05, M.get("gold"), x, y + 0.145, z, { tile: 0.1 });
+  }
+}
+function jug(k, x, y, z, o = {}) {
+  const M = k.M, b = B(x, y, z, o.rotY || 0), s = o.scale ?? 1;
+  const gl = o.mat || M.get("glass");
+  k.p(b, 0, 0.11 * s, 0, 0.14 * s, 0.22 * s, 0.14 * s, gl, 0.15);
+  k.p(b, 0, 0.085 * s, 0, 0.115 * s, 0.15 * s, 0.115 * s, M.paint(o.fill ?? 15246141, 0.4, "juice"), 0.15);
+  k.p(b, 0, 0.235 * s, 0.07 * s, 0.09 * s, 0.03 * s, 0.05 * s, gl, 0.1);
+  k.p(b, 0, 0.15 * s, -0.1 * s, 0.02 * s, 0.13 * s, 0.025 * s, gl, 0.1);
+  for (const oy of [0.09, 0.21]) k.p(b, 0, oy * s, -0.08 * s, 0.02 * s, 0.02 * s, 0.05 * s, gl, 0.1);
+}
+function openBook(k, x, y, z, o = {}) {
+  const M = k.M, r = o.rotY || 0, w = o.w ?? 0.17, d2 = o.d ?? 0.23;
+  const tilt = o.stand ? o.tilt ?? -0.85 : 0;
+  const lift = o.stand ? 0.11 : 0;
+  const page = M.paint(16250350, 0.85, "page");
+  const cover = M.paint(o.color ?? 3100523, 0.7, `cover${o.color ?? 0}`);
+  const put = (oy, oz, bw, bh, bd, mat, rz = 0) => {
+    const c = Math.cos(tilt), s2 = Math.sin(tilt);
+    const wy = y + lift + oy * c - oz * s2, wo = oy * s2 + oz * c;
+    k.box(
+      bw,
+      bh,
+      bd,
+      mat,
+      x + Math.sin(r) * wo,
+      wy,
+      z + Math.cos(r) * wo,
+      { rotY: r, rotX: tilt, rotZ: rz, tile: 0.15 }
+    );
+  };
+  put(4e-3, 0, w * 2 + 0.02, 0.014, d2, cover);
+  for (const s of [-1, 1]) put(0.017, 0, w, 0.012, d2 - 0.02, page, s * 0.05);
+  for (const s of [-1, 1]) {
+    k.box(
+      w * 0.9,
+      4e-3,
+      d2 - 0.06,
+      M.solid(14670284, 0.9),
+      x + Math.sin(r) * (0.026 * Math.sin(tilt)) + Math.cos(r) * s * (w / 2 + 5e-3),
+      y + lift + 0.026 * Math.cos(tilt),
+      z + Math.cos(r) * (0.026 * Math.sin(tilt)) - Math.sin(r) * s * (w / 2 + 5e-3),
+      { rotY: r, rotX: tilt, tile: 0.1 }
+    );
+  }
+  if (o.stand) {
+    k.box(w * 1.5, 0.02, 0.2, M.get("maple"), x, y + 0.01, z, { rotY: r, tile: 0.15 });
+    k.box(
+      w * 1.5,
+      0.09,
+      0.02,
+      M.get("maple"),
+      x - Math.sin(r) * 0.095,
+      y + 0.045,
+      z - Math.cos(r) * 0.095,
+      { rotY: r, tile: 0.15 }
+    );
+  }
+}
+var PARTY = [14826327, 16106776, 3113471, 6991948, 15232936];
+var PARTY_R = 0.85;
+function cake(k, x, y, z, o = {}) {
+  const M = k.M, n = o.candles ?? 8;
+  const ice = M.paint(o.icing ?? 16181232, 0.55, "icing");
+  const sponge = M.paint(9067322, 0.85, "sponge");
+  k.box(0.36, 0.02, 0.36, M.paint(15262939, 0.3, "cakestand"), x, y + 0.01, z, { tile: 0.2 });
+  k.box(0.3, 0.07, 0.3, sponge, x, y + 0.055, z, { tile: 0.2 });
+  k.box(0.31, 0.03, 0.31, ice, x, y + 0.105, z, { tile: 0.2 });
+  k.box(0.19, 0.06, 0.19, sponge, x, y + 0.15, z, { tile: 0.2 });
+  k.box(0.2, 0.025, 0.2, ice, x, y + 0.192, z, { tile: 0.2 });
+  const flame = M.emissive(16757575, 2.4);
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2, cx2 = x + Math.cos(a) * 0.07, cz2 = z + Math.sin(a) * 0.07;
+    k.box(0.014, 0.09, 0.014, M.solid(PARTY[i % PARTY.length], PARTY_R), cx2, y + 0.25, cz2, { tile: 0.1 });
+    k.box(0.02, 0.035, 0.02, flame, cx2, y + 0.312, cz2, { tile: 0.1 });
+  }
+}
+function balloons(k, x, y, z, o = {}) {
+  const M = k.M, n = o.n ?? 5, h = o.h ?? 1.1;
+  const geo = new SphereGeometry(0.15, 10, 7);
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2 + 0.4, spread = 0.16 + i % 2 * 0.12;
+    const bx = x + Math.cos(a) * spread, bz = z + Math.sin(a) * spread;
+    const by = y + h + i % 3 * 0.15, s = 0.9 + i % 2 * 0.16;
+    const col = M.solid(PARTY[(i + (o.seed ?? 0)) % PARTY.length], PARTY_R);
+    batched(k, geo, col, bx, by, bz, 0, 0, 0, s);
+    k.box(0.03, 0.04, 0.03, col, bx, by - 0.15 * s, bz, { tile: 0.1 });
+    const dy = by - 0.17 * s - y;
+    k.box(
+      8e-3,
+      dy,
+      8e-3,
+      M.solid(15262422, 0.9),
+      (x + bx) / 2,
+      y + dy / 2,
+      (z + bz) / 2,
+      { rotZ: -Math.atan2(bx - x, dy), rotX: Math.atan2(bz - z, dy), tile: 0.1 }
+    );
+  }
+  geo.dispose();
+}
+function bunting(k, x, y, z, len, o = {}) {
+  const M = k.M, n = o.n ?? 12, sag = o.sag ?? 0.3, r = o.rotY || 0;
+  const cord = M.solid(15262422, 0.9);
+  const at = (t) => -Math.sin(Math.PI * t) * sag;
+  for (let i = 0; i < n; i++) {
+    const t0 = i / n, t1 = (i + 1) / n;
+    const ox0 = (t0 - 0.5) * len, ox1 = (t1 - 0.5) * len;
+    const y0 = at(t0), y1 = at(t1);
+    const [cx2, cz2] = k.L((ox0 + ox1) / 2, 0, x, z, r);
+    k.box(
+      Math.hypot(ox1 - ox0, y1 - y0),
+      0.012,
+      0.012,
+      cord,
+      cx2,
+      y + (y0 + y1) / 2,
+      cz2,
+      { rotY: r, rotZ: Math.atan2(y1 - y0, ox1 - ox0), tile: 0.1 }
+    );
+    k.box(
+      0.13,
+      0.17,
+      8e-3,
+      M.solid(PARTY[i % PARTY.length], PARTY_R),
+      cx2,
+      y + (y0 + y1) / 2 - 0.09,
+      cz2,
+      { rotY: r, tile: 0.12 }
+    );
+  }
+}
+function presents(k, x, y, z, o = {}) {
+  const M = k.M, n = o.n ?? 3, rib = M.solid(16181192, 0.6);
+  let yy = y;
+  for (let i = 0; i < n; i++) {
+    const w = (o.w ?? 0.34) * (1 - i * 0.2), h = 0.14 - i * 0.02, d2 = w * 0.78;
+    const r = (o.rotY || 0) + (i % 2 ? 0.22 : -0.16);
+    const col = PARTY[(i + (o.seed ?? 0)) % PARTY.length];
+    k.box(w, h, d2, M.paint(col, 0.7, `wrap${col}`), x, yy + h / 2, z, { rotY: r, tile: 0.25 });
+    k.box(w + 6e-3, h + 6e-3, 0.035, rib, x, yy + h / 2, z, { rotY: r, tile: 0.1 });
+    k.box(0.035, h + 6e-3, d2 + 6e-3, rib, x, yy + h / 2, z, { rotY: r, tile: 0.1 });
+    yy += h;
+    if (i === n - 1) {
+      for (const s of [-1, 1]) k.box(0.09, 0.04, 0.05, rib, x + Math.cos(r) * s * 0.05, yy + 0.02, z - Math.sin(r) * s * 0.05, { rotY: r, tile: 0.1 });
+      k.box(0.04, 0.05, 0.04, rib, x, yy + 0.025, z, { rotY: r, tile: 0.1 });
+    }
+  }
+  return yy;
+}
+function partyHat(k, x, y, z, o = {}) {
+  const M = k.M, col = M.solid(o.color ?? PARTY[0], PARTY_R);
+  const cone = new ConeGeometry(0.06, 0.18, 8, 1, true);
+  if (o.lying) batched(k, cone, col, x, y + 0.06, z, 0, 0, Math.PI / 2);
+  else batched(k, cone, col, x, y + 0.09, z);
+  cone.dispose();
+}
+function paperCup(k, x, y, z, o = {}) {
+  const M = k.M, col = M.solid(o.color ?? PARTY[1], PARTY_R);
+  const cup = new CylinderGeometry(0.037, 0.027, 0.095, 8, 1, true);
+  batched(k, cup, col, x, y + 0.048, z);
+  cup.dispose();
+  k.box(0.06, 0.01, 0.06, M.paint(15246141, 0.5, "squash"), x, y + 0.075, z, { tile: 0.1 });
+}
+function banner(k, x, y, z, o = {}) {
+  const M = k.M, w = o.w ?? 2.4, h = o.h ?? 0.46, r = o.rotY || 0;
+  const text = (o.text || "HAPPY BIRTHDAY").toUpperCase();
+  const mat = panelMaterial(M, `banner:${text}`, 512, 96, (c, cw, ch) => {
+    c.fillStyle = "#f6efe1";
+    c.fillRect(0, 0, cw, ch);
+    const cols = ["#e23b57", "#f5c518", "#2f81ff", "#6ab04c", "#e86fa8"];
+    for (let i = 0; i < 16; i++) {
+      c.fillStyle = cols[i % cols.length];
+      c.fillRect(i * (cw / 16) + 1, 0, cw / 16 - 2, 9);
+      c.fillRect(i * (cw / 16) + 1, ch - 9, cw / 16 - 2, 9);
+    }
+    c.fillStyle = "#b3352a";
+    c.font = 'bold 44px Georgia, "Times New Roman", serif';
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    c.fillText(text, cw / 2, ch / 2 + 2);
+  }, { roughness: 0.9 });
+  k.box(w, h, 0.014, mat, x, y, z, { rotY: r });
+  for (const s of [-1, 1]) {
+    k.box(
+      0.035,
+      0.035,
+      0.02,
+      M.get("gold"),
+      x + Math.cos(r) * s * (w / 2 - 0.07),
+      y + h / 2 - 0.05,
+      z - Math.sin(r) * s * (w / 2 - 0.07),
+      { rotY: r, tile: 0.1 }
+    );
+  }
+}
 function toyBox(k, x, y, z, o = {}) {
   const b = B(x, y, z, o.rotY || 0), M = k.M, rng = k.rng;
   const w = o.w ?? 0.9, d2 = o.d ?? 0.5, h = o.h ?? 0.5;
@@ -29715,6 +30024,96 @@ function trophyShelf(k, x, y, z, o = {}) {
     k.p(b, ox, 0.12 * s + 0.05, 0, 0.04, 0.1 * s, 0.04, gold, 0.2);
     k.p(b, ox, 0.22 * s + 0.05, 0, 0.13 * s, 0.13 * s, 0.1 * s, gold, 0.2);
   }
+}
+function pencilPot(k, x, y, z, o = {}) {
+  const M = k.M, n = o.n ?? 6, lean = 0.13;
+  const hues = o.crayon ? [13644844, 3113471, 15774761, 6991948, 15232936, 9067418] : [15774761, 3100523, 9190203, 4152378, 7033648, 2829099];
+  k.box(0.09, 0.11, 0.09, M.paint(o.color ?? 10135732, 0.5, "pencilpot"), x, y + 0.055, z, { tile: 0.12 });
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2, cx2 = Math.cos(a), cz2 = Math.sin(a);
+    const t = o.crayon ? 0.016 : 0.01;
+    k.box(
+      t,
+      0.17,
+      t,
+      M.solid(hues[i % hues.length], 0.6),
+      x + cx2 * 0.022,
+      y + 0.14,
+      z + cz2 * 0.022,
+      { rotZ: -cx2 * lean, rotX: cz2 * lean, tile: 0.08 }
+    );
+  }
+}
+function schoolBag(k, x, y, z, o = {}) {
+  const M = k.M, b = B(x, y, z, o.rotY || 0);
+  const w = o.w ?? 0.34, h = o.h ?? 0.42, d2 = o.d ?? 0.22;
+  const col = o.color ?? 3100523;
+  const cloth = M.paint(col, 0.9, `bag${col}`);
+  const trim = M.paint(shade(col, 0.7), 0.9, `bagtrim${col}`);
+  k.p(b, 0, h / 2, 0, w, h, d2, cloth, 0.3);
+  k.p(b, 0, h * 0.3, d2 / 2 + 0.02, w - 0.08, h * 0.42, 0.05, trim, 0.25);
+  k.p(b, 0, h - 0.03, 0.02, w - 0.06, 0.06, d2 + 0.04, trim, 0.25);
+  k.p(b, 0, h * 0.5, d2 / 2 + 0.045, 0.05, 0.04, 0.02, M.get("chrome"), 0.1);
+  for (const s of [-1, 1]) k.p(b, s * (w / 2 - 0.07), h * 0.55, -d2 / 2 - 0.02, 0.05, h * 0.7, 0.04, trim, 0.25);
+  k.pc(b, 0, h / 2, 0, w + 0.06, h, d2 + 0.1);
+  return b;
+}
+function tablet(k, x, y, z, o = {}) {
+  const M = k.M, r = o.rotY || 0, w = o.w ?? 0.19, d2 = o.d ?? 0.26;
+  if (!o.owner) {
+    k.box(w, 0.012, d2, M.get("blackMetal"), x, y + 6e-3, z, { rotY: r, tile: 0.1 });
+    k.box(w - 0.02, 4e-3, d2 - 0.025, M.get("carGlass"), x, y + 0.014, z, { rotY: r, tile: 0.1 });
+    return null;
+  }
+  const grp = new Group();
+  grp.name = "tablet";
+  const prev = k.B;
+  k.B = new Batcher("tablet");
+  const b = B(x, y, z, r);
+  try {
+    k.p(b, 0, 6e-3, 0, w, 0.012, d2, M.get("blackMetal"), 0.1);
+    k.p(b, 0, 0.014, 0, w - 0.02, 4e-3, d2 - 0.025, M.get("carGlass"), 0.1);
+  } finally {
+    k.B.flush(grp);
+    k.B = prev;
+  }
+  k.world.addProp(grp);
+  screenTime(k.world).push({ mesh: grp, pos: new Vector3(x, y, z), room: o.room || null, owner: o.owner });
+  return grp;
+}
+function screenTime(world) {
+  return world.consoles || (world.consoles = []);
+}
+function gamesConsole(k, x, y, z, o = {}) {
+  const M = k.M, b = B(x, y, z, o.rotY || 0);
+  const grp = new Group();
+  grp.name = "console";
+  const prev = k.B;
+  k.B = new Batcher("console");
+  try {
+    const shell = M.paint(1777445, 0.4, "consoleshell");
+    const trim = M.get("darkPlastic");
+    k.p(b, 0, 0.05, 0, 0.36, 0.1, 0.26, shell, 0.25);
+    k.p(b, 0, 0.102, -0.03, 0.3, 0.014, 0.16, trim, 0.2);
+    k.p(b, 0, 0.05, 0.132, 0.2, 0.012, 0.02, M.get("chrome"), 0.1);
+    k.p(b, 0.14, 0.062, 0.133, 0.022, 0.022, 0.012, M.emissive(o.led ?? 5227511, 1.8), 0.1);
+    const cx2 = o.padAt ?? 0.31;
+    k.p(b, cx2, 0.022, 0, 0.15, 0.044, 0.09, trim, 0.15);
+    for (const s of [-1, 1]) k.p(b, cx2 + s * 0.08, 0.022, 0.05, 0.07, 0.044, 0.1, trim, 0.15);
+    for (const s of [-1, 1]) k.p(b, cx2 + s * 0.04, 0.05, -0.012, 0.03, 0.016, 0.03, M.get("chrome"), 0.1);
+    k.p(b, cx2, 0.047, 0.03, 0.05, 0.012, 0.03, M.emissive(16777215, 0.5), 0.1);
+  } finally {
+    k.B.flush(grp);
+    k.B = prev;
+  }
+  k.world.addProp(grp);
+  screenTime(k.world).push({
+    mesh: grp,
+    pos: new Vector3(x, y, z),
+    room: o.room || null,
+    owner: o.owner || null
+  });
+  return grp;
 }
 function dressingTable(k, x, y, z, o = {}) {
   const b = B(x, y, z, o.rotY || 0), M = k.M;
@@ -30345,6 +30744,12 @@ function gamingRoom(k, R, id) {
   world.addProp(gtv);
   const gScreen = { mesh: gtv, mat: tvMat, on: false, kind: "tv" };
   world.screens.push(gScreen);
+  const plX = x - R.w / 2 + 0.42;
+  B2.box(0.5, 0.46, 1.7, M.paint(1316637, 0.5, "mediaunit"), plX, y + 0.23, z, { tile: 0.5 });
+  B2.box(0.56, 0.05, 1.76, M.get("blackMetal"), plX, y + 0.48, z, { tile: 0.4 });
+  B2.box(0.44, 0.03, 1.5, M.emissive(rgb2[id % 4], 0.9), plX + 0.04, y + 0.02, z, { tile: 0.3 });
+  world.collider(0.56, 0.52, 1.76, plX, y + 0.26, z);
+  gamesConsole(k, plX, y + 0.505, z - 0.25, { rotY: Math.PI / 2, room: R.name, led: rgb2[id % 4] });
   const powerOn = () => {
     const on = !screens[0].on;
     for (const s of screens) s.on = on;
@@ -30668,1038 +31073,6 @@ function posterMaterial(M) {
     c.fillStyle = "#160a0c";
     c.fillRect(9, 4, w - 18, 6);
   }, { glow: 0.75 });
-}
-
-// src/world/furnish.js
-var V3 = (x, y, z) => new Vector3(x, y, z);
-var SWITCHED = /* @__PURE__ */ new Set([
-  "bedroom",
-  "bath",
-  "great",
-  "family",
-  "kitchen",
-  "dining",
-  "library",
-  "music",
-  "foyer",
-  "sunroom",
-  "mud",
-  "pantry",
-  "storage",
-  "gaming",
-  "laundry",
-  "workshop",
-  "garage",
-  "gym",
-  "stairhall",
-  "court",
-  "bowling"
-]);
-function furnishAll(world) {
-  const k = new Kit(world);
-  const rng = makeRng(4242);
-  k.openings = collectOpenings(world);
-  k.bounds = houseBounds(world);
-  let gamingId = 0;
-  for (const R of world.rooms) {
-    const t = R.type;
-    const rr = roomRng(R);
-    switch (t) {
-      case "bedroom":
-        bedroom(k, R, rr);
-        break;
-      case "bath":
-        bathroom(k, R, rr);
-        break;
-      case "gaming":
-        gamingRoom(k, R, gamingId++);
-        break;
-      case "theater":
-        theater(k, R);
-        break;
-      case "bowling":
-        bowling(k, R);
-        break;
-      case "court":
-        court(k, R);
-        break;
-      case "gym":
-        gym(k, R);
-        break;
-      case "laundry":
-        laundry(k, R);
-        break;
-      case "garage":
-        garage(k, R);
-        break;
-      case "workshop":
-        workshop(k, R);
-        break;
-      case "great":
-        greatRoom(k, R, rr);
-        break;
-      case "family":
-        familyRoom(k, R, rr);
-        break;
-      case "kitchen":
-        kitchen(k, R, rr);
-        break;
-      case "dining":
-        dining(k, R, rr);
-        break;
-      case "library":
-        library(k, R, rr);
-        break;
-      case "music":
-        music(k, R, rr);
-        break;
-      case "foyer":
-        foyer(k, R, rr);
-        break;
-      case "sunroom":
-        sunroom(k, R, rr);
-        break;
-      case "mud":
-        mud(k, R, rr);
-        break;
-      case "stairhall":
-        stairHall(k, R, rr);
-        break;
-      case "corridor":
-        gallery(k, R, rr);
-        break;
-      case "pantry":
-      case "storage":
-        storage(k, R, rr);
-        break;
-      default:
-        break;
-    }
-    if (SWITCHED.has(t)) roomSwitch(k, R);
-    if (["bedroom", "great", "family", "library", "foyer", "dining", "sunroom", "music"].includes(t) && R.w >= 7) {
-      const px3 = t === "family" ? R.x + R.w / 2 - 0.9 : R.x - R.w / 2 + 0.9;
-      plant(k, px3, R.y, R.z + R.d / 2 - 0.9, rng.range(0.9, 1.3));
-    }
-  }
-  return k;
-}
-function collectOpenings(world) {
-  const list = [];
-  for (const R of world.rooms) {
-    for (const dd of R.def?.doors || []) {
-      const half = dd.w / 2, h = dd.w > 1.6 ? 2.7 : 2.25;
-      if (dd.side === "n" || dd.side === "s") {
-        list.push({
-          floor: R.floor,
-          axis: "z",
-          h,
-          line: dd.side === "n" ? R.z - R.d / 2 : R.z + R.d / 2,
-          lo: R.x + dd.at - half,
-          hi: R.x + dd.at + half
-        });
-      } else {
-        list.push({
-          floor: R.floor,
-          axis: "x",
-          h,
-          line: dd.side === "w" ? R.x - R.w / 2 : R.x + R.w / 2,
-          lo: R.z + dd.at - half,
-          hi: R.z + dd.at + half
-        });
-      }
-    }
-  }
-  return list;
-}
-function houseBounds(world) {
-  const b = { x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity };
-  for (const R of world.rooms) {
-    b.x0 = Math.min(b.x0, R.x - R.w / 2);
-    b.x1 = Math.max(b.x1, R.x + R.w / 2);
-    b.z0 = Math.min(b.z0, R.z - R.d / 2);
-    b.z1 = Math.max(b.z1, R.z + R.d / 2);
-  }
-  return b;
-}
-function roomRng(R) {
-  let h = 2166136261;
-  for (const s of `${R.name}|${R.floor}`) h = Math.imul(h ^ s.charCodeAt(0), 16777619);
-  return makeRng(h >>> 0);
-}
-var wallLine = (R, side) => side === "n" ? R.z - R.d / 2 : side === "s" ? R.z + R.d / 2 : side === "w" ? R.x - R.w / 2 : R.x + R.w / 2;
-function onWall(R, side, along, inset = 0) {
-  const hw = R.w / 2 - 0.06, hd = R.d / 2 - 0.06;
-  if (side === "n") return [R.x + along, R.z - hd + inset, 0];
-  if (side === "s") return [R.x + along, R.z + hd - inset, Math.PI];
-  if (side === "w") return [R.x - hw + inset, R.z + along, Math.PI / 2];
-  return [R.x + hw - inset, R.z + along, -Math.PI / 2];
-}
-function exterior(k, R, side) {
-  const b = k.bounds, l = wallLine(R, side);
-  return side === "n" ? Math.abs(l - b.z0) < 0.4 : side === "s" ? Math.abs(l - b.z1) < 0.4 : side === "w" ? Math.abs(l - b.x0) < 0.4 : Math.abs(l - b.x1) < 0.4;
-}
-function wallFree(k, R, side, c, half, pad = 0.4) {
-  const horiz = side === "n" || side === "s";
-  const line = wallLine(R, side);
-  for (const o of k.openings) {
-    if (o.floor !== R.floor || o.axis !== (horiz ? "z" : "x")) continue;
-    if (Math.abs(o.line - line) > 0.4) continue;
-    if (c + half + pad > o.lo && c - half - pad < o.hi) return false;
-  }
-  return true;
-}
-function wallSpot(k, R, side, c, half, o = {}) {
-  if (!o.windows && exterior(k, R, side)) return null;
-  if (Math.abs(c - (side === "n" || side === "s" ? R.x : R.z)) + half > (side === "n" || side === "s" ? R.w : R.d) / 2 - 0.25) return null;
-  if (!wallFree(k, R, side, c, half, o.pad ?? 0.35)) return null;
-  const along = side === "n" || side === "s" ? c - R.x : c - R.z;
-  return onWall(R, side, along, o.inset ?? 0.04);
-}
-function backedByRoom(k, R, side, c) {
-  const line = wallLine(R, side);
-  return k.world.rooms.some((r) => r.floor === R.floor && r.type !== "corridor" && c > r.x - r.w / 2 + 0.3 && c < r.x + r.w / 2 - 0.3 && Math.abs((side === "n" ? r.z + r.d / 2 : r.z - r.d / 2) - line) < 0.4);
-}
-function railHeight(k, R) {
-  let top = 2.25;
-  for (const o of k.openings) {
-    if (o.floor !== R.floor) continue;
-    const near = o.axis === "z" ? (Math.abs(o.line - (R.z - R.d / 2)) < 0.4 || Math.abs(o.line - (R.z + R.d / 2)) < 0.4) && o.hi > R.x - R.w / 2 && o.lo < R.x + R.w / 2 : (Math.abs(o.line - (R.x - R.w / 2)) < 0.4 || Math.abs(o.line - (R.x + R.w / 2)) < 0.4) && o.hi > R.z - R.d / 2 && o.lo < R.z + R.d / 2;
-    if (near) top = Math.max(top, o.h);
-  }
-  return Math.min((R.h || 3.8) - 0.55, top + 0.22);
-}
-function railRound(k, R, extraSkip = []) {
-  const skip = ["n", "s", "e", "w"].filter((s) => exterior(k, R, s) || extraSkip.includes(s));
-  if (skip.length === 4) return;
-  pictureRail(k, R, { h: railHeight(k, R), skip });
-}
-function roomSwitch(k, R) {
-  const dd = (R.def?.doors || [])[0];
-  if (!dd) return;
-  const span = dd.side === "n" || dd.side === "s" ? R.w : R.d;
-  const half = dd.w / 2;
-  const side = dd.at - half - 0.5 > -span / 2 ? -1 : 1;
-  const at = dd.at + side * (half + 0.3);
-  if (Math.abs(at) > span / 2 - 0.25) return;
-  const [x, z, rotY] = onWall(R, dd.side, at, 0.02);
-  lightSwitch(k, R, x, R.y + 1.16, z, { rotY });
-}
-function dressTop(k, x, y, z, rng, o = {}) {
-  const r = o.rotY ?? 0, w = o.w ?? 1.4, n = o.n ?? 3;
-  const kinds = o.kinds || ["photo", "vase", "books", "bowl", "mags"];
-  for (let i = 0; i < n; i++) {
-    const ox = -w / 2 + (i + 0.5) * (w / n);
-    const px3 = x + Math.cos(r) * ox, pz2 = z - Math.sin(r) * ox;
-    switch (rng.pick(kinds)) {
-      case "photo":
-        photoFrame(k, px3, y, pz2, { rotY: r, color: rng.pick([3623004, 7035717, 5925719, 8014742]) });
-        break;
-      case "vase":
-        vase(k, px3, y, pz2, { scale: rng.range(0.7, 1.15), color: rng.pick([13227211, 14208958, 10135732]) });
-        break;
-      case "books":
-        bookStack(k, px3, y, pz2, { rotY: r, n: rng.int(2, 4) });
-        break;
-      case "bowl":
-        fruitBowl(k, px3, y, pz2, {});
-        break;
-      case "mags":
-        magazines(k, px3, y, pz2, { rotY: r, n: rng.int(2, 4) });
-        break;
-      default:
-        break;
-    }
-  }
-}
-function dressWindows(k, R, side, color, wide = 3.2) {
-  const inward = side === "n" ? 1 : -1;
-  const wallZ = wallLine(R, side);
-  const wins = (k.world.windowMap || []).filter((wn) => wn.floor === R.floor && wn.side === side && wn.x > R.x - R.w / 2 + 0.2 && wn.x < R.x + R.w / 2 - 0.2);
-  for (const wn of wins) {
-    curtains(k, wn.x, R.y, wallZ + inward * 0.28, Math.min(wide, (wn.w || 2.1) + 1), side === "n" ? 0 : Math.PI, color);
-  }
-  return wins.length;
-}
-function bedroom(k, R, rng) {
-  const M = k.M;
-  const north = R.z < 0;
-  const wallZ = north ? R.z - R.d / 2 : R.z + R.d / 2;
-  const inward = north ? 1 : -1;
-  const owner = R.def?.owner;
-  const palettes = {
-    you: { duvet: 14212838, sheet: 16250610, rug: 6977156, art: 3623004 },
-    james: { duvet: 3108789, sheet: 15660283, rug: 2442606, art: 1915747 },
-    chloie: { duvet: 14393560, sheet: 16643067, rug: 9264808, art: 8014742 }
-  };
-  const pal = palettes[owner] || {
-    duvet: rng.pick([14672872, 14274496, 13161419, 14734296]),
-    sheet: 16184559,
-    rug: rng.pick([9077106, 7240320, 9141647]),
-    art: rng.pick([4938344, 7035717, 5925719])
-  };
-  const size = owner === "you" ? "king" : owner ? "twin" : rng.pick(["queen", "king", "queen"]);
-  const bx = R.x, bz = wallZ + inward * 1.45;
-  if (R.name === "Bunk Room") {
-    bunkBed(k, R.x - 1.6, R.y, bz, { rotY: north ? 0 : Math.PI });
-    bunkBed(k, R.x + 1.6, R.y, bz, { rotY: north ? 0 : Math.PI });
-  } else {
-    bed(k, bx, R.y, bz, { size, rotY: north ? 0 : Math.PI, duvet: pal.duvet, sheet: pal.sheet, cushion: pal.rug });
-    nightstand(k, bx - 1.5, R.y, bz - inward * 0.4, { rotY: north ? 0 : Math.PI });
-    if (R.w > 7) nightstand(k, bx + 1.5, R.y, bz - inward * 0.4, { rotY: north ? 0 : Math.PI, lamp: false });
-  }
-  rug(k, R.x, R.y, R.z + inward * -0.4, Math.min(4.2, R.w - 2), Math.min(3.4, R.d - 3), pal.rug);
-  const farZ = north ? R.z + R.d / 2 : R.z - R.d / 2;
-  const farSide = north ? "s" : "n";
-  const dDef = (R.def?.doors || []).find((dd) => dd.side === farSide);
-  const doorX = R.x + (dDef?.at ?? 0);
-  const clear = (dDef?.w ?? 1) / 2 + 0.4;
-  const westRun = doorX - clear - (R.x - R.w / 2 + 0.25);
-  const eastRun = R.x + R.w / 2 - 2.1 - (doorX + clear);
-  const side = westRun >= eastRun ? -1 : 1;
-  const dw = Math.min(2.2, R.w * 0.3, Math.max(westRun, eastRun));
-  const dx = doorX + side * (clear + dw / 2);
-  dresser(k, dx, R.y, farZ - inward * 0.4, { rotY: north ? Math.PI : 0, w: dw });
-  tv(k, dx, R.y, farZ - inward * 0.17, { rotY: north ? Math.PI : 0, w: Math.min(1.5, dw - 0.2), h: 1.55, wall: true });
-  const cornerFits = R.x + R.w / 2 - 1.95 > doorX + clear;
-  if (cornerFits) wardrobe(k, R.x + R.w / 2 - 1.1, R.y, farZ - inward * 0.45, { rotY: north ? Math.PI : 0 });
-  else wardrobe(k, R.x + R.w / 2 - 0.45, R.y, farZ - inward * 1.15, { rotY: -Math.PI / 2 });
-  if (owner === "james" || owner === "chloie") {
-    const kx = R.x + R.w / 2 - 1.4;
-    desk(k, kx, R.y, wallZ + inward * 0.55, { rotY: north ? 0 : Math.PI, w: 1.4 });
-    officeChair(k, kx, R.y, wallZ + inward * 1.35, { rotY: north ? Math.PI : 0, color: owner === "james" ? 3108789 : 11890600 });
-    bookshelf(k, R.x - R.w / 2 + 0.35, R.y, R.z - inward * 1.8, { rotY: Math.PI / 2, w: 1.4, h: 1.8 });
-    for (let i = 0; i < 5; i++) {
-      k.box(
-        0.22,
-        0.22,
-        0.22,
-        k.M.solid(rng.pick([13644844, 3113471, 15774761, 6991948]), 0.6),
-        R.x - R.w / 2 + 1.6 + i * 0.35,
-        R.y + 0.11,
-        R.z + inward * 1.4,
-        { rotY: rng() * 3, tile: 0.2 }
-      );
-    }
-    tableLamp(k, kx - 0.5, wallZ + inward * 0.55, R.y + 0.79);
-    bookStack(k, kx + 0.45, R.y + 0.77, wallZ + inward * 0.5, { n: 3, w: 0.22 });
-  } else if (owner === "you") {
-    armchair(k, R.x - R.w / 2 + 1.8, R.y, R.z + inward * 1.2, { rotY: Math.PI / 2 });
-    coffeeTable(k, R.x - R.w / 2 + 3.2, R.y, R.z + inward * 1.2, { w: 0.7, d: 0.7 });
-    bookshelf(k, dx - dw / 2 - 0.95, R.y, farZ - inward * 0.22, { rotY: north ? Math.PI : 0, w: 1.6, h: 2.1 });
-  } else if (R.w > 7.5) {
-    armchair(k, R.x + R.w / 2 - 1.6, R.y, R.z, { rotY: north ? -Math.PI / 2 : Math.PI / 2 });
-  }
-  let variant = null;
-  if (!owner && R.name !== "Bunk Room") {
-    const cornerMin = R.w > 7 ? 2.55 : 1.95;
-    const cornerX = R.x + Math.min(Math.max(R.w / 2 - 1.4, cornerMin), R.w / 2 - 0.85);
-    const cornerOk = R.w / 2 - 0.85 >= cornerMin;
-    variant = rng.pick(cornerOk ? ["reading", "desk", "bench", "bean"] : ["bench", "bean"]);
-    if (variant === "reading") {
-      armchair(k, cornerX, R.y, wallZ + inward * 1.25, { rotY: north ? 0 : Math.PI, color: pal.rug });
-      floorLamp(k, R.x + R.w / 2 - 0.55, R.y, wallZ + inward * 0.55, { h: 1.5 });
-    } else if (variant === "desk") {
-      desk(k, cornerX, R.y, wallZ + inward * 0.55, { rotY: north ? 0 : Math.PI, w: 1.3 });
-      officeChair(k, cornerX, R.y, wallZ + inward * 1.3, { rotY: north ? Math.PI : 0, color: pal.art });
-      tableLamp(k, cornerX - 0.45, wallZ + inward * 0.5, R.y + 0.79);
-    } else if (variant === "bench") {
-      bench(k, bx, R.y, bz + inward * 1.55, { w: 1.4, rotY: north ? 0 : Math.PI, color: pal.rug });
-    } else {
-      const px3 = R.x - R.w / 2 + 1.1, pz2 = R.z + inward * 0.3;
-      rug(k, px3, R.y, pz2, 1.7, 1.7, pal.duvet);
-      k.box(0.75, 0.32, 0.75, M.solid(pal.art, 0.95), px3, R.y + 0.16, pz2, { tile: 0.4 });
-      k.box(0.55, 0.2, 0.55, M.solid(pal.rug, 0.95), px3, R.y + 0.4, pz2, { tile: 0.3 });
-      k.col(0.8, 0.55, 0.8, px3, R.y + 0.3, pz2);
-    }
-  }
-  const artLo = side < 0 ? doorX + (clear - 0.3) : R.x - R.w / 2 + 0.35;
-  const artHi = side < 0 ? R.x + R.w / 2 - (cornerFits ? 2 : 0.85) : doorX - (clear - 0.3);
-  if (artHi - artLo > 1.2) artwork(k, (artLo + artHi) / 2, R.y + 1.9, farZ - inward * 0.1, 1, 0.7, north ? Math.PI : 0, pal.art);
-  const curCol = rng.pick([12563622, 11055803, 13221038]);
-  if (!dressWindows(k, R, north ? "n" : "s", curCol)) {
-    curtains(k, R.x, R.y, wallZ + inward * 0.22, Math.min(3.2, R.w * 0.5), north ? 0 : Math.PI, curCol);
-  }
-  if (owner) k.world.spot(`room_${owner}`, R.x, R.y, R.z);
-  railRound(k, R);
-  if (!owner && R.w >= 7) {
-    const cw = variant === "bean" ? "e" : "w", inx = cw === "w" ? 1 : -1;
-    const sp = wallSpot(k, R, cw, R.z + inward * 1.9, 1.2, { windows: true, inset: 1.05, pad: 0.7 });
-    if (sp) {
-      armchair(k, sp[0], R.y, sp[1], { rotY: sp[2], color: pal.art });
-      sideTable(k, sp[0] + inx * 0.25, R.y, sp[1] - inward * 1.15, { w: 0.5, lamp: rng.chance(0.5) });
-      floorLamp(k, sp[0] - inx * 0.45, R.y, sp[1] + inward * 1.2, { h: 1.5 });
-      wastebasket(k, sp[0] + inx * 0.15, R.y, sp[1] + inward * 1.5, {});
-    }
-  }
-  if (owner && R.name !== "Bunk Room") {
-    bench(k, bx, R.y, bz + inward * 1.7, {
-      w: owner === "you" ? 1.8 : 1.3,
-      rack: owner === "you",
-      rotY: north ? 0 : Math.PI,
-      color: pal.rug
-    });
-  }
-  dressTop(k, dx, R.y + 0.9, farZ - inward * 0.4, rng, { rotY: north ? Math.PI : 0, w: dw - 0.4, n: 2, kinds: ["photo", "vase", "books"] });
-  const bin = wallSpot(k, R, farSide, dx + (dw / 2 + 0.4) * side, 0.2, { windows: true, inset: 0.3, pad: 0.45 });
-  if (bin) wastebasket(k, bin[0], R.y, bin[1], { color: pal.rug });
-  const lb = wallSpot(k, R, "w", R.z + inward * 3.6, 0.3, { windows: true, inset: 0.3, pad: 0.5 });
-  if (lb) laundryBasket(k, lb[0], R.y, lb[1], { rotY: lb[2] });
-  for (const [ws, zo] of [["w", -3.4], ["e", 2.6]]) {
-    const sp = wallSpot(k, R, ws, R.z + inward * zo, 0.65);
-    if (sp) artwork(k, sp[0], R.y + 2, sp[1], rng.range(0.8, 1.15), rng.range(0.6, 0.85), sp[2], pal.art);
-  }
-  const cs = wallSpot(k, R, "w", R.z + inward * 1.2, 0.25);
-  if (cs) wallClock(k, cs[0], R.y + 2.12, cs[1], cs[2], { hour: rng.int(1, 12), minute: rng.int(0, 55) });
-  const sh = wallSpot(k, R, "e", R.z + inward * 0.4, 0.7, { inset: 0.14 });
-  if (sh) wallShelf(k, sh[0], R.y + 1.55, sh[1], { rotY: sh[2], w: 1.1 });
-  const mi = owner ? null : wallSpot(k, R, "w", R.z + inward * 3.4, 0.6, { inset: 0.2 });
-  if (mi && rng.chance(0.6)) tallMirror(k, mi[0], R.y, mi[1], { rotY: mi[2], lean: true, h: 1.7, frame: M.get("walnut") });
-  for (const s of [-1, 1]) {
-    const sp = wallSpot(k, R, s < 0 ? "w" : "e", R.z + inward * (s < 0 ? -0.8 : -3.2), 0.25);
-    if (sp && rng.chance(0.55)) sconce2(k, sp[0], R.y + 2, sp[1], sp[2]);
-  }
-  if (rng.chance(0.4)) radio(k, dx + (dw / 2 - 0.3) * -side, R.y + 0.9, farZ - inward * 0.4, { rotY: north ? Math.PI : 0 });
-  if (owner === "james") jamesRoom(k, R, rng, { inward, wallZ, farSide });
-  if (owner === "chloie") chloieRoom(k, R, rng, { north, inward, wallZ, bx, bz });
-  if (owner === "you") masterSuite(k, R, { inward, pal });
-  if (R.name === "Bunk Room") {
-    toyBox(k, R.x - R.w / 2 + 1.2, R.y, R.z + inward * 1.2, { rotY: inward > 0 ? 0 : Math.PI, color: 6991948 });
-    for (let i = 0; i < 3; i++) softToy(k, R.x - 2.4 + i * 0.5, R.y, R.z + inward * 2.6, { scale: 0.9, color: [14196830, 15232936, 6991948][i] });
-    const sr = wallSpot(k, R, "e", R.z + inward * 1.6, 0.6, { inset: 0.1 });
-    if (sr) sportsRack(k, sr[0], R.y + 1.7, sr[1], { rotY: sr[2], w: 1 });
-  }
-}
-function jamesRoom(k, R, rng, C) {
-  const { inward, wallZ, farSide } = C;
-  const sp = wallSpot(k, R, "w", R.z + inward * 4.2, 0.7, { inset: 0.12 });
-  if (sp) sportsRack(k, sp[0], R.y + 1.7, sp[1], { rotY: sp[2], w: 1.1 });
-  const tr = wallSpot(k, R, "w", R.z + inward * 2.4, 0.7, { inset: 0.13 });
-  if (tr) trophyShelf(k, tr[0], R.y + 1.75, tr[1], { rotY: tr[2], w: 1.2 });
-  for (let i = 0; i < 3; i++) {
-    const sp2 = wallSpot(k, R, "e", R.z + inward * (-1.2 - i * 0.8), 0.4);
-    if (sp2) poster(k, sp2[0], R.y + 1.95, sp2[1], { rotY: sp2[2], w: 0.72, h: 1, seed: 11 + i, hue: [0.58, 0.06, 0.34][i] });
-  }
-  const bag = wallSpot(k, R, farSide, R.x - R.w / 2 + 2.4, 0.4, { windows: true, inset: 0.35, pad: 0.5 });
-  if (bag) {
-    k.box(0.62, 0.34, 0.34, k.M.paint(1915747, 0.85, "kitbag"), bag[0], R.y + 0.17, bag[1], { rotY: bag[2], tile: 0.3 });
-    k.col(0.62, 0.34, 0.36, bag[0], R.y + 0.17, bag[1], bag[2]);
-  }
-  k.box(0.22, 0.8, 0.06, k.M.solid(3108789, 0.5), R.x - R.w / 2 + 0.5, R.y + 0.42, R.z + inward * 2.4, { rotZ: 0.22, tile: 0.2 });
-  const ball = new Mesh(new SphereGeometry(0.12, 12, 9), k.M.solid(13923884, 0.75));
-  ball.position.set(R.x - R.w / 2 + 1.6, R.y + 0.12, R.z + inward * 3.4);
-  k.world.addProp(ball);
-  const kx = R.x + R.w / 2 - 1.4;
-  k.box(0.1, 0.28, 0.1, k.M.solid(15262939, 0.5), kx + 0.2, R.y + 0.9, wallZ + inward * 0.4, { tile: 0.2 });
-  k.box(0.26, 0.05, 0.05, k.M.solid(13644844, 0.5), kx + 0.2, R.y + 0.86, wallZ + inward * 0.4, { tile: 0.2 });
-  k.world.spot("jamesDesk", kx, R.y, wallZ + inward * 1.3);
-}
-function chloieRoom(k, R, rng, C) {
-  const { north, inward, wallZ, bx, bz } = C;
-  canopy(k, bx, R.y, bz, { w: 1.5, d: 2.3, h: 2.05, color: 16508660 });
-  for (let i = 0; i < 4; i++) {
-    softToy(
-      k,
-      bx - 0.5 + i * 0.34,
-      R.y + 0.66,
-      bz + (i % 2 ? 0.5 : 0.75),
-      { scale: rng.range(0.7, 1), color: rng.pick([14196830, 15232936, 15774761, 10211816]), rotY: rng() * 3 }
-    );
-  }
-  toyBox(k, R.x - R.w / 2 + 1.3, R.y, R.z + inward * 3.4, { rotY: north ? 0 : Math.PI, color: 15232936 });
-  for (let i = 0; i < 6; i++) {
-    const sp = wallSpot(k, R, "e", R.z + inward * (-1 - i % 3 * 0.62), 0.28, { pad: 0.3 });
-    if (!sp) continue;
-    poster(k, sp[0], R.y + 1.5 + Math.floor(i / 3) * 0.5, sp[1], {
-      rotY: sp[2],
-      w: 0.34,
-      h: 0.42,
-      seed: 40 + i,
-      hue: rng()
-    });
-  }
-  const tx = R.x - R.w / 2 + 1.5, tz = R.z + inward * 0.6;
-  sideTable(k, tx, R.y, tz, { w: 0.7, h: 0.42 });
-  for (const s of [-1, 1]) {
-    k.box(0.34, 0.06, 0.34, k.M.paint(15780068, 0.9, "stool"), tx + s * 0.62, R.y + 0.28, tz, { tile: 0.2 });
-    for (const [ox, oz] of [[-0.12, -0.12], [0.12, -0.12], [-0.12, 0.12], [0.12, 0.12]]) {
-      k.box(0.04, 0.28, 0.04, k.M.get("maple"), tx + s * 0.62 + ox, R.y + 0.14, tz + oz, { tile: 0.2 });
-    }
-    k.col(0.38, 0.32, 0.38, tx + s * 0.62, R.y + 0.16, tz);
-  }
-  softToy(k, tx, R.y + 0.47, tz, { scale: 0.7, color: 15774761 });
-  k.box(Math.min(3.4, R.w - 2), 0.03, 0.03, k.M.emissive(16769200, 1.2), R.x, R.y + 2.5, wallZ + inward * 0.16, { tile: 0.2 });
-  k.world.spot("chloiePlay", tx, R.y, tz);
-}
-function masterSuite(k, R, C) {
-  const { inward, pal } = C;
-  armchair(k, R.x - R.w / 2 + 1.8, R.y, R.z + inward * 2.9, { rotY: Math.PI / 2 });
-  rug(k, R.x - R.w / 2 + 2.6, R.y, R.z + inward * 2.05, 3.4, 3.6, pal.rug);
-  floorLamp(k, R.x - R.w / 2 + 0.7, R.y, R.z + inward * 3.9, { h: 1.6 });
-  sideTable(k, R.x - R.w / 2 + 1.9, R.y, R.z + inward * 4, { w: 0.55, lamp: false });
-  magazines(k, R.x - R.w / 2 + 3.2, R.y + 0.44, R.z + inward * 1.2, { n: 3 });
-  const dt = wallSpot(k, R, "e", R.z + inward * 3.2, 0.9, { inset: 0.3, pad: 0.8 });
-  if (dt) dressingTable(k, dt[0], R.y, dt[1], { rotY: dt[2], w: 1.3, stool: pal.duvet });
-  const mi = wallSpot(k, R, "e", R.z - inward * 2, 0.6, { inset: 0.16 });
-  if (mi) tallMirror(k, mi[0], R.y, mi[1], { rotY: mi[2], lean: true, h: 1.8 });
-  k.world.spot("masterSitting", R.x - R.w / 2 + 2.6, R.y, R.z + inward * 2);
-}
-function bathroom(k, R, rng) {
-  const M = k.M;
-  const north = R.z < 0;
-  const inward = north ? 1 : -1;
-  const wallZ = north ? R.z - R.d / 2 : R.z + R.d / 2;
-  const zi = (f) => wallZ + inward * f;
-  const wide = R.w > 5;
-  const xW = R.x - R.w / 2, xE = R.x + R.w / 2;
-  const dDef = (R.def?.doors || []).find((dd) => dd.side === (north ? "s" : "n"));
-  const doorX = R.x + (dDef?.at ?? 0);
-  const doorClear = (dDef?.w ?? 0.9) / 2 + 0.4;
-  const doorWallZ = north ? R.z + R.d / 2 : R.z - R.d / 2;
-  const doorSide = north ? "s" : "n";
-  const shX = xW + (wide ? 1 : 0.9);
-  shower(k, shX, R.y, zi(0.9), { rotY: north ? 0 : Math.PI, w: wide ? 1.6 : 1.3, d: wide ? 1.4 : 1.2 });
-  if (wide) {
-    bathtub(k, R.x + 0.7, R.y, zi(0.72), { rotY: 0 });
-    k.box(1.3, 0.024, 0.6, M.paint(14542826, 0.96, "bathmat"), R.x + 0.7, R.y + 0.06, zi(1.55), { tile: 0.5 });
-  } else {
-    k.box(0.9, 0.024, 0.55, M.paint(14542826, 0.96, "bathmat"), shX, R.y + 0.06, zi(1.85), { tile: 0.5 });
-  }
-  vanity(k, xE - 0.45, R.y, zi(wide ? 2.4 : 2.2), { rotY: -Math.PI / 2, w: wide ? 2 : 1.3 });
-  if (wide) {
-    vanity(k, xW + 0.45, R.y, zi(2.9), { rotY: Math.PI / 2, w: 1.6 });
-    k.box(0.05, 1.35, 0.95, M.get("gold"), xW + 0.17, R.y + 1.75, zi(4.6), { tile: 0.4 });
-    k.box(0.04, 1.2, 0.8, M.get("mirror"), xW + 0.21, R.y + 1.75, zi(4.6), { tile: 0.6 });
-    toilet(k, xE - 0.5, R.y, zi(3.9), { rotY: -Math.PI / 2 });
-  } else {
-    toilet(k, xW + 0.45, R.y, zi(2.5), { rotY: Math.PI / 2 });
-  }
-  const tbz = zi(wide ? 0.8 : 0.9);
-  k.box(0.04, 0.04, 1, M.get("chrome"), xE - 0.26, R.y + 1.25, tbz, { tile: 0.2 });
-  for (const s of [-1, 1]) k.box(0.2, 0.05, 0.05, M.get("chrome"), xE - 0.15, R.y + 1.25, tbz + s * 0.42, { tile: 0.2 });
-  for (let i = 0; i < 2; i++) {
-    k.box(
-      0.12,
-      0.5,
-      0.34,
-      M.paint(rng.pick([15265522, 14148584]), 0.95, "towel"),
-      xE - 0.28,
-      R.y + 1.03,
-      tbz + (i ? 0.22 : -0.22),
-      { tile: 0.3 }
-    );
-  }
-  const hx = doorX - doorClear - 0.35;
-  if (hx - 0.3 > xW + 0.2) {
-    laundryBasket(k, hx, R.y, doorWallZ - inward * 0.35, { w: 0.5, d: 0.4, h: 0.6, color: 14212577 });
-  }
-  const tSide = wide ? "e" : "w", tz = zi(wide ? 3.9 : 2.5);
-  const sp = wallSpot(k, R, tSide, tz, 0.6, { windows: true, inset: 0.14 });
-  if (sp) {
-    wallShelf(k, sp[0], R.y + 1.65, sp[1], { rotY: sp[2], w: 1, items: 3 });
-    wallShelf(k, sp[0], R.y + 2.05, sp[1], { rotY: sp[2], w: 1, items: 2 });
-  }
-  const bs = wallSpot(k, R, tSide, tz + inward * 0.85, 0.2, { windows: true, inset: 0.24 });
-  if (bs) wastebasket(k, bs[0], R.y, bs[1], { w: 0.24, h: 0.3, metal: true });
-  const hk = wallSpot(k, R, doorSide, doorX + (hx - 0.3 > xW + 0.2 ? doorClear + 0.6 : -doorClear - 0.6), 0.45);
-  if (hk) coatHooks(k, hk[0], R.y + 1.75, hk[1], { rotY: hk[2], w: 0.9, n: 3, full: 0.5 });
-  const ar = wallSpot(k, R, doorSide, R.x + (wide ? 1.6 : 1.1), 0.4);
-  if (ar) artwork(k, ar[0], R.y + 1.95, ar[1], 0.6, 0.8, ar[2], rng.pick([4942714, 7043668, 8022924]));
-  rug(k, R.x, R.y, zi(6.6), Math.min(1.7, R.w - 1.8), 2.8, 10466237);
-  const ld = wallSpot(k, R, wide ? "w" : "e", zi(6), 0.4, { windows: true, inset: 0.2, pad: 0.5 });
-  if (ld) {
-    for (const s of [-1, 1]) k.box(0.05, 1.7, 0.05, M.get("maple"), ld[0] - 0.05 * Math.sin(ld[2]), R.y + 0.85, ld[1] + s * 0.3 - 0.05 * Math.cos(ld[2]), { rotX: 0.06, tile: 0.2 });
-    for (let i = 0; i < 4; i++) {
-      k.box(0.06, 0.05, 0.66, M.get("maple"), ld[0], R.y + 0.5 + i * 0.4, ld[1], { rotY: ld[2], tile: 0.2 });
-      if (i % 2) k.box(0.16, 0.5, 0.3, M.paint(rng.pick([15265522, 14148584]), 0.95, "towel"), ld[0] + 0.07 * Math.sin(ld[2]), R.y + 0.26 + i * 0.4, ld[1] + 0.07 * Math.cos(ld[2]), { rotY: ld[2], tile: 0.3 });
-    }
-    k.col(0.3, 1.7, 0.7, ld[0], R.y + 0.85, ld[1], ld[2]);
-  }
-  plant(k, wide ? R.x - 1.6 : R.x + R.w / 2 - 0.6, R.y, zi(wide ? 0.9 : 3.4), rng.range(0.6, 0.9));
-  if (wide) {
-    sideTable(k, R.x + 0.7, R.y, zi(2.4), { w: 0.42, h: 0.44, pedestal: true });
-    k.box(0.3, 0.14, 0.24, M.paint(15265522, 0.95, "towel"), R.x + 0.7, R.y + 0.52, zi(2.4), { tile: 0.2 });
-    const cl = wallSpot(k, R, doorSide, R.x - 1.4, 0.25);
-    if (cl) wallClock(k, cl[0], R.y + 2.2, cl[1], cl[2], { hour: rng.int(1, 12), minute: rng.int(0, 55), d: 0.28 });
-  }
-}
-function greatRoom(k, R, rng) {
-  const M = k.M;
-  fireplace(k, R.x - R.w / 2 + 3.4, R.y, R.z - R.d / 2 + 0.5, { rotY: 0, w: 3.6, h: 7.4 });
-  rug(k, R.x - 1, R.y, R.z, 5.6, 4.2, 8220511);
-  sectional(k, R.x - 2.2, R.y, R.z + 1.2, { w: 3.6, rotY: Math.PI, color: 14275528, pillow: 10135732 });
-  armchair(k, R.x + 1.8, R.y, R.z - 0.8, { rotY: -Math.PI / 2 });
-  armchair(k, R.x + 1.8, R.y, R.z + 1.6, { rotY: -Math.PI / 2 });
-  coffeeTable(k, R.x - 1.4, R.y, R.z + 0.2, { w: 1.6, d: 0.9 });
-  tv(k, R.x - R.w / 2 + 3.4, R.y, R.z - R.d / 2 + 0.58, { rotY: 0, w: 2.2, h: 2.7, wall: true });
-  piano(k, R.x + R.w / 2 - 3, R.y, R.z + R.d / 2 - 3, Math.PI * 0.15);
-  for (let i = 0; i < 3; i++) {
-    const colX = R.x - R.w / 2 + 1 + i * (R.w - 2) / 2;
-    k.box(0.4, 7.6, 0.4, M.get("stone"), colX, R.y + 3.8, R.z + R.d / 2 - 0.6, { tile: 1.4 });
-    k.col(0.45, 7.6, 0.45, colX, R.y + 3.8, R.z + R.d / 2 - 0.6);
-  }
-  k.world.spot("greatRoom", R.x - 1, R.y, R.z + 0.6);
-  k.world.spot("fireplaceSeat", R.x - 2.2, R.y, R.z + 1.2);
-  rug(k, R.x - 1.6, R.y + 0.01, R.z + 0.9, 3, 2.2, 6116166);
-  consoleTable(k, R.x - 2.2, R.y, R.z + 2.7, { w: 2.6, d: 0.42, rotY: Math.PI });
-  dressTop(k, R.x - 2.2, R.y + 0.91, R.z + 2.7, rng, { rotY: Math.PI, w: 2, kinds: ["photo", "vase", "books"] });
-  sideTable(k, R.x - 4.3, R.y, R.z + 1.2, { w: 0.6, lamp: true });
-  sideTable(k, R.x + 3, R.y, R.z + 0.4, { w: 0.6, lamp: true });
-  floorLamp(k, R.x + 3.1, R.y, R.z - 1.6, { h: 1.6 });
-  for (const s of [-1, 1]) {
-    const bx = R.x - R.w / 2 + 3.4 + s * 2.9;
-    const sp = wallSpot(k, R, "n", bx, 1, { windows: true, inset: 0.24, pad: 0.5 });
-    if (sp) bookshelf(k, sp[0], R.y, sp[1], { w: 1.8, h: 2.4 });
-    const sc = wallSpot(k, R, "n", bx, 0.2, { windows: true });
-    if (sc) sconce2(k, sc[0], R.y + 2.9, sc[1], sc[2], { intensity: 6 });
-  }
-  const art = wallSpot(k, R, "e", R.z - 3.2, 1);
-  if (art) artwork(k, art[0], R.y + 2.6, art[1], 1.9, 1.3, art[2], 4938344);
-  const bar = wallSpot(k, R, "e", R.z + 3.4, 0.9, { inset: 0.3, pad: 0.6 });
-  if (bar) {
-    consoleTable(k, bar[0], R.y, bar[1], { w: 1.6, d: 0.45, rotY: bar[2] });
-    dressTop(k, bar[0], R.y + 0.91, bar[1], rng, { rotY: bar[2], w: 1.2, n: 2, kinds: ["vase", "bowl"] });
-    radio(k, bar[0] - 0.35, R.y + 0.91, bar[1] + 0.3, { rotY: bar[2], label: "Put a record on" });
-  }
-  magazines(k, R.x - 1.8, R.y + 0.44, R.z + 0.2, { n: 4 });
-  boardGame(k, R.x - 0.9, R.y + 0.44, R.z + 0.3, { rotY: 0.4 });
-  wastebasket(k, R.x + R.w / 2 - 1, R.y, R.z + R.d / 2 - 1.2, { metal: true });
-  plant(k, R.x + R.w / 2 - 1.4, R.y, R.z - 3.6, 1.8);
-  for (const s of [-1, 1]) curtains(k, R.x + s * 2.5, R.y, R.z + R.d / 2 - 0.95, 3.6, Math.PI, 13221038);
-}
-function familyRoom(k, R, rng) {
-  fireplace(k, R.x - 3.2, R.y, R.z - R.d / 2 + 0.5, { rotY: 0, w: 2.4, h: 2.6 });
-  rug(k, R.x, R.y, R.z + 0.6, 4.4, 3.2, 7299925);
-  sofa(k, R.x, R.y, R.z + 2.4, { w: 2.8, rotY: Math.PI, color: 9213088, cushion: 14672872 });
-  armchair(k, R.x - 2.4, R.y, R.z + 0.6, { rotY: -Math.PI / 2, color: 8022616 });
-  armchair(k, R.x + 2.4, R.y, R.z + 0.6, { rotY: Math.PI / 2, color: 8022616 });
-  coffeeTable(k, R.x, R.y, R.z + 1.2);
-  tvUnit(k, R.x + R.w / 2 - 0.4, R.y, R.z - 3.2, { rotY: -Math.PI / 2, w: 2.2 });
-  tv(k, R.x + R.w / 2 - 0.5, R.y, R.z - 3.2, { rotY: -Math.PI / 2, w: 1.9, h: 1.4 });
-  bookshelf(k, R.x - R.w / 2 + 0.35, R.y, R.z + R.d / 2 - 2, { rotY: Math.PI / 2, w: 2, h: 2.2 });
-  k.world.spot("familyRoom", R.x, R.y, R.z + 1.6);
-  railRound(k, R);
-  rug(k, R.x, R.y + 0.01, R.z + 1.6, 2.6, 1.8, 5721410);
-  consoleTable(k, R.x, R.y, R.z + 3.9, { w: 2.4, d: 0.4, rotY: Math.PI });
-  dressTop(k, R.x, R.y + 0.91, R.z + 3.9, rng, { rotY: Math.PI, w: 1.8 });
-  sideTable(k, R.x - 1.9, R.y, R.z + 2.6, { w: 0.55, lamp: true });
-  sideTable(k, R.x + 1.9, R.y, R.z + 2.6, { w: 0.55, lamp: true });
-  floorLamp(k, R.x + 3.4, R.y, R.z + 2, { h: 1.55 });
-  boardGame(k, R.x - 0.3, R.y + 0.44, R.z + 1.2, { rotY: 0.2 });
-  magazines(k, R.x + 0.45, R.y + 0.44, R.z + 1.15, { n: 3 });
-  laundryBasket(k, R.x + R.w / 2 - 0.9, R.y, R.z - 1.6, { color: 13621449 });
-  wastebasket(k, R.x - R.w / 2 + 0.8, R.y, R.z - 2.4, {});
-  for (const s of [-1, 1]) {
-    const sp = wallSpot(k, R, "n", R.x + s * 2.2, 0.35, { windows: true });
-    if (sp) sconce2(k, sp[0], R.y + 2, sp[1], sp[2]);
-  }
-  const art = wallSpot(k, R, "w", R.z - 2.6, 0.9);
-  if (art) artwork(k, art[0], R.y + 2.05, art[1], 1.4, 1, art[2], 5925719);
-  const cl = wallSpot(k, R, "n", R.x + 2.6, 0.25, { windows: true });
-  if (cl) wallClock(k, cl[0], R.y + 2.3, cl[1], cl[2], { hour: 4, minute: 20 });
-  const sh = wallSpot(k, R, "w", R.z + 1.4, 0.7, { inset: 0.14 });
-  if (sh) wallShelf(k, sh[0], R.y + 1.7, sh[1], { rotY: sh[2], w: 1.2 });
-  dressWindows(k, R, R.z > 0 ? "s" : "n", 12563622, 3);
-  plant(k, R.x + R.w / 2 - 1.2, R.y, R.z + R.d / 2 - 2.6, 1.1);
-}
-function piano(k, x, y, z, rotY) {
-  const M = k.M, b = { x, y, z, r: rotY };
-  const body = M.paint(723982, 0.18, "pianoblack");
-  k.p(b, 0, 0.72, 0, 1.5, 0.28, 2.1, body, 1);
-  k.p(b, 0, 0.9, -0.6, 1.5, 0.06, 0.9, body, 1);
-  k.p(b, 0, 0.62, 1.02, 1.42, 0.1, 0.3, M.paint(16250352, 0.3, "keys"), 0.4);
-  for (let i = 0; i < 18; i++) k.p(b, -0.66 + i * 0.078, 0.68, 0.97, 0.03, 0.06, 0.18, body, 0.2);
-  for (const [ox, oz] of [[-0.6, -0.85], [0.6, -0.85], [0, 0.9]]) k.p(b, ox, 0.36, oz, 0.09, 0.72, 0.09, body, 0.3);
-  k.pc(b, 0, 0.5, 0, 1.6, 1, 2.2);
-  const [sx, sz] = k.L(0, 1.5, x, z, rotY);
-  k.p(b, 0, 0.52, 1.5, 0.62, 0.1, 0.34, M.get("leather"), 0.4);
-  for (const [ox, oz] of [[-0.25, 1.36], [0.25, 1.36], [-0.25, 1.64], [0.25, 1.64]]) {
-    k.p(b, ox, 0.24, oz, 0.05, 0.46, 0.05, M.get("walnut"), 0.3);
-  }
-  k.pc(b, 0, 0.3, 1.5, 0.66, 0.6, 0.4);
-  k.world.addInteract({
-    pos: V3(sx, y + 0.6, sz),
-    radius: 1.4,
-    label: "Sit at the piano",
-    kind: "seat",
-    seat: { x: sx, y: y + 0.56, z: sz, rotY: rotY + Math.PI }
-  });
-  k.world.addInteract({
-    pos: V3(x, y + 0.9, z),
-    radius: 2,
-    label: "Play the piano",
-    kind: "piano"
-  });
-}
-function kitchen(k, R, rng) {
-  const M = k.M;
-  const backZ = R.z + R.d / 2 - 0.4;
-  counterRun(k, R.x - 2.6, R.y, backZ, 5.4, { rotY: Math.PI });
-  range(k, R.x + 1.2, R.y, backZ, { rotY: Math.PI });
-  fridge(k, R.x + 3.4, R.y, backZ, { rotY: Math.PI });
-  counterRun(k, R.x + R.w / 2 - 0.48, R.y, R.z + 2.8, 3, { rotY: -Math.PI / 2, upper: false });
-  island(k, R.x - 0.6, R.y, R.z - 1, { w: 3.4, d: 1.2 });
-  fruitBowl(k, R.x - 1.4, R.y + 0.95, R.z - 1, {});
-  k.world.spot("kitchen", R.x - 0.6, R.y, R.z + 0.6);
-  k.world.spot("kitchenIsland", R.x - 0.6, R.y, R.z - 2);
-  const wr = wallSpot(k, R, "w", R.z - 3.6, 1.5, { inset: 0.48, pad: 0.55 });
-  const ws = wallSpot(k, R, "w", R.z - 3.6, 1.5, { inset: 0.14, pad: 0.55 });
-  if (wr && ws) {
-    counterRun(k, wr[0], R.y, wr[1], 3, { rotY: wr[2], upper: false, cabinet: 3819088 });
-    wallShelf(k, ws[0], R.y + 1.5, ws[1], { rotY: ws[2], w: 1.6, items: 4 });
-    wallShelf(k, ws[0], R.y + 1.95, ws[1], { rotY: ws[2], w: 1.6, items: 3 });
-  }
-  const cy = R.y + 0.93;
-  k.box(0.2, 0.28, 0.2, M.get("steel"), R.x - 4.4, cy + 0.14, backZ - 0.04, { tile: 0.2 });
-  k.box(0.16, 0.3, 0.2, M.paint(2830133, 0.4, "coffee"), R.x - 3.7, cy + 0.15, backZ - 0.04, { tile: 0.2 });
-  k.box(0.14, 0.24, 0.16, M.get("walnut"), R.x - 3.1, cy + 0.12, backZ - 0.06, { tile: 0.2 });
-  for (let i = 0; i < 4; i++) {
-    k.box(0.03, 0.14, 0.03, M.get("chrome"), R.x - 3.13 + i * 0.03, cy + 0.3, backZ - 0.06, { tile: 0.1 });
-  }
-  k.box(0.42, 0.03, 0.3, M.get("maple"), R.x - 2.2, cy + 0.02, backZ - 0.02, { tile: 0.3 });
-  for (let i = 0; i < 3; i++) {
-    k.box(0.14, 0.2, 0.14, M.paint([14208958, 13227211, 14672872][i], 0.4, "jar"), R.x - 1.4 + i * 0.2, cy + 0.1, backZ - 0.08, { tile: 0.2 });
-  }
-  k.box(0.3, 0.34, 0.03, M.paint(10471124, 0.95, "teatowel"), R.x + 1.2, R.y + 0.62, backZ + 0.36, { tile: 0.2 });
-  plant(k, R.x - 5.2, R.y + 0.95, backZ - 0.1, 0.45);
-  plant(k, R.x - 4.9, R.y + 0.95, backZ - 0.1, 0.4);
-  wastebasket(k, R.x + 1.6, R.y, R.z - 1, { w: 0.34, h: 0.5, metal: true });
-  rug(k, R.x - 0.6, R.y, R.z - 2.2, 2.6, 0.8, 7043668);
-  const cl = wallSpot(k, R, "n", R.x + 3.4, 0.3);
-  if (cl) wallClock(k, cl[0], R.y + 2.4, cl[1], cl[2], { hour: 8, minute: 15, d: 0.4 });
-  const ar = wallSpot(k, R, "n", R.x - 3.4, 0.8);
-  if (ar) artwork(k, ar[0], R.y + 2, ar[1], 1, 0.7, ar[2], 7035717);
-  void rng;
-}
-function dining(k, R, rng) {
-  const M = k.M;
-  const b = { x: R.x, y: R.y, z: R.z, r: 0 };
-  rug(k, R.x, R.y, R.z, 4.6, 3, 7032634);
-  k.p(b, 0, 0.74, 0, 3, 0.08, 1.3, M.get("walnut"), 1.2);
-  for (const [ox, oz] of [[-1.3, -0.5], [1.3, -0.5], [-1.3, 0.5], [1.3, 0.5]]) k.p(b, ox, 0.37, oz, 0.12, 0.74, 0.12, M.get("walnut"), 0.5);
-  k.pc(b, 0, 0.4, 0, 3, 0.8, 1.3);
-  for (let i = 0; i < 4; i++) {
-    diningChair(k, R.x - 1.1 + i * 0.73, R.y, R.z - 1.05, { rotY: 0 });
-    diningChair(k, R.x - 1.1 + i * 0.73, R.y, R.z + 1.05, { rotY: Math.PI });
-  }
-  diningChair(k, R.x - 1.9, R.y, R.z, { rotY: -Math.PI / 2 });
-  diningChair(k, R.x + 1.9, R.y, R.z, { rotY: Math.PI / 2 });
-  vase(k, R.x, R.y + 0.78, R.z, { scale: 1.2, color: 13227211 });
-  for (let i = 0; i < 3; i++) {
-    k.box(0.03, 0.9, 0.03, M.get("gold"), R.x - 0.8 + i * 0.8, R.y + 3.3, R.z, { tile: 0.2 });
-    k.box(0.5, 0.14, 0.5, M.emissive(16768168, 2), R.x - 0.8 + i * 0.8, R.y + 2.8, R.z, { tile: 0.3 });
-  }
-  k.box(2.4, 0.9, 0.5, M.get("walnut"), R.x, R.y + 0.45, R.z - R.d / 2 + 0.5, { tile: 0.9 });
-  k.world.collider(2.4, 0.9, 0.5, R.x, R.y + 0.45, R.z - R.d / 2 + 0.5);
-  artwork(k, R.x, R.y + 2, R.z - R.d / 2 + 0.3, 1.6, 1, 0, 5917247);
-  k.world.spot("dining", R.x, R.y, R.z + 1.8);
-  railRound(k, R);
-  const sz = R.z - R.d / 2 + 0.5;
-  dressTop(k, R.x, R.y + 0.9, sz, rng, { rotY: 0, w: 1.9, n: 3, kinds: ["photo", "bowl", "vase"] });
-  for (const s of [-1, 1]) {
-    k.box(0.06, 0.34, 0.06, M.get("gold"), R.x + s * 1.05, R.y + 1.07, sz, { tile: 0.2 });
-    k.box(0.03, 0.16, 0.03, M.paint(16183516, 0.8, "candle"), R.x + s * 1.05, R.y + 1.32, sz, { tile: 0.1 });
-  }
-  const cab = wallSpot(k, R, "e", R.z - 2.4, 1.1, { inset: 0.3, pad: 0.6 });
-  const cabW = wallSpot(k, R, "e", R.z - 2.4, 1.1, { inset: 0.06, pad: 0.6 });
-  if (cab && cabW) {
-    consoleTable(k, cab[0], R.y, cab[1], { w: 2, d: 0.45, rotY: cab[2] });
-    dressTop(k, cab[0], R.y + 0.91, cab[1], rng, { rotY: cab[2], w: 1.5, n: 2, kinds: ["vase", "books"] });
-    tallMirror(k, cabW[0], R.y + 1.15, cabW[1], { rotY: cabW[2], w: 1.1, h: 1.3, base: 0 });
-  }
-  const wine = wallSpot(k, R, "e", R.z + 2.6, 0.7, { inset: 0.24, pad: 0.6 });
-  if (wine) {
-    k.box(0.42, 1.1, 1.2, M.get("walnut"), wine[0], R.y + 0.55, wine[1], { rotY: wine[2], tile: 0.5 });
-    for (let i = 0; i < 12; i++) {
-      k.box(
-        0.06,
-        0.08,
-        0.08,
-        M.solid(rng.pick([2832932, 3812132, 2042672]), 0.4),
-        wine[0] - 0.2 * Math.sin(wine[2]),
-        R.y + 0.3 + Math.floor(i / 4) * 0.24,
-        wine[1] - 0.4 + i % 4 * 0.26,
-        { rotY: wine[2], tile: 0.1 }
-      );
-    }
-    k.col(0.45, 1.1, 1.25, wine[0], R.y + 0.55, wine[1], wine[2]);
-  }
-  for (const s of [-1, 1]) {
-    const sc = wallSpot(k, R, "w", R.z + s * 2.8, 0.3);
-    if (sc) sconce2(k, sc[0], R.y + 2.1, sc[1], sc[2]);
-    const ar = wallSpot(k, R, "w", R.z + s * 1, 0.7);
-    if (ar) artwork(k, ar[0], R.y + 2, ar[1], 0.9, 1.2, ar[2], rng.pick([5917247, 4938344, 7035717]));
-  }
-  dressWindows(k, R, "n", 11055803, 3);
-  plant(k, R.x + R.w / 2 - 1.2, R.y, R.z - R.d / 2 + 1.4, 1.5);
-  wastebasket(k, R.x - R.w / 2 + 0.9, R.y, R.z - R.d / 2 + 1, {});
-}
-function library(k, R, rng) {
-  const M = k.M;
-  for (const zz of [R.z - 3.7, R.z - 1.85, R.z + 1.75, R.z + 3.6]) {
-    bookshelf(k, R.x - R.w / 2 + 0.35, R.y, zz, { rotY: Math.PI / 2, w: 1.8, h: 2.6 });
-  }
-  bookshelf(k, R.x, R.y, R.z - R.d / 2 + 0.4, { w: 2.4, h: 2.6 });
-  desk(k, R.x + 1.4, R.y, R.z + 1, { rotY: Math.PI, w: 1.9, d: 0.85 });
-  officeChair(k, R.x + 1.4, R.y, R.z + 2, { rotY: 0 });
-  armchair(k, R.x + 1.6, R.y, R.z - 2.4, { rotY: Math.PI });
-  rug(k, R.x + 0.6, R.y, R.z, 3.4, 2.6, 7032634);
-  tableLamp(k, R.x + 1.4, R.z + 0.7, R.y + 0.79);
-  k.world.spot("library", R.x + 1, R.y, R.z);
-  railRound(k, R, ["w", "s"]);
-  armchair(k, R.x + 3.2, R.y, R.z - 2.4, { rotY: Math.PI, color: 5917247 });
-  sideTable(k, R.x + 2.4, R.y, R.z - 2.9, { w: 0.55 });
-  bookStack(k, R.x + 2.4, R.y + 0.6, R.z - 2.9, { n: 3 });
-  floorLamp(k, R.x + 3.4, R.y, R.z - 3.6, { h: 1.6 });
-  bookStack(k, R.x + 1.9, R.y + 0.77, R.z + 1, { n: 4 });
-  magazines(k, R.x + 0.9, R.y + 0.77, R.z + 1, { n: 2 });
-  bookStack(k, R.x - R.w / 2 + 1.4, R.y, R.z + 0.2, { n: 4, w: 0.3 });
-  const lx = R.x - R.w / 2 + 1.05;
-  for (const s of [-1, 1]) k.box(0.06, 2.3, 0.06, M.get("walnut"), lx + s * 0.02, R.y + 1.15, R.z - 0.8 + s * 0.34, { rotX: 0.1, tile: 0.3 });
-  for (let i = 0; i < 5; i++) k.box(0.5, 0.04, 0.05, M.get("walnut"), lx, R.y + 0.4 + i * 0.42, R.z - 0.8 + (i - 2) * 0.02, { rotY: Math.PI / 2, tile: 0.2 });
-  k.col(0.2, 2.3, 0.8, lx, R.y + 1.15, R.z - 0.8);
-  const globe = new Mesh(new SphereGeometry(0.2, 14, 10), M.solid(4157096, 0.7));
-  globe.position.set(R.x + 3, R.y + 0.95, R.z + 2.6);
-  k.world.addProp(globe);
-  k.box(0.06, 0.7, 0.06, M.get("walnut"), R.x + 3, R.y + 0.35, R.z + 2.6, { tile: 0.2 });
-  k.box(0.34, 0.05, 0.34, M.get("walnut"), R.x + 3, R.y + 0.03, R.z + 2.6, { tile: 0.2 });
-  k.col(0.36, 1.2, 0.36, R.x + 3, R.y + 0.6, R.z + 2.6);
-  wastebasket(k, R.x + 2.6, R.y, R.z + 1.4, { metal: true });
-  radio(k, R.x + R.w / 2 - 0.9, R.y + 0.9, R.z + 3.4, { rotY: -Math.PI / 2 });
-  consoleTable(k, R.x + R.w / 2 - 0.7, R.y, R.z + 3.4, { w: 1.4, d: 0.42, rotY: -Math.PI / 2 });
-  const ar = wallSpot(k, R, "e", R.z - 1.2, 0.8);
-  if (ar) artwork(k, ar[0], R.y + 2, ar[1], 1.1, 0.8, ar[2], 4865884);
-  for (const s of [-1, 1]) {
-    const sc = wallSpot(k, R, "e", R.z + s * 3.4, 0.3);
-    if (sc) sconce2(k, sc[0], R.y + 2.15, sc[1], sc[2]);
-  }
-  dressWindows(k, R, "n", 9207662, 2.8);
-  void rng;
-}
-function music(k, R, rng) {
-  piano(k, R.x, R.y, R.z, 0);
-  armchair(k, R.x + 2.4, R.y, R.z + 1.4, { rotY: Math.PI });
-  rug(k, R.x, R.y, R.z, 4, 3.2, 6048856);
-  artwork(k, R.x, R.y + 2, R.z - R.d / 2 + 0.3, 1.4, 0.9, 0, 4011344);
-  railRound(k, R);
-  floorLamp(k, R.x - 2.6, R.y, R.z - 1.6, { h: 1.6 });
-  sideTable(k, R.x + 3.1, R.y, R.z + 1.4, { w: 0.5, lamp: true });
-  k.box(0.05, 1.1, 0.05, k.M.get("blackMetal"), R.x - 1.6, R.y + 0.55, R.z + 1.6, { tile: 0.2 });
-  k.box(0.5, 0.36, 0.04, k.M.get("blackMetal"), R.x - 1.6, R.y + 1.16, R.z + 1.6, { rotX: -0.35, tile: 0.2 });
-  k.box(0.42, 1.2, 0.24, k.M.paint(3812132, 0.6, "case"), R.x - R.w / 2 + 0.7, R.y + 0.6, R.z + 2.4, { rotZ: 0.12, tile: 0.3 });
-  k.col(0.45, 1.2, 0.3, R.x - R.w / 2 + 0.7, R.y + 0.6, R.z + 2.4);
-  const sh = wallSpot(k, R, "e", R.z - 1.6, 0.7, { inset: 0.14 });
-  if (sh) wallShelf(k, sh[0], R.y + 1.6, sh[1], { rotY: sh[2], w: 1.2 });
-  void rng;
-}
-function foyer(k, R, rng) {
-  const M = k.M;
-  for (const s of [-1, 1]) {
-    consoleTable(k, R.x + s * 3.4, R.y, R.z - R.d / 2 + 0.6, { w: 1.4, d: 0.42 });
-    k.box(1.1, 1.6, 0.05, M.get("mirror"), R.x + s * 3.4, R.y + 1.9, R.z - R.d / 2 + 0.42, { tile: 0.8 });
-    plant(k, R.x + s * 4.8, R.y, R.z - R.d / 2 + 0.9, 1.4);
-    dressTop(k, R.x + s * 3.4, R.y + 0.91, R.z - R.d / 2 + 0.6, rng, { w: 1, n: 2, kinds: ["bowl", "photo", "vase"] });
-  }
-  const colors = [4152427, 7033919, 4865884, 4156237, 7028554];
-  for (let i = 0; i < 5; i++) {
-    artwork(k, R.x - 5.9, R.y + 2 + i * 0.55, R.z - 4 + i * 1.1, 0.7, 0.5, Math.PI / 2, colors[i]);
-  }
-  k.world.spot("foyerCentre", R.x, R.y, R.z - 5);
-  rug(k, R.x, R.y, R.z - 6, 5, 3, 7035466);
-  rug(k, R.x, R.y + 0.01, R.z - 6, 2, 2.6, 8202803);
-  umbrellaStand(k, R.x - 2.3, R.y, R.z - R.d / 2 + 0.55);
-  const bn = wallSpot(k, R, "e", R.z - 5.6, 1, { inset: 0.3, pad: 0.8 });
-  if (bn) {
-    bench(k, bn[0], R.y, bn[1], { w: 1.6, rotY: bn[2], color: 9076588, rack: true });
-    coatHooks(k, bn[0] - 0.24 * Math.sin(bn[2]), R.y + 1.75, bn[1] - 0.24 * Math.cos(bn[2]), { rotY: bn[2], w: 1.4, n: 4 });
-  }
-  const cl = wallSpot(k, R, "e", R.z - 8.4, 0.3);
-  if (cl) wallClock(k, cl[0], R.y + 2.4, cl[1], cl[2], { hour: 9, minute: 5, d: 0.44 });
-  const ar = wallSpot(k, R, "e", R.z - 2.6, 1);
-  if (ar) artwork(k, ar[0], R.y + 2.4, ar[1], 1.4, 1.9, ar[2], 4152427);
-  for (const s of [-1, 1]) floorLamp(k, R.x + s * 2.7, R.y, R.z - 4.2, { h: 1.65 });
-  for (const s of [-1, 1]) {
-    const sc = wallSpot(k, R, "w", R.z - 5.4 + s * 1.4, 0.3);
-    if (sc) sconce2(k, sc[0], R.y + 2.6, sc[1], sc[2], { intensity: 6 });
-  }
-}
-function sunroom(k, R, rng) {
-  const M = k.M;
-  const b = { x: R.x, y: R.y, z: R.z + 0.6, r: 0 };
-  rug(k, R.x, R.y, R.z + 0.6, 3.2, 3.2, 10135692);
-  k.p(b, 0, 0.74, 0, 1.5, 0.07, 1.5, M.get("maple"), 0.9);
-  for (const [ox, oz] of [[-0.6, -0.6], [0.6, -0.6], [-0.6, 0.6], [0.6, 0.6]]) k.p(b, ox, 0.37, oz, 0.08, 0.74, 0.08, M.get("maple"), 0.4);
-  k.pc(b, 0, 0.4, 0, 1.5, 0.8, 1.5);
-  for (let i = 0; i < 4; i++) {
-    const a = i / 4 * Math.PI * 2 + Math.PI / 4;
-    diningChair(k, R.x + Math.cos(a) * 1.15, R.y, R.z + 0.6 + Math.sin(a) * 1.15, { rotY: -a + Math.PI / 2 });
-  }
-  plant(k, R.x - R.w / 2 + 1, R.y, R.z - 1.6, 1.5);
-  plant(k, R.x + R.w / 2 - 1, R.y, R.z - 1.6, 1.2);
-  k.world.spot("sunroom", R.x, R.y, R.z);
-  for (const s of [-1, 1]) {
-    armchair(k, R.x - 1.5 + s * 0.9, R.y, R.z + 3.6, { rotY: 0, color: 13621449 });
-  }
-  sideTable(k, R.x - 1.5, R.y, R.z + 3.7, { w: 0.6 });
-  magazines(k, R.x - 1.5, R.y + 0.6, R.z + 3.7, { n: 3 });
-  floorLamp(k, R.x - 3, R.y, R.z + 3.6, { h: 1.5 });
-  curtains(k, R.x - 1.6, R.y, R.z + R.d / 2 - 0.35, 4, Math.PI, 14209734);
-  fruitBowl(k, R.x, R.y + 0.78, R.z + 0.6, {});
-  const sp = wallSpot(k, R, "w", R.z + 3.6, 0.9, { inset: 0.16, pad: 0.6 });
-  if (sp) {
-    wallShelf(k, sp[0], R.y + 1.3, sp[1], { rotY: sp[2], w: 1.4, items: 3 });
-    wallShelf(k, sp[0], R.y + 1.75, sp[1], { rotY: sp[2], w: 1.4, items: 3 });
-  }
-  for (const [px3, pz2, s] of [[R.x - 3, R.z + 2.2, 1.9], [R.x + 3.2, R.z - 3.2, 1.3], [R.x - 2.8, R.z - 3.6, 0.8], [R.x + 3.3, R.z + 1, 1.1]]) {
-    plant(k, px3, R.y, pz2, s);
-  }
-  k.box(0.24, 0.24, 0.18, M.paint(7043668, 0.6, "can"), R.x - 3.4, R.y + 0.12, R.z + 2.2, { tile: 0.2 });
-  k.box(0.3, 0.04, 0.04, M.paint(7043668, 0.6, "can"), R.x - 3.2, R.y + 0.22, R.z + 2.2, { rotZ: 0.4, tile: 0.2 });
-  const cl = wallSpot(k, R, "n", R.x - 2.2, 0.25);
-  if (cl) wallClock(k, cl[0], R.y + 2.3, cl[1], cl[2], { hour: 11, minute: 40 });
-  void rng;
-}
-function mud(k, R, rng) {
-  const M = k.M;
-  k.box(R.w - 0.6, 0.06, 0.45, M.get("maple"), R.x, R.y + 0.5, R.z - R.d / 2 + 0.4, { tile: 0.6 });
-  k.box(R.w - 0.6, 1.8, 0.3, M.paint(14673128, 0.6, "lockers"), R.x, R.y + 1.6, R.z - R.d / 2 + 0.3, { tile: 0.7 });
-  for (let i = 0; i < 4; i++) {
-    k.box(0.05, 0.05, 0.14, M.get("chrome"), R.x - 1.2 + i * 0.8, R.y + 1.7, R.z - R.d / 2 + 0.5, { tile: 0.2 });
-    k.box(
-      0.4,
-      0.7,
-      0.16,
-      M.paint([3108789, 11890600, 7043668, 9067322][i], 0.9, "coat"),
-      R.x - 1.2 + i * 0.8,
-      R.y + 1.3,
-      R.z - R.d / 2 + 0.52,
-      { tile: 0.3 }
-    );
-  }
-  for (let i = 0; i < 4; i++) {
-    k.box(
-      0.28,
-      0.12,
-      0.4,
-      M.paint([2829099, 9059119, 3100523, 7033648][i], 0.8, "shoe"),
-      R.x - 1.2 + i * 0.8,
-      R.y + 0.08,
-      R.z - R.d / 2 + 0.8,
-      { tile: 0.2 }
-    );
-  }
-  const hk = wallSpot(k, R, "w", R.z - 2.6, 0.7, { inset: 0.1 });
-  if (hk) coatHooks(k, hk[0], R.y + 1.7, hk[1], { rotY: hk[2], w: 1.3, n: 4 });
-  const sh = wallSpot(k, R, "w", R.z - 0.6, 0.6, { inset: 0.14 });
-  if (sh) wallShelf(k, sh[0], R.y + 1.5, sh[1], { rotY: sh[2], w: 1, items: 2 });
-  const mi = wallSpot(k, R, "w", R.z + 1.6, 0.5, { inset: 0.08 });
-  if (mi) tallMirror(k, mi[0], R.y + 0.9, mi[1], { rotY: mi[2], w: 0.7, h: 1.2, base: 0, frame: M.get("walnut") });
-  umbrellaStand(k, R.x + R.w / 2 - 0.5, R.y, R.z - R.d / 2 + 1.3);
-  laundryBasket(k, R.x - R.w / 2 + 0.55, R.y, R.z + 2.6, { color: 13621449 });
-  k.box(1.4, 0.05, 0.4, M.paint(3817285, 0.7, "boottray"), R.x, R.y + 0.03, R.z - R.d / 2 + 1.1, { tile: 0.3 });
-  k.box(0.5, 0.3, 0.3, M.paint(7043668, 0.85, "bag"), R.x + 0.6, R.y + 0.15, R.z + 1.6, { rotY: 0.5, tile: 0.3 });
-  k.col(0.52, 0.3, 0.32, R.x + 0.6, R.y + 0.15, R.z + 1.6, 0.5);
-  const cl = wallSpot(k, R, "e", R.z + 3.4, 0.25);
-  if (cl) wallClock(k, cl[0], R.y + 2.1, cl[1], cl[2], { hour: 7, minute: 50, d: 0.28 });
-  void rng;
-}
-function storage(k, R, rng) {
-  const M = k.M;
-  const doorSide = (R.def?.doors || [])[0]?.side;
-  const shelfZ = doorSide === "n" ? R.z + R.d / 2 - 0.4 : R.z - R.d / 2 + 0.4;
-  for (let s = 0; s < 4; s++) {
-    k.box(R.w - 1.2, 0.06, 0.5, M.get("steel"), R.x, R.y + 0.45 + s * 0.62, shelfZ, { tile: 0.6 });
-    for (let i = 0; i < 6; i++) {
-      if (!rng.chance(0.75)) continue;
-      k.box(
-        0.5,
-        0.4,
-        0.4,
-        M.paint(rng.pick([11569512, 14530706, 11055803, 13621449]), 0.85, "crate"),
-        R.x - (R.w - 2.4) / 2 + i * ((R.w - 2.4) / 5),
-        R.y + 0.68 + s * 0.62,
-        shelfZ,
-        { tile: 0.3 }
-      );
-    }
-  }
-  k.world.collider(R.w - 1.2, 2.6, 0.5, R.x, R.y + 1.3, shelfZ);
-  const sp = wallSpot(k, R, "w", R.z + 1, 1.6, { inset: 0.32, pad: 0.6 }) || wallSpot(k, R, "e", R.z + 1, 1.6, { inset: 0.32, pad: 0.6 });
-  if (sp) {
-    for (let s = 0; s < 3; s++) {
-      k.box(0.55, 0.05, 3.2, M.get("steel"), sp[0], R.y + 0.5 + s * 0.62, sp[1], { tile: 0.5 });
-      for (let i = 0; i < 7; i++) {
-        if (!rng.chance(0.7)) continue;
-        k.box(
-          0.18,
-          0.24,
-          0.18,
-          M.paint(rng.pick([14208958, 13227211, 14672872, 11569512]), 0.5, "jar"),
-          sp[0],
-          R.y + 0.65 + s * 0.62,
-          sp[1] - 1.3 + i * 0.44,
-          { tile: 0.2 }
-        );
-      }
-    }
-    k.col(0.55, 2, 3.2, sp[0], R.y + 1, sp[1]);
-  }
-  const lx = R.x - R.w / 2 + 0.9, lz = shelfZ + (doorSide === "n" ? -1.5 : 1.5);
-  for (const s of [-1, 1]) k.box(0.06, 1.7, 0.06, M.get("maple"), lx + s * 0.22, R.y + 0.85, lz, { rotZ: s * 0.06, tile: 0.3 });
-  for (let i = 0; i < 4; i++) k.box(0.5, 0.04, 0.16, M.get("maple"), lx, R.y + 0.3 + i * 0.4, lz, { tile: 0.2 });
-  k.col(0.6, 1.7, 0.3, lx, R.y + 0.85, lz);
-  k.box(0.05, 1.4, 0.05, M.get("maple"), R.x + R.w / 2 - 0.6, R.y + 0.7, lz, { rotZ: 0.12, tile: 0.2 });
-  k.box(0.3, 0.1, 0.12, M.paint(7033648, 0.9, "broom"), R.x + R.w / 2 - 0.52, R.y + 0.06, lz, { tile: 0.2 });
-  const wb = wallSpot(k, R, R.z < 0 ? "s" : "n", R.x - R.w / 2 + 0.8, 0.3, { windows: true, inset: 0.3, pad: 0.5 });
-  if (wb) wastebasket(k, wb[0], R.y, wb[1], { w: 0.34, h: 0.5, metal: true });
-}
-function stairHall(k, R, rng) {
-  const zN = R.z - R.d / 2;
-  rug(k, R.x, R.y, zN + 4, 3.6, 4.4, 7035466);
-  consoleTable(k, R.x, R.y, zN + 0.55, { w: 1.8, d: 0.44 });
-  dressTop(k, R.x, R.y + 0.91, zN + 0.55, rng, { w: 1.3, n: 2, kinds: ["vase", "photo", "bowl"] });
-  for (const s of [-1, 1]) plant(k, R.x + s * 2.6, R.y, zN + 0.9, 1.6);
-  bench(k, R.x, R.y, zN + 6.6, { w: 1.6, color: 9076588 });
-  floorLamp(k, R.x - 3, R.y, zN + 5.6, { h: 1.65 });
-  const ar = wallSpot(k, R, "e", zN + 9.4, 1);
-  if (ar) artwork(k, ar[0], R.y + 2.2, ar[1], 1.3, 1.8, ar[2], 4865884);
-  const cl = wallSpot(k, R, "e", zN + 3.2, 0.3);
-  if (cl) wallClock(k, cl[0], R.y + 2.3, cl[1], cl[2], { hour: 10, minute: 10, d: 0.4 });
-  for (const s of [-1, 1]) {
-    const sc = wallSpot(k, R, "e", zN + 2 + s * 0.9, 0.3);
-    if (sc) sconce2(k, sc[0], R.y + 2.5, sc[1], sc[2]);
-  }
-}
-function gallery(k, R, rng) {
-  const clearOfStairs = (x) => x > -20 && Math.abs(x) > 7.5 && !(x > 14.5 && x < 24.5);
-  const cols = [4152427, 7033919, 4865884, 4156237, 7028554, 5917247];
-  let i = 0;
-  for (let x = R.x - R.w / 2 + 4; x < R.x + R.w / 2 - 3; x += 4.5) {
-    if (!clearOfStairs(x)) continue;
-    for (const side of ["n", "s"]) {
-      if (!backedByRoom(k, R, side, x)) continue;
-      const sp = wallSpot(k, R, side, x, 0.6, { pad: 0.45, inset: i % 3 === 2 ? 0.14 : 0.04 });
-      if (!sp) continue;
-      if (i % 3 === 2) {
-        wallShelf(k, sp[0], R.y + 1.5, sp[1], { rotY: sp[2], w: 1, items: 2 });
-      } else {
-        artwork(k, sp[0], R.y + 2, sp[1], rng.range(0.7, 1), rng.range(0.5, 0.8), sp[2], cols[i % cols.length]);
-      }
-      i++;
-    }
-    if (i % 3 === 0) {
-      const side = rng.chance(0.5) ? "n" : "s";
-      const sp = backedByRoom(k, R, side, x) ? wallSpot(k, R, side, x, 0.8, { inset: 0.26, pad: 0.7 }) : null;
-      if (sp) {
-        consoleTable(k, sp[0], R.y, sp[1], { w: 1.3, d: 0.38, rotY: sp[2] });
-        if (rng.chance(0.5)) tableLamp(k, sp[0], sp[1], R.y + 0.91, { rotY: sp[2] });
-        else vase(k, sp[0], R.y + 0.91, sp[1], { scale: 1.1 });
-      }
-    }
-  }
-  for (const cx2 of [-19, -12, 12, 27]) {
-    if (!clearOfStairs(cx2) || cx2 < R.x - R.w / 2 + 3 || cx2 > R.x + R.w / 2 - 3) continue;
-    rug(k, cx2, R.y, R.z, 5, 1.6, 7032634);
-  }
 }
 
 // vendor/three/examples/jsm/objects/Sky.js
@@ -32468,6 +31841,1178 @@ var SkySystem = class {
     return `${hh}:${String(m).padStart(2, "0")} ${ampm}`;
   }
 };
+
+// src/world/furnish.js
+var V3 = (x, y, z) => new Vector3(x, y, z);
+var SWITCHED = /* @__PURE__ */ new Set([
+  "bedroom",
+  "bath",
+  "great",
+  "family",
+  "kitchen",
+  "dining",
+  "library",
+  "music",
+  "foyer",
+  "sunroom",
+  "mud",
+  "pantry",
+  "storage",
+  "gaming",
+  "laundry",
+  "workshop",
+  "garage",
+  "gym",
+  "stairhall",
+  "court",
+  "bowling"
+]);
+function furnishAll(world) {
+  const k = new Kit(world);
+  const rng = makeRng(4242);
+  k.openings = collectOpenings(world);
+  k.bounds = houseBounds(world);
+  world.consoles = world.consoles || [];
+  let gamingId = 0;
+  for (const R of world.rooms) {
+    const t = R.type;
+    const rr = roomRng(R);
+    switch (t) {
+      case "bedroom":
+        bedroom(k, R, rr);
+        break;
+      case "bath":
+        bathroom(k, R, rr);
+        break;
+      case "gaming":
+        gamingRoom(k, R, gamingId++);
+        break;
+      case "theater":
+        theater(k, R);
+        break;
+      case "bowling":
+        bowling(k, R);
+        break;
+      case "court":
+        court(k, R);
+        break;
+      case "gym":
+        gym(k, R);
+        break;
+      case "laundry":
+        laundry(k, R);
+        break;
+      case "garage":
+        garage(k, R);
+        break;
+      case "workshop":
+        workshop(k, R);
+        break;
+      case "great":
+        greatRoom(k, R, rr);
+        break;
+      case "family":
+        familyRoom(k, R, rr);
+        break;
+      case "kitchen":
+        kitchen(k, R, rr);
+        break;
+      case "dining":
+        dining(k, R, rr);
+        break;
+      case "library":
+        library(k, R, rr);
+        break;
+      case "music":
+        music(k, R, rr);
+        break;
+      case "foyer":
+        foyer(k, R, rr);
+        break;
+      case "sunroom":
+        sunroom(k, R, rr);
+        break;
+      case "mud":
+        mud(k, R, rr);
+        break;
+      case "stairhall":
+        stairHall(k, R, rr);
+        break;
+      case "corridor":
+        gallery(k, R, rr);
+        break;
+      case "pantry":
+      case "storage":
+        storage(k, R, rr);
+        break;
+      default:
+        break;
+    }
+    if (SWITCHED.has(t)) roomSwitch(k, R);
+    if (["bedroom", "great", "family", "library", "foyer", "dining", "sunroom", "music"].includes(t) && R.w >= 7) {
+      const px3 = t === "family" ? R.x + R.w / 2 - 0.9 : R.x - R.w / 2 + 0.9;
+      plant(k, px3, R.y, R.z + R.d / 2 - 0.9, rng.range(0.9, 1.3));
+    }
+  }
+  outdoorSpots(world);
+  return k;
+}
+function grouped(k, name, build) {
+  const grp = new Group();
+  grp.name = name;
+  const prev = k.B;
+  k.B = new Batcher(name);
+  try {
+    build(grp);
+  } finally {
+    k.B.flush(grp);
+    k.B = prev;
+  }
+  k.world.addProp(grp);
+  return grp;
+}
+function outdoorSpots(world) {
+  const cx2 = 22, cz2 = 40, y = groundHeight(cx2, cz2) + 0.12;
+  const tx = cx2 - 2.4;
+  world.spot("picnicSeatA", tx - 1.05, y, cz2, { rotY: Math.PI / 2 });
+  world.spot("picnicSeatB", tx + 1.05, y, cz2, { rotY: -Math.PI / 2 });
+  world.spot("picnicTable", tx, y, cz2);
+}
+function collectOpenings(world) {
+  const list = [];
+  for (const R of world.rooms) {
+    for (const dd of R.def?.doors || []) {
+      const half = dd.w / 2, h = dd.w > 1.6 ? 2.7 : 2.25;
+      if (dd.side === "n" || dd.side === "s") {
+        list.push({
+          floor: R.floor,
+          axis: "z",
+          h,
+          line: dd.side === "n" ? R.z - R.d / 2 : R.z + R.d / 2,
+          lo: R.x + dd.at - half,
+          hi: R.x + dd.at + half
+        });
+      } else {
+        list.push({
+          floor: R.floor,
+          axis: "x",
+          h,
+          line: dd.side === "w" ? R.x - R.w / 2 : R.x + R.w / 2,
+          lo: R.z + dd.at - half,
+          hi: R.z + dd.at + half
+        });
+      }
+    }
+  }
+  return list;
+}
+function houseBounds(world) {
+  const b = { x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity };
+  for (const R of world.rooms) {
+    b.x0 = Math.min(b.x0, R.x - R.w / 2);
+    b.x1 = Math.max(b.x1, R.x + R.w / 2);
+    b.z0 = Math.min(b.z0, R.z - R.d / 2);
+    b.z1 = Math.max(b.z1, R.z + R.d / 2);
+  }
+  return b;
+}
+function roomRng(R) {
+  let h = 2166136261;
+  for (const s of `${R.name}|${R.floor}`) h = Math.imul(h ^ s.charCodeAt(0), 16777619);
+  return makeRng(h >>> 0);
+}
+var wallLine = (R, side) => side === "n" ? R.z - R.d / 2 : side === "s" ? R.z + R.d / 2 : side === "w" ? R.x - R.w / 2 : R.x + R.w / 2;
+function onWall(R, side, along, inset = 0) {
+  const hw = R.w / 2 - 0.06, hd = R.d / 2 - 0.06;
+  if (side === "n") return [R.x + along, R.z - hd + inset, 0];
+  if (side === "s") return [R.x + along, R.z + hd - inset, Math.PI];
+  if (side === "w") return [R.x - hw + inset, R.z + along, Math.PI / 2];
+  return [R.x + hw - inset, R.z + along, -Math.PI / 2];
+}
+function exterior(k, R, side) {
+  const b = k.bounds, l = wallLine(R, side);
+  return side === "n" ? Math.abs(l - b.z0) < 0.4 : side === "s" ? Math.abs(l - b.z1) < 0.4 : side === "w" ? Math.abs(l - b.x0) < 0.4 : Math.abs(l - b.x1) < 0.4;
+}
+function wallFree(k, R, side, c, half, pad = 0.4) {
+  const horiz = side === "n" || side === "s";
+  const line = wallLine(R, side);
+  for (const o of k.openings) {
+    if (o.floor !== R.floor || o.axis !== (horiz ? "z" : "x")) continue;
+    if (Math.abs(o.line - line) > 0.4) continue;
+    if (c + half + pad > o.lo && c - half - pad < o.hi) return false;
+  }
+  return true;
+}
+function wallSpot(k, R, side, c, half, o = {}) {
+  if (!o.windows && exterior(k, R, side)) return null;
+  if (Math.abs(c - (side === "n" || side === "s" ? R.x : R.z)) + half > (side === "n" || side === "s" ? R.w : R.d) / 2 - 0.25) return null;
+  if (!wallFree(k, R, side, c, half, o.pad ?? 0.35)) return null;
+  const along = side === "n" || side === "s" ? c - R.x : c - R.z;
+  return onWall(R, side, along, o.inset ?? 0.04);
+}
+function backedByRoom(k, R, side, c) {
+  const line = wallLine(R, side);
+  return k.world.rooms.some((r) => r.floor === R.floor && r.type !== "corridor" && c > r.x - r.w / 2 + 0.3 && c < r.x + r.w / 2 - 0.3 && Math.abs((side === "n" ? r.z + r.d / 2 : r.z - r.d / 2) - line) < 0.4);
+}
+function railHeight(k, R) {
+  let top = 2.25;
+  for (const o of k.openings) {
+    if (o.floor !== R.floor) continue;
+    const near = o.axis === "z" ? (Math.abs(o.line - (R.z - R.d / 2)) < 0.4 || Math.abs(o.line - (R.z + R.d / 2)) < 0.4) && o.hi > R.x - R.w / 2 && o.lo < R.x + R.w / 2 : (Math.abs(o.line - (R.x - R.w / 2)) < 0.4 || Math.abs(o.line - (R.x + R.w / 2)) < 0.4) && o.hi > R.z - R.d / 2 && o.lo < R.z + R.d / 2;
+    if (near) top = Math.max(top, o.h);
+  }
+  return Math.min((R.h || 3.8) - 0.55, top + 0.22);
+}
+function railRound(k, R, extraSkip = []) {
+  const skip = ["n", "s", "e", "w"].filter((s) => exterior(k, R, s) || extraSkip.includes(s));
+  if (skip.length === 4) return;
+  pictureRail(k, R, { h: railHeight(k, R), skip });
+}
+function roomSwitch(k, R) {
+  const dd = (R.def?.doors || [])[0];
+  if (!dd) return;
+  const span = dd.side === "n" || dd.side === "s" ? R.w : R.d;
+  const half = dd.w / 2;
+  const side = dd.at - half - 0.5 > -span / 2 ? -1 : 1;
+  const at = dd.at + side * (half + 0.3);
+  if (Math.abs(at) > span / 2 - 0.25) return;
+  const [x, z, rotY] = onWall(R, dd.side, at, 0.02);
+  lightSwitch(k, R, x, R.y + 1.16, z, { rotY });
+}
+function dressTop(k, x, y, z, rng, o = {}) {
+  const r = o.rotY ?? 0, w = o.w ?? 1.4, n = o.n ?? 3;
+  const kinds = o.kinds || ["photo", "vase", "books", "bowl", "mags"];
+  for (let i = 0; i < n; i++) {
+    const ox = -w / 2 + (i + 0.5) * (w / n);
+    const px3 = x + Math.cos(r) * ox, pz2 = z - Math.sin(r) * ox;
+    switch (rng.pick(kinds)) {
+      case "photo":
+        photoFrame(k, px3, y, pz2, { rotY: r, color: rng.pick([3623004, 7035717, 5925719, 8014742]) });
+        break;
+      case "vase":
+        vase(k, px3, y, pz2, { scale: rng.range(0.7, 1.15), color: rng.pick([13227211, 14208958, 10135732]) });
+        break;
+      case "books":
+        bookStack(k, px3, y, pz2, { rotY: r, n: rng.int(2, 4) });
+        break;
+      case "bowl":
+        fruitBowl(k, px3, y, pz2, {});
+        break;
+      case "mags":
+        magazines(k, px3, y, pz2, { rotY: r, n: rng.int(2, 4) });
+        break;
+      default:
+        break;
+    }
+  }
+}
+function dressWindows(k, R, side, color, wide = 3.2) {
+  const inward = side === "n" ? 1 : -1;
+  const wallZ = wallLine(R, side);
+  const wins = (k.world.windowMap || []).filter((wn) => wn.floor === R.floor && wn.side === side && wn.x > R.x - R.w / 2 + 0.2 && wn.x < R.x + R.w / 2 - 0.2);
+  for (const wn of wins) {
+    curtains(k, wn.x, R.y, wallZ + inward * 0.28, Math.min(wide, (wn.w || 2.1) + 1), side === "n" ? 0 : Math.PI, color);
+  }
+  return wins.length;
+}
+function bedroom(k, R, rng) {
+  const M = k.M;
+  const north = R.z < 0;
+  const wallZ = north ? R.z - R.d / 2 : R.z + R.d / 2;
+  const inward = north ? 1 : -1;
+  const owner = R.def?.owner;
+  const palettes = {
+    you: { duvet: 14212838, sheet: 16250610, rug: 6977156, art: 3623004 },
+    james: { duvet: 3108789, sheet: 15660283, rug: 2442606, art: 1915747 },
+    chloie: { duvet: 14393560, sheet: 16643067, rug: 9264808, art: 8014742 }
+  };
+  const pal = palettes[owner] || {
+    duvet: rng.pick([14672872, 14274496, 13161419, 14734296]),
+    sheet: 16184559,
+    rug: rng.pick([9077106, 7240320, 9141647]),
+    art: rng.pick([4938344, 7035717, 5925719])
+  };
+  const size = owner === "you" ? "king" : owner ? "twin" : rng.pick(["queen", "king", "queen"]);
+  const bx = R.x, bz = wallZ + inward * 1.45;
+  if (R.name === "Bunk Room") {
+    bunkBed(k, R.x - 1.6, R.y, bz, { rotY: north ? 0 : Math.PI });
+    bunkBed(k, R.x + 1.6, R.y, bz, { rotY: north ? 0 : Math.PI });
+  } else {
+    bed(k, bx, R.y, bz, { size, rotY: north ? 0 : Math.PI, duvet: pal.duvet, sheet: pal.sheet, cushion: pal.rug });
+    nightstand(k, bx - 1.5, R.y, bz - inward * 0.4, { rotY: north ? 0 : Math.PI });
+    if (R.w > 7) nightstand(k, bx + 1.5, R.y, bz - inward * 0.4, { rotY: north ? 0 : Math.PI, lamp: false });
+  }
+  rug(k, R.x, R.y, R.z + inward * -0.4, Math.min(4.2, R.w - 2), Math.min(3.4, R.d - 3), pal.rug);
+  const farZ = north ? R.z + R.d / 2 : R.z - R.d / 2;
+  const farSide = north ? "s" : "n";
+  const dDef = (R.def?.doors || []).find((dd) => dd.side === farSide);
+  const doorX = R.x + (dDef?.at ?? 0);
+  const clear = (dDef?.w ?? 1) / 2 + 0.4;
+  const westRun = doorX - clear - (R.x - R.w / 2 + 0.25);
+  const eastRun = R.x + R.w / 2 - 2.1 - (doorX + clear);
+  const side = westRun >= eastRun ? -1 : 1;
+  const dw = Math.min(2.2, R.w * 0.3, Math.max(westRun, eastRun));
+  const dx = doorX + side * (clear + dw / 2);
+  dresser(k, dx, R.y, farZ - inward * 0.4, { rotY: north ? Math.PI : 0, w: dw });
+  tv(k, dx, R.y, farZ - inward * 0.17, { rotY: north ? Math.PI : 0, w: Math.min(1.5, dw - 0.2), h: 1.55, wall: true });
+  const cornerFits = R.x + R.w / 2 - 1.95 > doorX + clear;
+  if (cornerFits) wardrobe(k, R.x + R.w / 2 - 1.1, R.y, farZ - inward * 0.45, { rotY: north ? Math.PI : 0 });
+  else wardrobe(k, R.x + R.w / 2 - 0.45, R.y, farZ - inward * 1.15, { rotY: -Math.PI / 2 });
+  if (owner === "james" || owner === "chloie") {
+    const kx = R.x + R.w / 2 - 1.4;
+    desk(k, kx, R.y, wallZ + inward * 0.55, { rotY: north ? 0 : Math.PI, w: 1.4 });
+    officeChair(k, kx, R.y, wallZ + inward * 1.35, { rotY: north ? Math.PI : 0, color: owner === "james" ? 3108789 : 11890600 });
+    bookshelf(k, R.x - R.w / 2 + 0.35, R.y, R.z - inward * 1.8, { rotY: Math.PI / 2, w: 1.4, h: 1.8 });
+    for (let i = 0; i < 5; i++) {
+      k.box(
+        0.22,
+        0.22,
+        0.22,
+        k.M.solid(rng.pick([13644844, 3113471, 15774761, 6991948]), 0.6),
+        R.x - R.w / 2 + 1.6 + i * 0.35,
+        R.y + 0.11,
+        R.z + inward * 1.4,
+        { rotY: rng() * 3, tile: 0.2 }
+      );
+    }
+    tableLamp(k, kx - 0.5, wallZ + inward * 0.55, R.y + 0.79);
+    bookStack(k, kx + 0.45, R.y + 0.77, wallZ + inward * 0.5, { n: 3, w: 0.22 });
+  } else if (owner === "you") {
+    armchair(k, R.x - R.w / 2 + 1.8, R.y, R.z + inward * 1.2, { rotY: Math.PI / 2 });
+    coffeeTable(k, R.x - R.w / 2 + 3.2, R.y, R.z + inward * 1.2, { w: 0.7, d: 0.7 });
+    bookshelf(k, dx - dw / 2 - 0.95, R.y, farZ - inward * 0.22, { rotY: north ? Math.PI : 0, w: 1.6, h: 2.1 });
+  } else if (R.w > 7.5) {
+    armchair(k, R.x + R.w / 2 - 1.6, R.y, R.z, { rotY: north ? -Math.PI / 2 : Math.PI / 2 });
+  }
+  let variant = null;
+  if (!owner && R.name !== "Bunk Room") {
+    const cornerMin = R.w > 7 ? 2.55 : 1.95;
+    const cornerX = R.x + Math.min(Math.max(R.w / 2 - 1.4, cornerMin), R.w / 2 - 0.85);
+    const cornerOk = R.w / 2 - 0.85 >= cornerMin;
+    variant = rng.pick(cornerOk ? ["reading", "desk", "bench", "bean"] : ["bench", "bean"]);
+    if (variant === "reading") {
+      armchair(k, cornerX, R.y, wallZ + inward * 1.25, { rotY: north ? 0 : Math.PI, color: pal.rug });
+      floorLamp(k, R.x + R.w / 2 - 0.55, R.y, wallZ + inward * 0.55, { h: 1.5 });
+    } else if (variant === "desk") {
+      desk(k, cornerX, R.y, wallZ + inward * 0.55, { rotY: north ? 0 : Math.PI, w: 1.3 });
+      officeChair(k, cornerX, R.y, wallZ + inward * 1.3, { rotY: north ? Math.PI : 0, color: pal.art });
+      tableLamp(k, cornerX - 0.45, wallZ + inward * 0.5, R.y + 0.79);
+    } else if (variant === "bench") {
+      bench(k, bx, R.y, bz + inward * 1.55, { w: 1.4, rotY: north ? 0 : Math.PI, color: pal.rug });
+    } else {
+      const px3 = R.x - R.w / 2 + 1.1, pz2 = R.z + inward * 0.3;
+      rug(k, px3, R.y, pz2, 1.7, 1.7, pal.duvet);
+      k.box(0.75, 0.32, 0.75, M.solid(pal.art, 0.95), px3, R.y + 0.16, pz2, { tile: 0.4 });
+      k.box(0.55, 0.2, 0.55, M.solid(pal.rug, 0.95), px3, R.y + 0.4, pz2, { tile: 0.3 });
+      k.col(0.8, 0.55, 0.8, px3, R.y + 0.3, pz2);
+    }
+  }
+  const artLo = side < 0 ? doorX + (clear - 0.3) : R.x - R.w / 2 + 0.35;
+  const artHi = side < 0 ? R.x + R.w / 2 - (cornerFits ? 2 : 0.85) : doorX - (clear - 0.3);
+  if (artHi - artLo > 1.2) artwork(k, (artLo + artHi) / 2, R.y + 1.9, farZ - inward * 0.1, 1, 0.7, north ? Math.PI : 0, pal.art);
+  const curCol = rng.pick([12563622, 11055803, 13221038]);
+  if (!dressWindows(k, R, north ? "n" : "s", curCol)) {
+    curtains(k, R.x, R.y, wallZ + inward * 0.22, Math.min(3.2, R.w * 0.5), north ? 0 : Math.PI, curCol);
+  }
+  if (owner) k.world.spot(`room_${owner}`, R.x, R.y, R.z);
+  railRound(k, R);
+  if (!owner && R.w >= 7) {
+    const cw = variant === "bean" ? "e" : "w", inx = cw === "w" ? 1 : -1;
+    const sp = wallSpot(k, R, cw, R.z + inward * 1.9, 1.2, { windows: true, inset: 1.05, pad: 0.7 });
+    if (sp) {
+      armchair(k, sp[0], R.y, sp[1], { rotY: sp[2], color: pal.art });
+      sideTable(k, sp[0] + inx * 0.25, R.y, sp[1] - inward * 1.15, { w: 0.5, lamp: rng.chance(0.5) });
+      floorLamp(k, sp[0] - inx * 0.45, R.y, sp[1] + inward * 1.2, { h: 1.5 });
+      wastebasket(k, sp[0] + inx * 0.15, R.y, sp[1] + inward * 1.5, {});
+    }
+  }
+  if (owner && R.name !== "Bunk Room") {
+    bench(k, bx, R.y, bz + inward * 1.7, {
+      w: owner === "you" ? 1.8 : 1.3,
+      rack: owner === "you",
+      rotY: north ? 0 : Math.PI,
+      color: pal.rug
+    });
+  }
+  dressTop(k, dx, R.y + 0.9, farZ - inward * 0.4, rng, { rotY: north ? Math.PI : 0, w: dw - 0.4, n: 2, kinds: ["photo", "vase", "books"] });
+  const bin = wallSpot(k, R, farSide, dx + (dw / 2 + 0.4) * side, 0.2, { windows: true, inset: 0.3, pad: 0.45 });
+  if (bin) wastebasket(k, bin[0], R.y, bin[1], { color: pal.rug });
+  const lb = wallSpot(k, R, "w", R.z + inward * 3.6, 0.3, { windows: true, inset: 0.3, pad: 0.5 });
+  if (lb) laundryBasket(k, lb[0], R.y, lb[1], { rotY: lb[2] });
+  for (const [ws, zo] of [["w", -3.4], ["e", 2.6]]) {
+    const sp = wallSpot(k, R, ws, R.z + inward * zo, 0.65);
+    if (sp) artwork(k, sp[0], R.y + 2, sp[1], rng.range(0.8, 1.15), rng.range(0.6, 0.85), sp[2], pal.art);
+  }
+  const cs = wallSpot(k, R, "w", R.z + inward * 1.2, 0.25);
+  if (cs) wallClock(k, cs[0], R.y + 2.12, cs[1], cs[2], { hour: rng.int(1, 12), minute: rng.int(0, 55) });
+  const sh = wallSpot(k, R, "e", R.z + inward * 0.4, 0.7, { inset: 0.14 });
+  if (sh) wallShelf(k, sh[0], R.y + 1.55, sh[1], { rotY: sh[2], w: 1.1 });
+  const mi = owner ? null : wallSpot(k, R, "w", R.z + inward * 3.4, 0.6, { inset: 0.2 });
+  if (mi && rng.chance(0.6)) tallMirror(k, mi[0], R.y, mi[1], { rotY: mi[2], lean: true, h: 1.7, frame: M.get("walnut") });
+  for (const s of [-1, 1]) {
+    const sp = wallSpot(k, R, s < 0 ? "w" : "e", R.z + inward * (s < 0 ? -0.8 : -3.2), 0.25);
+    if (sp && rng.chance(0.55)) sconce2(k, sp[0], R.y + 2, sp[1], sp[2]);
+  }
+  if (rng.chance(0.4)) radio(k, dx + (dw / 2 - 0.3) * -side, R.y + 0.9, farZ - inward * 0.4, { rotY: north ? Math.PI : 0 });
+  if (owner === "james") jamesRoom(k, R, rng, { inward, wallZ, farSide });
+  if (owner === "chloie") chloieRoom(k, R, rng, { north, inward, wallZ, bx, bz });
+  if (owner === "you") masterSuite(k, R, { inward, pal });
+  if (R.name === "Bunk Room") {
+    toyBox(k, R.x - R.w / 2 + 1.2, R.y, R.z + inward * 1.2, { rotY: inward > 0 ? 0 : Math.PI, color: 6991948 });
+    for (let i = 0; i < 3; i++) softToy(k, R.x - 2.4 + i * 0.5, R.y, R.z + inward * 2.6, { scale: 0.9, color: [14196830, 15232936, 6991948][i] });
+    const sr = wallSpot(k, R, "e", R.z + inward * 1.6, 0.6, { inset: 0.1 });
+    if (sr) sportsRack(k, sr[0], R.y + 1.7, sr[1], { rotY: sr[2], w: 1 });
+  }
+}
+function jamesRoom(k, R, rng, C) {
+  const { inward, wallZ, farSide } = C;
+  const sp = wallSpot(k, R, "w", R.z + inward * 4.2, 0.7, { inset: 0.12 });
+  if (sp) sportsRack(k, sp[0], R.y + 1.7, sp[1], { rotY: sp[2], w: 1.1 });
+  const tr = wallSpot(k, R, "w", R.z + inward * 2.4, 0.7, { inset: 0.13 });
+  if (tr) trophyShelf(k, tr[0], R.y + 1.75, tr[1], { rotY: tr[2], w: 1.2 });
+  for (let i = 0; i < 3; i++) {
+    const sp2 = wallSpot(k, R, "e", R.z + inward * (-1.2 - i * 0.8), 0.4);
+    if (sp2) poster(k, sp2[0], R.y + 1.95, sp2[1], { rotY: sp2[2], w: 0.72, h: 1, seed: 11 + i, hue: [0.58, 0.06, 0.34][i] });
+  }
+  const bag = wallSpot(k, R, farSide, R.x - R.w / 2 + 2.4, 0.4, { windows: true, inset: 0.35, pad: 0.5 });
+  if (bag) {
+    k.box(0.62, 0.34, 0.34, k.M.paint(1915747, 0.85, "kitbag"), bag[0], R.y + 0.17, bag[1], { rotY: bag[2], tile: 0.3 });
+    k.col(0.62, 0.34, 0.36, bag[0], R.y + 0.17, bag[1], bag[2]);
+  }
+  k.box(0.22, 0.8, 0.06, k.M.solid(3108789, 0.5), R.x - R.w / 2 + 0.5, R.y + 0.42, R.z + inward * 2.4, { rotZ: 0.22, tile: 0.2 });
+  const ball = new Mesh(new SphereGeometry(0.12, 12, 9), k.M.solid(13923884, 0.75));
+  ball.position.set(R.x - R.w / 2 + 1.6, R.y + 0.12, R.z + inward * 3.4);
+  k.world.addProp(ball);
+  const kx = R.x + R.w / 2 - 1.4;
+  k.box(0.1, 0.28, 0.1, k.M.solid(15262939, 0.5), kx + 0.2, R.y + 0.9, wallZ + inward * 0.4, { tile: 0.2 });
+  k.box(0.26, 0.05, 0.05, k.M.solid(13644844, 0.5), kx + 0.2, R.y + 0.86, wallZ + inward * 0.4, { tile: 0.2 });
+  homeworkDesk(k, R, "james", inward, wallZ);
+  const foot = new Mesh(new SphereGeometry(0.11, 12, 9), k.M.solid(15921386, 0.7));
+  foot.position.set(kx - 1.7, R.y + 0.11, wallZ + inward * 1);
+  k.world.addProp(foot);
+  const cs = wallSpot(k, R, "w", R.z + inward * 0.7, 0.62, { inset: 0.16 });
+  if (cs) {
+    wallShelf(k, cs[0], R.y + 1.15, cs[1], { rotY: cs[2], w: 1.2, d: 0.3, items: 0 });
+    gamesConsole(
+      k,
+      cs[0] + 0.02 * Math.sin(cs[2]),
+      R.y + 1.175,
+      cs[1] + 0.02 * Math.cos(cs[2]),
+      { rotY: cs[2], room: R.name, owner: "james", led: 3108789 }
+    );
+  }
+}
+function homeworkDesk(k, R, owner, inward, wallZ) {
+  const kx = R.x + R.w / 2 - 1.4;
+  const dz = wallZ + inward * 0.55;
+  const ty = R.y + 0.765;
+  const face = inward > 0 ? Math.PI : 0;
+  const small = owner === "chloie";
+  openBook(k, kx + 0.02, ty, dz + inward * 0.12, { rotY: face, color: small ? 9264808 : 3100523 });
+  pencilPot(k, kx + 0.24, ty, dz + inward * 0.14, { crayon: small, color: small ? 15232936 : 10135732 });
+  if (small) {
+    for (let i = 0; i < 3; i++) {
+      poster(
+        k,
+        kx - 0.3 + i * 0.44,
+        R.y + 1.62 + i % 2 * 0.44,
+        wallZ + inward * 0.1,
+        { rotY: face + Math.PI, w: 0.3, h: 0.38, seed: 60 + i, hue: 0.78 + i * 0.07 }
+      );
+    }
+  }
+  tablet(k, kx - 0.26, ty, dz + inward * 0.1, { rotY: face, owner, room: R.name });
+  schoolBag(k, kx - 0.95, R.y, dz + inward * 0.45, { rotY: face, color: small ? 11890600 : 3108789 });
+  k.world.spot(`${owner}Desk`, kx, R.y, wallZ + inward * 1.3, { rotY: face });
+}
+function chloieRoom(k, R, rng, C) {
+  const { north, inward, wallZ, bx, bz } = C;
+  canopy(k, bx, R.y, bz, { w: 1.5, d: 2.3, h: 2.05, color: 16508660 });
+  for (let i = 0; i < 4; i++) {
+    softToy(
+      k,
+      bx - 0.5 + i * 0.34,
+      R.y + 0.66,
+      bz + (i % 2 ? 0.5 : 0.75),
+      { scale: rng.range(0.7, 1), color: rng.pick([14196830, 15232936, 15774761, 10211816]), rotY: rng() * 3 }
+    );
+  }
+  toyBox(k, R.x - R.w / 2 + 1.3, R.y, R.z + inward * 3.4, { rotY: north ? 0 : Math.PI, color: 15232936 });
+  for (let i = 0; i < 6; i++) {
+    const sp = wallSpot(k, R, "e", R.z + inward * (-1 - i % 3 * 0.62), 0.28, { pad: 0.3 });
+    if (!sp) continue;
+    poster(k, sp[0], R.y + 1.5 + Math.floor(i / 3) * 0.5, sp[1], {
+      rotY: sp[2],
+      w: 0.34,
+      h: 0.42,
+      seed: 40 + i,
+      hue: rng()
+    });
+  }
+  const tx = R.x - R.w / 2 + 1.5, tz = R.z + inward * 0.6;
+  sideTable(k, tx, R.y, tz, { w: 0.7, h: 0.42 });
+  for (const s of [-1, 1]) {
+    k.box(0.34, 0.06, 0.34, k.M.paint(15780068, 0.9, "stool"), tx + s * 0.62, R.y + 0.28, tz, { tile: 0.2 });
+    for (const [ox, oz] of [[-0.12, -0.12], [0.12, -0.12], [-0.12, 0.12], [0.12, 0.12]]) {
+      k.box(0.04, 0.28, 0.04, k.M.get("maple"), tx + s * 0.62 + ox, R.y + 0.14, tz + oz, { tile: 0.2 });
+    }
+    k.col(0.38, 0.32, 0.38, tx + s * 0.62, R.y + 0.16, tz);
+  }
+  softToy(k, tx, R.y + 0.47, tz, { scale: 0.7, color: 15774761 });
+  k.box(Math.min(3.4, R.w - 2), 0.03, 0.03, k.M.emissive(16769200, 1.2), R.x, R.y + 2.5, wallZ + inward * 0.16, { tile: 0.2 });
+  homeworkDesk(k, R, "chloie", inward, wallZ);
+  k.world.spot("chloiePlay", tx, R.y, tz);
+}
+function masterSuite(k, R, C) {
+  const { inward, pal } = C;
+  armchair(k, R.x - R.w / 2 + 1.8, R.y, R.z + inward * 2.9, { rotY: Math.PI / 2 });
+  rug(k, R.x - R.w / 2 + 2.6, R.y, R.z + inward * 2.05, 3.4, 3.6, pal.rug);
+  floorLamp(k, R.x - R.w / 2 + 0.7, R.y, R.z + inward * 3.9, { h: 1.6 });
+  sideTable(k, R.x - R.w / 2 + 1.9, R.y, R.z + inward * 4, { w: 0.55, lamp: false });
+  magazines(k, R.x - R.w / 2 + 3.2, R.y + 0.44, R.z + inward * 1.2, { n: 3 });
+  const dt = wallSpot(k, R, "e", R.z + inward * 3.2, 0.9, { inset: 0.3, pad: 0.8 });
+  if (dt) dressingTable(k, dt[0], R.y, dt[1], { rotY: dt[2], w: 1.3, stool: pal.duvet });
+  const mi = wallSpot(k, R, "e", R.z - inward * 2, 0.6, { inset: 0.16 });
+  if (mi) tallMirror(k, mi[0], R.y, mi[1], { rotY: mi[2], lean: true, h: 1.8 });
+  k.world.spot("masterSitting", R.x - R.w / 2 + 2.6, R.y, R.z + inward * 2);
+}
+function bathroom(k, R, rng) {
+  const M = k.M;
+  const north = R.z < 0;
+  const inward = north ? 1 : -1;
+  const wallZ = north ? R.z - R.d / 2 : R.z + R.d / 2;
+  const zi = (f) => wallZ + inward * f;
+  const wide = R.w > 5;
+  const xW = R.x - R.w / 2, xE = R.x + R.w / 2;
+  const dDef = (R.def?.doors || []).find((dd) => dd.side === (north ? "s" : "n"));
+  const doorX = R.x + (dDef?.at ?? 0);
+  const doorClear = (dDef?.w ?? 0.9) / 2 + 0.4;
+  const doorWallZ = north ? R.z + R.d / 2 : R.z - R.d / 2;
+  const doorSide = north ? "s" : "n";
+  const shX = xW + (wide ? 1 : 0.9);
+  shower(k, shX, R.y, zi(0.9), { rotY: north ? 0 : Math.PI, w: wide ? 1.6 : 1.3, d: wide ? 1.4 : 1.2 });
+  if (wide) {
+    bathtub(k, R.x + 0.7, R.y, zi(0.72), { rotY: 0 });
+    k.box(1.3, 0.024, 0.6, M.paint(14542826, 0.96, "bathmat"), R.x + 0.7, R.y + 0.06, zi(1.55), { tile: 0.5 });
+  } else {
+    k.box(0.9, 0.024, 0.55, M.paint(14542826, 0.96, "bathmat"), shX, R.y + 0.06, zi(1.85), { tile: 0.5 });
+  }
+  vanity(k, xE - 0.45, R.y, zi(wide ? 2.4 : 2.2), { rotY: -Math.PI / 2, w: wide ? 2 : 1.3 });
+  if (wide) {
+    vanity(k, xW + 0.45, R.y, zi(2.9), { rotY: Math.PI / 2, w: 1.6 });
+    k.box(0.05, 1.35, 0.95, M.get("gold"), xW + 0.17, R.y + 1.75, zi(4.6), { tile: 0.4 });
+    k.box(0.04, 1.2, 0.8, M.get("mirror"), xW + 0.21, R.y + 1.75, zi(4.6), { tile: 0.6 });
+    toilet(k, xE - 0.5, R.y, zi(3.9), { rotY: -Math.PI / 2 });
+  } else {
+    toilet(k, xW + 0.45, R.y, zi(2.5), { rotY: Math.PI / 2 });
+  }
+  const tbz = zi(wide ? 0.8 : 0.9);
+  k.box(0.04, 0.04, 1, M.get("chrome"), xE - 0.26, R.y + 1.25, tbz, { tile: 0.2 });
+  for (const s of [-1, 1]) k.box(0.2, 0.05, 0.05, M.get("chrome"), xE - 0.15, R.y + 1.25, tbz + s * 0.42, { tile: 0.2 });
+  for (let i = 0; i < 2; i++) {
+    k.box(
+      0.12,
+      0.5,
+      0.34,
+      M.paint(rng.pick([15265522, 14148584]), 0.95, "towel"),
+      xE - 0.28,
+      R.y + 1.03,
+      tbz + (i ? 0.22 : -0.22),
+      { tile: 0.3 }
+    );
+  }
+  const hx = doorX - doorClear - 0.35;
+  if (hx - 0.3 > xW + 0.2) {
+    laundryBasket(k, hx, R.y, doorWallZ - inward * 0.35, { w: 0.5, d: 0.4, h: 0.6, color: 14212577 });
+  }
+  const tSide = wide ? "e" : "w", tz = zi(wide ? 3.9 : 2.5);
+  const sp = wallSpot(k, R, tSide, tz, 0.6, { windows: true, inset: 0.14 });
+  if (sp) {
+    wallShelf(k, sp[0], R.y + 1.65, sp[1], { rotY: sp[2], w: 1, items: 3 });
+    wallShelf(k, sp[0], R.y + 2.05, sp[1], { rotY: sp[2], w: 1, items: 2 });
+  }
+  const bs = wallSpot(k, R, tSide, tz + inward * 0.85, 0.2, { windows: true, inset: 0.24 });
+  if (bs) wastebasket(k, bs[0], R.y, bs[1], { w: 0.24, h: 0.3, metal: true });
+  const hk = wallSpot(k, R, doorSide, doorX + (hx - 0.3 > xW + 0.2 ? doorClear + 0.6 : -doorClear - 0.6), 0.45);
+  if (hk) coatHooks(k, hk[0], R.y + 1.75, hk[1], { rotY: hk[2], w: 0.9, n: 3, full: 0.5 });
+  const ar = wallSpot(k, R, doorSide, R.x + (wide ? 1.6 : 1.1), 0.4);
+  if (ar) artwork(k, ar[0], R.y + 1.95, ar[1], 0.6, 0.8, ar[2], rng.pick([4942714, 7043668, 8022924]));
+  rug(k, R.x, R.y, zi(6.6), Math.min(1.7, R.w - 1.8), 2.8, 10466237);
+  const ld = wallSpot(k, R, wide ? "w" : "e", zi(6), 0.4, { windows: true, inset: 0.2, pad: 0.5 });
+  if (ld) {
+    for (const s of [-1, 1]) k.box(0.05, 1.7, 0.05, M.get("maple"), ld[0] - 0.05 * Math.sin(ld[2]), R.y + 0.85, ld[1] + s * 0.3 - 0.05 * Math.cos(ld[2]), { rotX: 0.06, tile: 0.2 });
+    for (let i = 0; i < 4; i++) {
+      k.box(0.06, 0.05, 0.66, M.get("maple"), ld[0], R.y + 0.5 + i * 0.4, ld[1], { rotY: ld[2], tile: 0.2 });
+      if (i % 2) k.box(0.16, 0.5, 0.3, M.paint(rng.pick([15265522, 14148584]), 0.95, "towel"), ld[0] + 0.07 * Math.sin(ld[2]), R.y + 0.26 + i * 0.4, ld[1] + 0.07 * Math.cos(ld[2]), { rotY: ld[2], tile: 0.3 });
+    }
+    k.col(0.3, 1.7, 0.7, ld[0], R.y + 0.85, ld[1], ld[2]);
+  }
+  plant(k, wide ? R.x - 1.6 : R.x + R.w / 2 - 0.6, R.y, zi(wide ? 0.9 : 3.4), rng.range(0.6, 0.9));
+  if (wide) {
+    sideTable(k, R.x + 0.7, R.y, zi(2.4), { w: 0.42, h: 0.44, pedestal: true });
+    k.box(0.3, 0.14, 0.24, M.paint(15265522, 0.95, "towel"), R.x + 0.7, R.y + 0.52, zi(2.4), { tile: 0.2 });
+    const cl = wallSpot(k, R, doorSide, R.x - 1.4, 0.25);
+    if (cl) wallClock(k, cl[0], R.y + 2.2, cl[1], cl[2], { hour: rng.int(1, 12), minute: rng.int(0, 55), d: 0.28 });
+  }
+}
+function greatRoom(k, R, rng) {
+  const M = k.M;
+  fireplace(k, R.x - R.w / 2 + 3.4, R.y, R.z - R.d / 2 + 0.5, { rotY: 0, w: 3.6, h: 7.4 });
+  rug(k, R.x - 1, R.y, R.z, 5.6, 4.2, 8220511);
+  sectional(k, R.x - 2.2, R.y, R.z + 1.2, { w: 3.6, rotY: Math.PI, color: 14275528, pillow: 10135732 });
+  armchair(k, R.x + 1.8, R.y, R.z - 0.8, { rotY: -Math.PI / 2 });
+  armchair(k, R.x + 1.8, R.y, R.z + 1.6, { rotY: -Math.PI / 2 });
+  coffeeTable(k, R.x - 1.4, R.y, R.z + 0.2, { w: 1.6, d: 0.9 });
+  tv(k, R.x - R.w / 2 + 3.4, R.y, R.z - R.d / 2 + 0.58, { rotY: 0, w: 2.2, h: 2.7, wall: true });
+  piano(k, R.x + R.w / 2 - 3, R.y, R.z + R.d / 2 - 3, Math.PI * 0.15);
+  for (let i = 0; i < 3; i++) {
+    const colX = R.x - R.w / 2 + 1 + i * (R.w - 2) / 2;
+    k.box(0.4, 7.6, 0.4, M.get("stone"), colX, R.y + 3.8, R.z + R.d / 2 - 0.6, { tile: 1.4 });
+    k.col(0.45, 7.6, 0.45, colX, R.y + 3.8, R.z + R.d / 2 - 0.6);
+  }
+  k.world.spot("greatRoom", R.x - 1, R.y, R.z + 0.6);
+  k.world.spot("fireplaceSeat", R.x - 2.2, R.y, R.z + 1.2);
+  rug(k, R.x - 1.6, R.y + 0.01, R.z + 0.9, 3, 2.2, 6116166);
+  consoleTable(k, R.x - 2.2, R.y, R.z + 2.7, { w: 2.6, d: 0.42, rotY: Math.PI });
+  dressTop(k, R.x - 2.2, R.y + 0.91, R.z + 2.7, rng, { rotY: Math.PI, w: 2, kinds: ["photo", "vase", "books"] });
+  sideTable(k, R.x - 4.3, R.y, R.z + 1.2, { w: 0.6, lamp: true });
+  sideTable(k, R.x + 3, R.y, R.z + 0.4, { w: 0.6, lamp: true });
+  floorLamp(k, R.x + 3.1, R.y, R.z - 1.6, { h: 1.6 });
+  for (const s of [-1, 1]) {
+    const bx = R.x - R.w / 2 + 3.4 + s * 2.9;
+    const sp = wallSpot(k, R, "n", bx, 1, { windows: true, inset: 0.24, pad: 0.5 });
+    if (sp) bookshelf(k, sp[0], R.y, sp[1], { w: 1.8, h: 2.4 });
+    const sc = wallSpot(k, R, "n", bx, 0.2, { windows: true });
+    if (sc) sconce2(k, sc[0], R.y + 2.9, sc[1], sc[2], { intensity: 6 });
+  }
+  const art = wallSpot(k, R, "e", R.z - 3.2, 1);
+  if (art) artwork(k, art[0], R.y + 2.6, art[1], 1.9, 1.3, art[2], 4938344);
+  const bar = wallSpot(k, R, "e", R.z + 3.4, 0.9, { inset: 0.3, pad: 0.6 });
+  if (bar) {
+    consoleTable(k, bar[0], R.y, bar[1], { w: 1.6, d: 0.45, rotY: bar[2] });
+    dressTop(k, bar[0], R.y + 0.91, bar[1], rng, { rotY: bar[2], w: 1.2, n: 2, kinds: ["vase", "bowl"] });
+    radio(k, bar[0] - 0.35, R.y + 0.91, bar[1] + 0.3, { rotY: bar[2], label: "Put a record on" });
+  }
+  magazines(k, R.x - 1.8, R.y + 0.44, R.z + 0.2, { n: 4 });
+  boardGame(k, R.x - 0.9, R.y + 0.44, R.z + 0.3, { rotY: 0.4 });
+  wastebasket(k, R.x + R.w / 2 - 1, R.y, R.z + R.d / 2 - 1.2, { metal: true });
+  plant(k, R.x + R.w / 2 - 1.4, R.y, R.z - 3.6, 1.8);
+  for (const s of [-1, 1]) curtains(k, R.x + s * 2.5, R.y, R.z + R.d / 2 - 0.95, 3.6, Math.PI, 13221038);
+}
+function familyRoom(k, R, rng) {
+  fireplace(k, R.x - 3.2, R.y, R.z - R.d / 2 + 0.5, { rotY: 0, w: 2.4, h: 2.6 });
+  rug(k, R.x, R.y, R.z + 0.6, 4.4, 3.2, 7299925);
+  sofa(k, R.x, R.y, R.z + 2.4, { w: 2.8, rotY: Math.PI, color: 9213088, cushion: 14672872 });
+  armchair(k, R.x - 2.4, R.y, R.z + 0.6, { rotY: -Math.PI / 2, color: 8022616 });
+  armchair(k, R.x + 2.4, R.y, R.z + 0.6, { rotY: Math.PI / 2, color: 8022616 });
+  coffeeTable(k, R.x, R.y, R.z + 1.2);
+  tvUnit(k, R.x + R.w / 2 - 0.4, R.y, R.z - 3.2, { rotY: -Math.PI / 2, w: 2.2 });
+  tv(k, R.x + R.w / 2 - 0.5, R.y, R.z - 3.2, { rotY: -Math.PI / 2, w: 1.9, h: 1.4 });
+  bookshelf(k, R.x - R.w / 2 + 0.35, R.y, R.z + R.d / 2 - 2, { rotY: Math.PI / 2, w: 2, h: 2.2 });
+  k.world.spot("familyRoom", R.x, R.y, R.z + 1.6);
+  railRound(k, R);
+  rug(k, R.x, R.y + 0.01, R.z + 1.6, 2.6, 1.8, 5721410);
+  consoleTable(k, R.x, R.y, R.z + 3.9, { w: 2.4, d: 0.4, rotY: Math.PI });
+  dressTop(k, R.x, R.y + 0.91, R.z + 3.9, rng, { rotY: Math.PI, w: 1.8 });
+  sideTable(k, R.x - 1.9, R.y, R.z + 2.6, { w: 0.55, lamp: true });
+  sideTable(k, R.x + 1.9, R.y, R.z + 2.6, { w: 0.55, lamp: true });
+  floorLamp(k, R.x + 3.4, R.y, R.z + 2, { h: 1.55 });
+  boardGame(k, R.x - 0.3, R.y + 0.44, R.z + 1.2, { rotY: 0.2 });
+  magazines(k, R.x + 0.45, R.y + 0.44, R.z + 1.15, { n: 3 });
+  laundryBasket(k, R.x + R.w / 2 - 0.9, R.y, R.z - 1.6, { color: 13621449 });
+  wastebasket(k, R.x - R.w / 2 + 0.8, R.y, R.z - 2.4, {});
+  for (const s of [-1, 1]) {
+    const sp = wallSpot(k, R, "n", R.x + s * 2.2, 0.35, { windows: true });
+    if (sp) sconce2(k, sp[0], R.y + 2, sp[1], sp[2]);
+  }
+  const art = wallSpot(k, R, "w", R.z - 2.6, 0.9);
+  if (art) artwork(k, art[0], R.y + 2.05, art[1], 1.4, 1, art[2], 5925719);
+  const cl = wallSpot(k, R, "n", R.x + 2.6, 0.25, { windows: true });
+  if (cl) wallClock(k, cl[0], R.y + 2.3, cl[1], cl[2], { hour: 4, minute: 20 });
+  const sh = wallSpot(k, R, "w", R.z + 1.4, 0.7, { inset: 0.14 });
+  if (sh) wallShelf(k, sh[0], R.y + 1.7, sh[1], { rotY: sh[2], w: 1.2 });
+  dressWindows(k, R, R.z > 0 ? "s" : "n", 12563622, 3);
+  plant(k, R.x + R.w / 2 - 1.2, R.y, R.z + R.d / 2 - 2.6, 1.1);
+}
+function piano(k, x, y, z, rotY) {
+  const M = k.M, b = { x, y, z, r: rotY };
+  const body = M.paint(723982, 0.18, "pianoblack");
+  k.p(b, 0, 0.72, 0, 1.5, 0.28, 2.1, body, 1);
+  k.p(b, 0, 0.9, -0.6, 1.5, 0.06, 0.9, body, 1);
+  k.p(b, 0, 0.62, 1.02, 1.42, 0.1, 0.3, M.paint(16250352, 0.3, "keys"), 0.4);
+  for (let i = 0; i < 18; i++) k.p(b, -0.66 + i * 0.078, 0.68, 0.97, 0.03, 0.06, 0.18, body, 0.2);
+  for (const [ox, oz] of [[-0.6, -0.85], [0.6, -0.85], [0, 0.9]]) k.p(b, ox, 0.36, oz, 0.09, 0.72, 0.09, body, 0.3);
+  k.pc(b, 0, 0.5, 0, 1.6, 1, 2.2);
+  const [sx, sz] = k.L(0, 1.5, x, z, rotY);
+  k.p(b, 0, 0.52, 1.5, 0.62, 0.1, 0.34, M.get("leather"), 0.4);
+  for (const [ox, oz] of [[-0.25, 1.36], [0.25, 1.36], [-0.25, 1.64], [0.25, 1.64]]) {
+    k.p(b, ox, 0.24, oz, 0.05, 0.46, 0.05, M.get("walnut"), 0.3);
+  }
+  k.pc(b, 0, 0.3, 1.5, 0.66, 0.6, 0.4);
+  k.world.addInteract({
+    pos: V3(sx, y + 0.6, sz),
+    radius: 1.4,
+    label: "Sit at the piano",
+    kind: "seat",
+    seat: { x: sx, y: y + 0.56, z: sz, rotY: rotY + Math.PI }
+  });
+  k.world.addInteract({
+    pos: V3(x, y + 0.9, z),
+    radius: 2,
+    label: "Play the piano",
+    kind: "piano"
+  });
+}
+function kitchen(k, R, rng) {
+  const M = k.M;
+  const backZ = R.z + R.d / 2 - 0.4;
+  counterRun(k, R.x - 2.6, R.y, backZ, 5.4, { rotY: Math.PI });
+  range(k, R.x + 1.2, R.y, backZ, { rotY: Math.PI });
+  fridge(k, R.x + 3.4, R.y, backZ, { rotY: Math.PI });
+  counterRun(k, R.x + R.w / 2 - 0.48, R.y, R.z + 2.8, 3, { rotY: -Math.PI / 2, upper: false });
+  island(k, R.x - 0.6, R.y, R.z - 1, { w: 3.4, d: 1.2 });
+  fruitBowl(k, R.x - 1.4, R.y + 0.95, R.z - 1, {});
+  k.world.spot("kitchen", R.x - 0.6, R.y, R.z + 0.6);
+  k.world.spot("kitchenIsland", R.x - 0.6, R.y, R.z - 2);
+  const wr = wallSpot(k, R, "w", R.z - 3.6, 1.5, { inset: 0.48, pad: 0.55 });
+  const ws = wallSpot(k, R, "w", R.z - 3.6, 1.5, { inset: 0.14, pad: 0.55 });
+  if (wr && ws) {
+    counterRun(k, wr[0], R.y, wr[1], 3, { rotY: wr[2], upper: false, cabinet: 3819088 });
+    wallShelf(k, ws[0], R.y + 1.5, ws[1], { rotY: ws[2], w: 1.6, items: 4 });
+    wallShelf(k, ws[0], R.y + 1.95, ws[1], { rotY: ws[2], w: 1.6, items: 3 });
+  }
+  const cy = R.y + 0.93;
+  k.box(0.2, 0.28, 0.2, M.get("steel"), R.x - 4.4, cy + 0.14, backZ - 0.04, { tile: 0.2 });
+  k.box(0.16, 0.3, 0.2, M.paint(2830133, 0.4, "coffee"), R.x - 3.7, cy + 0.15, backZ - 0.04, { tile: 0.2 });
+  k.box(0.14, 0.24, 0.16, M.get("walnut"), R.x - 3.1, cy + 0.12, backZ - 0.06, { tile: 0.2 });
+  for (let i = 0; i < 4; i++) {
+    k.box(0.03, 0.14, 0.03, M.get("chrome"), R.x - 3.13 + i * 0.03, cy + 0.3, backZ - 0.06, { tile: 0.1 });
+  }
+  k.box(0.42, 0.03, 0.3, M.get("maple"), R.x - 2.2, cy + 0.02, backZ - 0.02, { tile: 0.3 });
+  for (let i = 0; i < 3; i++) {
+    k.box(0.14, 0.2, 0.14, M.paint([14208958, 13227211, 14672872][i], 0.4, "jar"), R.x - 1.4 + i * 0.2, cy + 0.1, backZ - 0.08, { tile: 0.2 });
+  }
+  k.box(0.3, 0.34, 0.03, M.paint(10471124, 0.95, "teatowel"), R.x + 1.2, R.y + 0.62, backZ + 0.36, { tile: 0.2 });
+  plant(k, R.x - 5.2, R.y + 0.95, backZ - 0.1, 0.45);
+  plant(k, R.x - 4.9, R.y + 0.95, backZ - 0.1, 0.4);
+  wastebasket(k, R.x + 1.6, R.y, R.z - 1, { w: 0.34, h: 0.5, metal: true });
+  rug(k, R.x - 0.6, R.y, R.z - 2.2, 2.6, 0.8, 7043668);
+  const cl = wallSpot(k, R, "n", R.x + 3.4, 0.3);
+  if (cl) wallClock(k, cl[0], R.y + 2.4, cl[1], cl[2], { hour: 8, minute: 15, d: 0.4 });
+  const ar = wallSpot(k, R, "n", R.x - 3.4, 0.8);
+  if (ar) artwork(k, ar[0], R.y + 2, ar[1], 1, 0.7, ar[2], 7035717);
+  const ix = R.x - 0.6, iz = R.z - 1, iy = R.y + 0.95;
+  choppingBoard(k, ix + 0.85, iy, iz + 0.25, { rotY: 0 });
+  openBook(k, ix + 1.3, iy, iz - 0.25, { rotY: 0, stand: true, color: 9190203, w: 0.16 });
+  mixingBowl(k, ix - 1.25, iy, iz + 0.3, { color: 14672872 });
+  utensilCrock(k, ix - 1.55, iy, iz - 0.3, {});
+  cookPot(k, R.x + 1.5, R.y + 0.96, backZ - 0.16, {});
+  k.world.spot("cookA", ix - 0.9, R.y, iz - 1.35, { rotY: 0 });
+  k.world.spot("cookB", ix + 0.7, R.y, iz - 1.35, { rotY: 0 });
+  void rng;
+}
+function dining(k, R, rng) {
+  const M = k.M;
+  const b = { x: R.x, y: R.y, z: R.z, r: 0 };
+  rug(k, R.x, R.y, R.z, 4.6, 3, 7032634);
+  k.p(b, 0, 0.74, 0, 3, 0.08, 1.3, M.get("walnut"), 1.2);
+  for (const [ox, oz] of [[-1.3, -0.5], [1.3, -0.5], [-1.3, 0.5], [1.3, 0.5]]) k.p(b, ox, 0.37, oz, 0.12, 0.74, 0.12, M.get("walnut"), 0.5);
+  k.pc(b, 0, 0.4, 0, 3, 0.8, 1.3);
+  const laid = [], spare = [];
+  for (let i = 0; i < 4; i++) {
+    const cx2 = R.x - 1.1 + i * 0.73;
+    for (const s of [-1, 1]) {
+      const rotY = s < 0 ? 0 : Math.PI;
+      diningChair(k, cx2, R.y, R.z + s * 1.05, { rotY });
+      (i === 1 || i === 2 ? laid : spare).push({ pos: V3(cx2, R.y, R.z + s * 1.05), rotY });
+    }
+  }
+  for (const s of [-1, 1]) {
+    const rotY = s < 0 ? Math.PI / 2 : -Math.PI / 2;
+    diningChair(k, R.x + s * 1.9, R.y, R.z, { rotY });
+    spare.push({ pos: V3(R.x + s * 1.9, R.y, R.z), rotY });
+  }
+  vase(k, R.x, R.y + 0.78, R.z, { scale: 1.2, color: 13227211 });
+  for (let i = 0; i < 3; i++) {
+    k.box(0.03, 0.9, 0.03, M.get("gold"), R.x - 0.8 + i * 0.8, R.y + 3.3, R.z, { tile: 0.2 });
+    k.box(0.5, 0.14, 0.5, M.emissive(16768168, 2), R.x - 0.8 + i * 0.8, R.y + 2.8, R.z, { tile: 0.3 });
+  }
+  k.box(2.4, 0.9, 0.5, M.get("walnut"), R.x, R.y + 0.45, R.z - R.d / 2 + 0.5, { tile: 0.9 });
+  k.world.collider(2.4, 0.9, 0.5, R.x, R.y + 0.45, R.z - R.d / 2 + 0.5);
+  artwork(k, R.x, R.y + 2, R.z - R.d / 2 + 0.3, 1.6, 1, 0, 5917247);
+  k.world.spot("dining", R.x, R.y, R.z + 1.8);
+  railRound(k, R);
+  const sz = R.z - R.d / 2 + 0.5;
+  dressTop(k, R.x, R.y + 0.9, sz, rng, { rotY: 0, w: 1.9, n: 3, kinds: ["photo", "bowl", "vase"] });
+  for (const s of [-1, 1]) {
+    k.box(0.06, 0.34, 0.06, M.get("gold"), R.x + s * 1.05, R.y + 1.07, sz, { tile: 0.2 });
+    k.box(0.03, 0.16, 0.03, M.paint(16183516, 0.8, "candle"), R.x + s * 1.05, R.y + 1.32, sz, { tile: 0.1 });
+  }
+  const cab = wallSpot(k, R, "e", R.z - 2.4, 1.1, { inset: 0.3, pad: 0.6 });
+  const cabW = wallSpot(k, R, "e", R.z - 2.4, 1.1, { inset: 0.06, pad: 0.6 });
+  if (cab && cabW) {
+    consoleTable(k, cab[0], R.y, cab[1], { w: 2, d: 0.45, rotY: cab[2] });
+    dressTop(k, cab[0], R.y + 0.91, cab[1], rng, { rotY: cab[2], w: 1.5, n: 2, kinds: ["vase", "books"] });
+    tallMirror(k, cabW[0], R.y + 1.15, cabW[1], { rotY: cabW[2], w: 1.1, h: 1.3, base: 0 });
+  }
+  const wine = wallSpot(k, R, "e", R.z + 2.6, 0.7, { inset: 0.24, pad: 0.6 });
+  if (wine) {
+    k.box(0.42, 1.1, 1.2, M.get("walnut"), wine[0], R.y + 0.55, wine[1], { rotY: wine[2], tile: 0.5 });
+    for (let i = 0; i < 12; i++) {
+      k.box(
+        0.06,
+        0.08,
+        0.08,
+        M.solid(rng.pick([2832932, 3812132, 2042672]), 0.4),
+        wine[0] - 0.2 * Math.sin(wine[2]),
+        R.y + 0.3 + Math.floor(i / 4) * 0.24,
+        wine[1] - 0.4 + i % 4 * 0.26,
+        { rotY: wine[2], tile: 0.1 }
+      );
+    }
+    k.col(0.45, 1.1, 1.25, wine[0], R.y + 0.55, wine[1], wine[2]);
+  }
+  for (const s of [-1, 1]) {
+    const sc = wallSpot(k, R, "w", R.z + s * 2.8, 0.3);
+    if (sc) sconce2(k, sc[0], R.y + 2.1, sc[1], sc[2]);
+    const ar = wallSpot(k, R, "w", R.z + s * 1, 0.7);
+    if (ar) artwork(k, ar[0], R.y + 2, ar[1], 0.9, 1.2, ar[2], rng.pick([5917247, 4938344, 7035717]));
+  }
+  dressWindows(k, R, "n", 11055803, 3);
+  plant(k, R.x + R.w / 2 - 1.2, R.y, R.z - R.d / 2 + 1.4, 1.5);
+  wastebasket(k, R.x - R.w / 2 + 0.9, R.y, R.z - R.d / 2 + 1, {});
+  layTable(k, R, laid, spare);
+  partyKit(k, R, cab);
+}
+function layTable(k, R, laid, spare) {
+  const ty = R.y + 0.78;
+  const grp = grouped(k, "diningSet", () => {
+    for (const s of laid) {
+      placeSetting(
+        k,
+        s.pos.x + Math.sin(s.rotY) * 0.63,
+        ty,
+        s.pos.z + Math.cos(s.rotY) * 0.63,
+        { rotY: s.rotY, napkin: 13227211 }
+      );
+    }
+    jug(k, R.x - 1.15, ty, R.z, {});
+    servingDish(k, R.x - 0.72, ty, R.z, { food: 13207359 });
+    servingDish(k, R.x + 0.72, ty, R.z, { w: 0.3, d: 0.22, food: 7043668, lid: false });
+  });
+  k.world.diningSet = { group: grp, seats: [...laid, ...spare] };
+}
+function partyKit(k, R, cab) {
+  const ty = R.y + 0.78;
+  const cakeAt = V3(R.x + 1.18, ty, R.z);
+  const grp = grouped(k, "party", () => {
+    for (const s of [-1, 1]) bunting(k, R.x, R.y + 2.95, R.z + s * 2.3, R.w - 0.5, { n: 14, sag: 0.34 });
+    for (const s of [-1, 1]) balloons(k, R.x + s * 2.1, R.y + 1.05, R.z, { n: 5, h: 1.05, seed: s < 0 ? 0 : 2 });
+    const wall = wallSpot(k, R, "e", R.z, 1.3, { inset: 0.05 });
+    if (wall) banner(k, wall[0], R.y + 2.2, wall[1], { rotY: wall[2], w: 2.4 });
+    else {
+      const nw = wallSpot(k, R, "n", R.x, 1.3, { windows: true, inset: 0.05 });
+      if (nw) banner(k, nw[0], R.y + 3.1, nw[1], { rotY: nw[2], w: 2.4 });
+    }
+    cake(k, cakeAt.x, ty, cakeAt.z, { candles: 8 });
+    for (let i = 0; i < 4; i++) {
+      const px3 = R.x - 0.37 + i % 2 * 0.73, s = i < 2 ? -1 : 1;
+      paperCup(k, px3 - s * 0.19, ty, R.z + s * 0.23, { color: [14826327, 16106776, 3113471, 6991948][i] });
+      partyHat(k, px3, ty, R.z + s * 0.6, { color: [16106776, 15232936, 6991948, 14826327][i], lying: i % 2 === 0 });
+    }
+    for (const s of [-1, 1]) partyHat(k, R.x - 1.34, ty, R.z + s * 0.45, { color: 3113471, lying: s < 0 });
+    if (cab) {
+      presents(k, cab[0], R.y + 0.885, cab[1] - 0.78, { rotY: cab[2], n: 3 });
+      presents(k, cab[0], R.y + 0.885, cab[1] + 0.8, { rotY: cab[2], n: 1, w: 0.26, seed: 2 });
+    } else {
+      presents(k, R.x - 0.95, R.y + 0.9, R.z - R.d / 2 + 0.5, { n: 3 });
+    }
+  });
+  grp.visible = false;
+  const candlelight = k.world.addLight({
+    pos: V3(cakeAt.x, ty + 0.34, cakeAt.z),
+    color: 16759146,
+    intensity: 1.7,
+    distance: 2.8,
+    on: false
+  });
+  k.world.party = {
+    group: grp,
+    cakeSpot: cakeAt,
+    show(on) {
+      grp.visible = on !== false;
+      candlelight.on = grp.visible;
+    }
+  };
+}
+function library(k, R, rng) {
+  const M = k.M;
+  for (const zz of [R.z - 3.7, R.z - 1.85, R.z + 1.75, R.z + 3.6]) {
+    bookshelf(k, R.x - R.w / 2 + 0.35, R.y, zz, { rotY: Math.PI / 2, w: 1.8, h: 2.6 });
+  }
+  bookshelf(k, R.x, R.y, R.z - R.d / 2 + 0.4, { w: 2.4, h: 2.6 });
+  desk(k, R.x + 1.4, R.y, R.z + 1, { rotY: Math.PI, w: 1.9, d: 0.85 });
+  officeChair(k, R.x + 1.4, R.y, R.z + 2, { rotY: 0 });
+  armchair(k, R.x + 1.6, R.y, R.z - 2.4, { rotY: Math.PI });
+  rug(k, R.x + 0.6, R.y, R.z, 3.4, 2.6, 7032634);
+  tableLamp(k, R.x + 1.4, R.z + 0.7, R.y + 0.79);
+  k.world.spot("library", R.x + 1, R.y, R.z);
+  railRound(k, R, ["w", "s"]);
+  armchair(k, R.x + 3.2, R.y, R.z - 2.4, { rotY: Math.PI, color: 5917247 });
+  sideTable(k, R.x + 2.4, R.y, R.z - 2.9, { w: 0.55 });
+  bookStack(k, R.x + 2.4, R.y + 0.6, R.z - 2.9, { n: 3 });
+  floorLamp(k, R.x + 3.4, R.y, R.z - 3.6, { h: 1.6 });
+  bookStack(k, R.x + 1.9, R.y + 0.77, R.z + 1, { n: 4 });
+  magazines(k, R.x + 0.9, R.y + 0.77, R.z + 1, { n: 2 });
+  bookStack(k, R.x - R.w / 2 + 1.4, R.y, R.z + 0.2, { n: 4, w: 0.3 });
+  const lx = R.x - R.w / 2 + 1.05;
+  for (const s of [-1, 1]) k.box(0.06, 2.3, 0.06, M.get("walnut"), lx + s * 0.02, R.y + 1.15, R.z - 0.8 + s * 0.34, { rotX: 0.1, tile: 0.3 });
+  for (let i = 0; i < 5; i++) k.box(0.5, 0.04, 0.05, M.get("walnut"), lx, R.y + 0.4 + i * 0.42, R.z - 0.8 + (i - 2) * 0.02, { rotY: Math.PI / 2, tile: 0.2 });
+  k.col(0.2, 2.3, 0.8, lx, R.y + 1.15, R.z - 0.8);
+  const globe = new Mesh(new SphereGeometry(0.2, 14, 10), M.solid(4157096, 0.7));
+  globe.position.set(R.x + 3, R.y + 0.95, R.z + 2.6);
+  k.world.addProp(globe);
+  k.box(0.06, 0.7, 0.06, M.get("walnut"), R.x + 3, R.y + 0.35, R.z + 2.6, { tile: 0.2 });
+  k.box(0.34, 0.05, 0.34, M.get("walnut"), R.x + 3, R.y + 0.03, R.z + 2.6, { tile: 0.2 });
+  k.col(0.36, 1.2, 0.36, R.x + 3, R.y + 0.6, R.z + 2.6);
+  wastebasket(k, R.x + 2.6, R.y, R.z + 1.4, { metal: true });
+  radio(k, R.x + R.w / 2 - 0.9, R.y + 0.9, R.z + 3.4, { rotY: -Math.PI / 2 });
+  consoleTable(k, R.x + R.w / 2 - 0.7, R.y, R.z + 3.4, { w: 1.4, d: 0.42, rotY: -Math.PI / 2 });
+  const ar = wallSpot(k, R, "e", R.z - 1.2, 0.8);
+  if (ar) artwork(k, ar[0], R.y + 2, ar[1], 1.1, 0.8, ar[2], 4865884);
+  for (const s of [-1, 1]) {
+    const sc = wallSpot(k, R, "e", R.z + s * 3.4, 0.3);
+    if (sc) sconce2(k, sc[0], R.y + 2.15, sc[1], sc[2]);
+  }
+  dressWindows(k, R, "n", 9207662, 2.8);
+  void rng;
+}
+function music(k, R, rng) {
+  piano(k, R.x, R.y, R.z, 0);
+  armchair(k, R.x + 2.4, R.y, R.z + 1.4, { rotY: Math.PI });
+  rug(k, R.x, R.y, R.z, 4, 3.2, 6048856);
+  artwork(k, R.x, R.y + 2, R.z - R.d / 2 + 0.3, 1.4, 0.9, 0, 4011344);
+  railRound(k, R);
+  floorLamp(k, R.x - 2.6, R.y, R.z - 1.6, { h: 1.6 });
+  sideTable(k, R.x + 3.1, R.y, R.z + 1.4, { w: 0.5, lamp: true });
+  k.box(0.05, 1.1, 0.05, k.M.get("blackMetal"), R.x - 1.6, R.y + 0.55, R.z + 1.6, { tile: 0.2 });
+  k.box(0.5, 0.36, 0.04, k.M.get("blackMetal"), R.x - 1.6, R.y + 1.16, R.z + 1.6, { rotX: -0.35, tile: 0.2 });
+  k.box(0.42, 1.2, 0.24, k.M.paint(3812132, 0.6, "case"), R.x - R.w / 2 + 0.7, R.y + 0.6, R.z + 2.4, { rotZ: 0.12, tile: 0.3 });
+  k.col(0.45, 1.2, 0.3, R.x - R.w / 2 + 0.7, R.y + 0.6, R.z + 2.4);
+  const sh = wallSpot(k, R, "e", R.z - 1.6, 0.7, { inset: 0.14 });
+  if (sh) wallShelf(k, sh[0], R.y + 1.6, sh[1], { rotY: sh[2], w: 1.2 });
+  void rng;
+}
+function foyer(k, R, rng) {
+  const M = k.M;
+  for (const s of [-1, 1]) {
+    consoleTable(k, R.x + s * 3.4, R.y, R.z - R.d / 2 + 0.6, { w: 1.4, d: 0.42 });
+    k.box(1.1, 1.6, 0.05, M.get("mirror"), R.x + s * 3.4, R.y + 1.9, R.z - R.d / 2 + 0.42, { tile: 0.8 });
+    plant(k, R.x + s * 4.8, R.y, R.z - R.d / 2 + 0.9, 1.4);
+    dressTop(k, R.x + s * 3.4, R.y + 0.91, R.z - R.d / 2 + 0.6, rng, { w: 1, n: 2, kinds: ["bowl", "photo", "vase"] });
+  }
+  const colors = [4152427, 7033919, 4865884, 4156237, 7028554];
+  for (let i = 0; i < 5; i++) {
+    artwork(k, R.x - 5.9, R.y + 2 + i * 0.55, R.z - 4 + i * 1.1, 0.7, 0.5, Math.PI / 2, colors[i]);
+  }
+  k.world.spot("foyerCentre", R.x, R.y, R.z - 5);
+  rug(k, R.x, R.y, R.z - 6, 5, 3, 7035466);
+  rug(k, R.x, R.y + 0.01, R.z - 6, 2, 2.6, 8202803);
+  umbrellaStand(k, R.x - 2.3, R.y, R.z - R.d / 2 + 0.55);
+  const bn = wallSpot(k, R, "e", R.z - 5.6, 1, { inset: 0.3, pad: 0.8 });
+  if (bn) {
+    bench(k, bn[0], R.y, bn[1], { w: 1.6, rotY: bn[2], color: 9076588, rack: true });
+    coatHooks(k, bn[0] - 0.24 * Math.sin(bn[2]), R.y + 1.75, bn[1] - 0.24 * Math.cos(bn[2]), { rotY: bn[2], w: 1.4, n: 4 });
+  }
+  const cl = wallSpot(k, R, "e", R.z - 8.4, 0.3);
+  if (cl) wallClock(k, cl[0], R.y + 2.4, cl[1], cl[2], { hour: 9, minute: 5, d: 0.44 });
+  const ar = wallSpot(k, R, "e", R.z - 2.6, 1);
+  if (ar) artwork(k, ar[0], R.y + 2.4, ar[1], 1.4, 1.9, ar[2], 4152427);
+  for (const s of [-1, 1]) floorLamp(k, R.x + s * 2.7, R.y, R.z - 4.2, { h: 1.65 });
+  for (const s of [-1, 1]) {
+    const sc = wallSpot(k, R, "w", R.z - 5.4 + s * 1.4, 0.3);
+    if (sc) sconce2(k, sc[0], R.y + 2.6, sc[1], sc[2], { intensity: 6 });
+  }
+}
+function sunroom(k, R, rng) {
+  const M = k.M;
+  const b = { x: R.x, y: R.y, z: R.z + 0.6, r: 0 };
+  rug(k, R.x, R.y, R.z + 0.6, 3.2, 3.2, 10135692);
+  k.p(b, 0, 0.74, 0, 1.5, 0.07, 1.5, M.get("maple"), 0.9);
+  for (const [ox, oz] of [[-0.6, -0.6], [0.6, -0.6], [-0.6, 0.6], [0.6, 0.6]]) k.p(b, ox, 0.37, oz, 0.08, 0.74, 0.08, M.get("maple"), 0.4);
+  k.pc(b, 0, 0.4, 0, 1.5, 0.8, 1.5);
+  for (let i = 0; i < 4; i++) {
+    const a = i / 4 * Math.PI * 2 + Math.PI / 4;
+    diningChair(k, R.x + Math.cos(a) * 1.15, R.y, R.z + 0.6 + Math.sin(a) * 1.15, { rotY: -a + Math.PI / 2 });
+  }
+  plant(k, R.x - R.w / 2 + 1, R.y, R.z - 1.6, 1.5);
+  plant(k, R.x + R.w / 2 - 1, R.y, R.z - 1.6, 1.2);
+  k.world.spot("sunroom", R.x, R.y, R.z);
+  for (const s of [-1, 1]) {
+    armchair(k, R.x - 1.5 + s * 0.9, R.y, R.z + 3.6, { rotY: 0, color: 13621449 });
+  }
+  sideTable(k, R.x - 1.5, R.y, R.z + 3.7, { w: 0.6 });
+  magazines(k, R.x - 1.5, R.y + 0.6, R.z + 3.7, { n: 3 });
+  floorLamp(k, R.x - 3, R.y, R.z + 3.6, { h: 1.5 });
+  curtains(k, R.x - 1.6, R.y, R.z + R.d / 2 - 0.35, 4, Math.PI, 14209734);
+  fruitBowl(k, R.x, R.y + 0.78, R.z + 0.6, {});
+  const sp = wallSpot(k, R, "w", R.z + 3.6, 0.9, { inset: 0.16, pad: 0.6 });
+  if (sp) {
+    wallShelf(k, sp[0], R.y + 1.3, sp[1], { rotY: sp[2], w: 1.4, items: 3 });
+    wallShelf(k, sp[0], R.y + 1.75, sp[1], { rotY: sp[2], w: 1.4, items: 3 });
+  }
+  for (const [px3, pz2, s] of [[R.x - 3, R.z + 2.2, 1.9], [R.x + 3.2, R.z - 3.2, 1.3], [R.x - 2.8, R.z - 3.6, 0.8], [R.x + 3.3, R.z + 1, 1.1]]) {
+    plant(k, px3, R.y, pz2, s);
+  }
+  k.box(0.24, 0.24, 0.18, M.paint(7043668, 0.6, "can"), R.x - 3.4, R.y + 0.12, R.z + 2.2, { tile: 0.2 });
+  k.box(0.3, 0.04, 0.04, M.paint(7043668, 0.6, "can"), R.x - 3.2, R.y + 0.22, R.z + 2.2, { rotZ: 0.4, tile: 0.2 });
+  const cl = wallSpot(k, R, "n", R.x - 2.2, 0.25);
+  if (cl) wallClock(k, cl[0], R.y + 2.3, cl[1], cl[2], { hour: 11, minute: 40 });
+  void rng;
+}
+function mud(k, R, rng) {
+  const M = k.M;
+  k.box(R.w - 0.6, 0.06, 0.45, M.get("maple"), R.x, R.y + 0.5, R.z - R.d / 2 + 0.4, { tile: 0.6 });
+  k.box(R.w - 0.6, 1.8, 0.3, M.paint(14673128, 0.6, "lockers"), R.x, R.y + 1.6, R.z - R.d / 2 + 0.3, { tile: 0.7 });
+  for (let i = 0; i < 4; i++) {
+    k.box(0.05, 0.05, 0.14, M.get("chrome"), R.x - 1.2 + i * 0.8, R.y + 1.7, R.z - R.d / 2 + 0.5, { tile: 0.2 });
+    k.box(
+      0.4,
+      0.7,
+      0.16,
+      M.paint([3108789, 11890600, 7043668, 9067322][i], 0.9, "coat"),
+      R.x - 1.2 + i * 0.8,
+      R.y + 1.3,
+      R.z - R.d / 2 + 0.52,
+      { tile: 0.3 }
+    );
+  }
+  for (let i = 0; i < 4; i++) {
+    k.box(
+      0.28,
+      0.12,
+      0.4,
+      M.paint([2829099, 9059119, 3100523, 7033648][i], 0.8, "shoe"),
+      R.x - 1.2 + i * 0.8,
+      R.y + 0.08,
+      R.z - R.d / 2 + 0.8,
+      { tile: 0.2 }
+    );
+  }
+  const hk = wallSpot(k, R, "w", R.z - 2.6, 0.7, { inset: 0.1 });
+  if (hk) coatHooks(k, hk[0], R.y + 1.7, hk[1], { rotY: hk[2], w: 1.3, n: 4 });
+  const sh = wallSpot(k, R, "w", R.z - 0.6, 0.6, { inset: 0.14 });
+  if (sh) wallShelf(k, sh[0], R.y + 1.5, sh[1], { rotY: sh[2], w: 1, items: 2 });
+  const mi = wallSpot(k, R, "w", R.z + 1.6, 0.5, { inset: 0.08 });
+  if (mi) tallMirror(k, mi[0], R.y + 0.9, mi[1], { rotY: mi[2], w: 0.7, h: 1.2, base: 0, frame: M.get("walnut") });
+  umbrellaStand(k, R.x + R.w / 2 - 0.5, R.y, R.z - R.d / 2 + 1.3);
+  laundryBasket(k, R.x - R.w / 2 + 0.55, R.y, R.z + 2.6, { color: 13621449 });
+  k.box(1.4, 0.05, 0.4, M.paint(3817285, 0.7, "boottray"), R.x, R.y + 0.03, R.z - R.d / 2 + 1.1, { tile: 0.3 });
+  k.box(0.5, 0.3, 0.3, M.paint(7043668, 0.85, "bag"), R.x + 0.6, R.y + 0.15, R.z + 1.6, { rotY: 0.5, tile: 0.3 });
+  k.col(0.52, 0.3, 0.32, R.x + 0.6, R.y + 0.15, R.z + 1.6, 0.5);
+  const cl = wallSpot(k, R, "e", R.z + 3.4, 0.25);
+  if (cl) wallClock(k, cl[0], R.y + 2.1, cl[1], cl[2], { hour: 7, minute: 50, d: 0.28 });
+  void rng;
+}
+function storage(k, R, rng) {
+  const M = k.M;
+  const doorSide = (R.def?.doors || [])[0]?.side;
+  const shelfZ = doorSide === "n" ? R.z + R.d / 2 - 0.4 : R.z - R.d / 2 + 0.4;
+  for (let s = 0; s < 4; s++) {
+    k.box(R.w - 1.2, 0.06, 0.5, M.get("steel"), R.x, R.y + 0.45 + s * 0.62, shelfZ, { tile: 0.6 });
+    for (let i = 0; i < 6; i++) {
+      if (!rng.chance(0.75)) continue;
+      k.box(
+        0.5,
+        0.4,
+        0.4,
+        M.paint(rng.pick([11569512, 14530706, 11055803, 13621449]), 0.85, "crate"),
+        R.x - (R.w - 2.4) / 2 + i * ((R.w - 2.4) / 5),
+        R.y + 0.68 + s * 0.62,
+        shelfZ,
+        { tile: 0.3 }
+      );
+    }
+  }
+  k.world.collider(R.w - 1.2, 2.6, 0.5, R.x, R.y + 1.3, shelfZ);
+  const sp = wallSpot(k, R, "w", R.z + 1, 1.6, { inset: 0.32, pad: 0.6 }) || wallSpot(k, R, "e", R.z + 1, 1.6, { inset: 0.32, pad: 0.6 });
+  if (sp) {
+    for (let s = 0; s < 3; s++) {
+      k.box(0.55, 0.05, 3.2, M.get("steel"), sp[0], R.y + 0.5 + s * 0.62, sp[1], { tile: 0.5 });
+      for (let i = 0; i < 7; i++) {
+        if (!rng.chance(0.7)) continue;
+        k.box(
+          0.18,
+          0.24,
+          0.18,
+          M.paint(rng.pick([14208958, 13227211, 14672872, 11569512]), 0.5, "jar"),
+          sp[0],
+          R.y + 0.65 + s * 0.62,
+          sp[1] - 1.3 + i * 0.44,
+          { tile: 0.2 }
+        );
+      }
+    }
+    k.col(0.55, 2, 3.2, sp[0], R.y + 1, sp[1]);
+  }
+  const lx = R.x - R.w / 2 + 0.9, lz = shelfZ + (doorSide === "n" ? -1.5 : 1.5);
+  for (const s of [-1, 1]) k.box(0.06, 1.7, 0.06, M.get("maple"), lx + s * 0.22, R.y + 0.85, lz, { rotZ: s * 0.06, tile: 0.3 });
+  for (let i = 0; i < 4; i++) k.box(0.5, 0.04, 0.16, M.get("maple"), lx, R.y + 0.3 + i * 0.4, lz, { tile: 0.2 });
+  k.col(0.6, 1.7, 0.3, lx, R.y + 0.85, lz);
+  k.box(0.05, 1.4, 0.05, M.get("maple"), R.x + R.w / 2 - 0.6, R.y + 0.7, lz, { rotZ: 0.12, tile: 0.2 });
+  k.box(0.3, 0.1, 0.12, M.paint(7033648, 0.9, "broom"), R.x + R.w / 2 - 0.52, R.y + 0.06, lz, { tile: 0.2 });
+  const wb = wallSpot(k, R, R.z < 0 ? "s" : "n", R.x - R.w / 2 + 0.8, 0.3, { windows: true, inset: 0.3, pad: 0.5 });
+  if (wb) wastebasket(k, wb[0], R.y, wb[1], { w: 0.34, h: 0.5, metal: true });
+}
+function stairHall(k, R, rng) {
+  const zN = R.z - R.d / 2;
+  rug(k, R.x, R.y, zN + 4, 3.6, 4.4, 7035466);
+  consoleTable(k, R.x, R.y, zN + 0.55, { w: 1.8, d: 0.44 });
+  dressTop(k, R.x, R.y + 0.91, zN + 0.55, rng, { w: 1.3, n: 2, kinds: ["vase", "photo", "bowl"] });
+  for (const s of [-1, 1]) plant(k, R.x + s * 2.6, R.y, zN + 0.9, 1.6);
+  bench(k, R.x, R.y, zN + 6.6, { w: 1.6, color: 9076588 });
+  floorLamp(k, R.x - 3, R.y, zN + 5.6, { h: 1.65 });
+  const ar = wallSpot(k, R, "e", zN + 9.4, 1);
+  if (ar) artwork(k, ar[0], R.y + 2.2, ar[1], 1.3, 1.8, ar[2], 4865884);
+  const cl = wallSpot(k, R, "e", zN + 3.2, 0.3);
+  if (cl) wallClock(k, cl[0], R.y + 2.3, cl[1], cl[2], { hour: 10, minute: 10, d: 0.4 });
+  for (const s of [-1, 1]) {
+    const sc = wallSpot(k, R, "e", zN + 2 + s * 0.9, 0.3);
+    if (sc) sconce2(k, sc[0], R.y + 2.5, sc[1], sc[2]);
+  }
+}
+function gallery(k, R, rng) {
+  const clearOfStairs = (x) => x > -20 && Math.abs(x) > 7.5 && !(x > 14.5 && x < 24.5);
+  const cols = [4152427, 7033919, 4865884, 4156237, 7028554, 5917247];
+  let i = 0;
+  for (let x = R.x - R.w / 2 + 4; x < R.x + R.w / 2 - 3; x += 4.5) {
+    if (!clearOfStairs(x)) continue;
+    for (const side of ["n", "s"]) {
+      if (!backedByRoom(k, R, side, x)) continue;
+      const sp = wallSpot(k, R, side, x, 0.6, { pad: 0.45, inset: i % 3 === 2 ? 0.14 : 0.04 });
+      if (!sp) continue;
+      if (i % 3 === 2) {
+        wallShelf(k, sp[0], R.y + 1.5, sp[1], { rotY: sp[2], w: 1, items: 2 });
+      } else {
+        artwork(k, sp[0], R.y + 2, sp[1], rng.range(0.7, 1), rng.range(0.5, 0.8), sp[2], cols[i % cols.length]);
+      }
+      i++;
+    }
+    if (i % 3 === 0) {
+      const side = rng.chance(0.5) ? "n" : "s";
+      const sp = backedByRoom(k, R, side, x) ? wallSpot(k, R, side, x, 0.8, { inset: 0.26, pad: 0.7 }) : null;
+      if (sp) {
+        consoleTable(k, sp[0], R.y, sp[1], { w: 1.3, d: 0.38, rotY: sp[2] });
+        if (rng.chance(0.5)) tableLamp(k, sp[0], sp[1], R.y + 0.91, { rotY: sp[2] });
+        else vase(k, sp[0], R.y + 0.91, sp[1], { scale: 1.1 });
+      }
+    }
+  }
+  for (const cx2 of [-19, -12, 12, 27]) {
+    if (!clearOfStairs(cx2) || cx2 < R.x - R.w / 2 + 3 || cx2 > R.x + R.w / 2 - 3) continue;
+    rug(k, cx2, R.y, R.z, 5, 1.6, 7032634);
+  }
+}
 
 // src/world/backyard.js
 var V4 = (x, y, z) => new Vector3(x, y, z);
@@ -35431,8 +35976,39 @@ var POSES = {
   // book / tablet / controller held up
   read: { hipY: 0.55, torsoX: 0.1, hip: -1.4, knee: 1.44, ankle: 0.16, spread: 0.05, splay: 0.06, armX: -0.92, elbow: -1.3, armZ: 0.18, headX: 0.12 },
   // crouched down over something on the ground
-  crouch: { hipY: 0.42, torsoX: 0.24, hip: -1.15, knee: 1.75, ankle: -0.4, spread: 0.08, splay: 0.16, armX: -0.7, elbow: -0.9, armZ: 0.18, headX: 0.1 }
+  crouch: { hipY: 0.42, torsoX: 0.24, hip: -1.15, knee: 1.75, ankle: -0.4, spread: 0.08, splay: 0.16, armX: -0.7, elbow: -0.9, armZ: 0.18, headX: 0.1 },
+  // ── together: the family poses ──
+  // Riding in a car.  Authored with the rig's origin *on the seat cushion* —
+  // family.js parks a passenger there and the car carries them — so hipY here
+  // is only the pelvis above the cushion, not a height off the ground.  The
+  // seat is raked, so the back goes back and the knees come up.
+  passenger: { hipY: 0.1, torsoX: -0.13, hip: -1.3, knee: 1.16, ankle: 0.12, spread: 0.07, splay: 0.03, armX: -0.06, elbow: -1.22, armZ: -0.05, wrist: 0.18, headX: 0.02 },
+  // mid-delivery: down over the front foot, ball arm behind (see the stagger
+  // in update() — the pose only sets the depth of the crouch)
+  bowl: { drop: 0.02, torsoX: 0.55, torsoZ: -0.07, hip: -0.42, knee: 0.85, ankle: -0.42, spread: 0.03, splay: 0.03, armX: 0.5, elbow: -0.3, armZ: 0.16, headX: 0.3 },
+  // both arms up — a goal, a strike, a birthday
+  cheer: { torsoX: -0.07, hip: -0.04, knee: 0.1, spread: 0.05, armX: -2.72, elbow: -0.28, armZ: 0.4, headX: -0.14 },
+  // at a table with a plate in front of them: forearms on the cloth
+  dine: { hipY: 0.55, torsoX: 0.11, hip: -1.42, knee: 1.44, ankle: 0.18, spread: 0.05, splay: 0.03, armX: -0.55, elbow: -1.02, armZ: 0.1, headX: 0.1 },
+  // hunched over a desk, pencil moving, head down over the page
+  homework: { hipY: 0.54, torsoX: 0.34, hip: -1.48, knee: 1.52, ankle: 0.22, spread: 0.04, splay: 0.02, armX: -0.76, elbow: -1.1, armZ: 0.09, headX: 0.52 },
+  // glass up — one arm raised, the other easy
+  toast: { torsoX: -0.02, hip: -0.03, knee: 0.08, armX: -0.2, elbow: -0.35, armZ: 0.1, headX: -0.06 },
+  // told off: shoulders in, arms folded, chin on chest
+  sulk: { drop: 0.012, torsoX: 0.2, hip: -0.07, knee: 0.17, spread: 0, armX: -0.38, elbow: -2, armZ: -0.3, headX: 0.32 },
+  // leaning in over the cake, hands down on the table edge
+  blow: { drop: 0.01, torsoX: 0.45, hip: -0.22, knee: 0.3, ankle: -0.12, spread: 0.04, armX: -0.6, elbow: -0.6, armZ: 0.14, headX: 0.42 }
 };
+var SEATED = /* @__PURE__ */ new Set(["sit", "lounge", "perch", "desk", "floor", "read", "dine", "homework", "passenger"]);
+var MOODS = {
+  neutral: { curl: 0, brow: 0, angle: 0, lid: 0, head: 0, tilt: 0, lean: 0, open: 0 },
+  happy: { curl: 0.6, brow: 0.3, angle: -0.06, lid: 0.12, head: -0.05, tilt: 0.05, lean: -0.02, open: 0.1 },
+  sad: { curl: -0.5, brow: 0.24, angle: -0.3, lid: 0.32, head: 0.2, tilt: 0.09, lean: 0.06, open: 0 },
+  cross: { curl: -0.34, brow: -0.45, angle: 0.36, lid: 0.26, head: 0.06, tilt: 0, lean: 0.03, open: 0 },
+  surprised: { curl: 0.1, brow: 0.95, angle: -0.08, lid: -0.34, head: -0.08, tilt: 0.03, lean: -0.05, open: 0.5 },
+  tired: { curl: -0.14, brow: -0.06, angle: -0.16, lid: 0.58, head: 0.16, tilt: 0.11, lean: 0.05, open: 0.06 }
+};
+var NECK_YAW = 1.02;
 var FOOT_TOE = 0.166;
 var FOOT_HEEL = -0.082;
 var SWING = 0.46;
@@ -35623,10 +36199,10 @@ var Character = class {
       w.flush();
       const ir = new Bin(this.head);
       for (const s of [-1, 1]) ir.add(cyl(92e-4, 92e-4, 5e-3, 10), irisM, { x: s * eyeX, y: eyeY, z: 0.0845, rx: Math.PI / 2 });
-      ir.flush();
+      this.iris = ir.flush(irisM);
       const pu = new Bin(this.head);
       for (const s of [-1, 1]) pu.add(cyl(44e-4, 44e-4, 5e-3, 8), pupilM, { x: s * eyeX, y: eyeY, z: 0.0865, rx: Math.PI / 2 });
-      pu.flush();
+      this.pupil = pu.flush(pupilM);
       this.lids = [];
       for (const s of [-1, 1]) {
         const g = new Group();
@@ -35640,16 +36216,17 @@ var Character = class {
       }
       this.browG = new Group();
       this.head.add(this.browG);
-      const brow = new Bin(this.browG);
       const ba = spec.browAngle ?? 0.12;
+      this.brows = [];
       for (const s of [-1, 1]) {
-        brow.add(
-          box(0.05 * fw, 0.0115, 0.018),
-          hairM,
-          { x: s * (eyeX + 2e-3), y: eyeY + 0.033, z: eyeZ + 8e-3, rz: -s * ba, rx: -0.2 }
-        );
+        const g = new Group();
+        g.position.set(s * (eyeX + 2e-3), eyeY + 0.033, eyeZ + 8e-3);
+        this.browG.add(g);
+        const brow = new Bin(g);
+        brow.add(box(0.05 * fw, 0.0115, 0.018), hairM, { rz: -s * ba, rx: -0.2 });
+        brow.flush();
+        this.brows.push({ g, side: s });
       }
-      brow.flush();
       this.browY = 0;
       const mx = 0.0555, mz = 0.0845;
       const lipTop = new Group();
@@ -35660,14 +36237,17 @@ var Character = class {
       const smile = spec.smile ?? 0.3;
       const line = new Bin(this.head);
       line.add(box(0.03, 5e-3, 0.012), mouthM, { y: mx, z: mz + 4e-3 });
-      for (const s of [-1, 1]) {
-        line.add(
-          box(0.017, 5e-3, 0.012),
-          mouthM,
-          { x: s * 0.0215, y: mx + smile * 8e-3, z: mz + 3e-3, rz: -s * smile }
-        );
-      }
       line.flush();
+      this.corners = [];
+      for (const s of [-1, 1]) {
+        const g = new Group();
+        g.position.set(s * 0.0215, mx + smile * 8e-3, mz + 3e-3);
+        this.head.add(g);
+        const cb = new Bin(g);
+        cb.add(box(0.017, 5e-3, 0.012), mouthM, { rz: -s * smile });
+        cb.flush();
+        this.corners.push({ g, side: s, x: g.position.x, y: g.position.y });
+      }
       this.lipBot = new Group();
       this.lipBotY = mx - 0.011;
       this.lipBot.position.set(0, this.lipBotY, mz);
@@ -35780,7 +36360,7 @@ var Character = class {
         b.add(capg(0.013, 0.028), skin, { x: -s * 0.031, y: -0.036, z: 0.012, rz: s * 0.5, rx: -0.3 });
         hand = b.flush(skin);
       }
-      this.arms.push({ sh, el, wrist: wr, hand, side: s });
+      this.arms.push({ sh, el, wrist: wr, hand, side: s, shY: sh.position.y, lift: 0 });
     }
     const bare = outfit === "skirt" && spec.tights === false;
     this.legs = [];
@@ -35833,6 +36413,7 @@ var Character = class {
       this.legs.push({ hip, knee, ankle, foot, side: s });
     }
     world.addProp(this.root);
+    this._baseParent = this.root.parent;
     this.pos = this.root.position;
     this.heading = 0;
     this.speed = 0;
@@ -35858,6 +36439,36 @@ var Character = class {
     this._gazeX = 0;
     this._prevHeading = 0;
     this._bank = 0;
+    this._neckX = 0;
+    this._neckY = 0;
+    this._neckZ = 0;
+    this._twist = 0;
+    this._eyeU = 0;
+    this._eyeV = 0;
+    this.mood = "neutral";
+    this._moodT = MOODS.neutral;
+    this._mood = { ...MOODS.neutral };
+    this._tilt = spec.name.charCodeAt(0) % 2 ? 1 : -1;
+    this._gb = { lean: 0, head: 0, yaw: 0, tilt: 0, brow: 0, angle: 0, curl: 0, lid: 0, open: 0, puff: 0 };
+  }
+  /** True while somebody else's transform is carrying them (a car seat). */
+  _carried() {
+    return !!this.root.parent && this.root.parent !== this._baseParent;
+  }
+  /**
+   * Hand the rig to another object — a vehicle, a lift — keeping the pose.
+   * `pos`/`heading` become local to that parent from here on; everything that
+   * needs world space (gaze, eyePos) goes through the world matrix instead.
+   */
+  attachTo(parent) {
+    if (!parent || this.root.parent === parent) return this;
+    parent.add(this.root);
+    return this;
+  }
+  /** Put them back in the world at large. */
+  detach() {
+    if (this._baseParent && this.root.parent !== this._baseParent) this._baseParent.add(this.root);
+    return this;
   }
   /**
    * Accepts the old boolean (`setPose(true)` = sitting) as well as any pose
@@ -35870,12 +36481,39 @@ var Character = class {
     if (!POSES[p]) p = "stand";
     if (p === this.pose) return;
     this.pose = p;
-    this.sitting = p === "sit" || p === "desk" || p === "read" || p === "lounge" || p === "floor" || p === "perch";
+    this.sitting = SEATED.has(p);
   }
   playGesture(name, time = 1.6) {
     this.gesture = name;
     this.gestureT = time;
     this.gestureDur = Math.max(0.2, time);
+  }
+  /**
+   * Expression.  One of happy | neutral | sad | cross | surprised | tired, and
+   * it holds until it is set again — being pleased with someone should outlast
+   * the sentence you said it in.  Everything blends, so it is safe to call on
+   * any frame.
+   */
+  setMood(name) {
+    const m = MOODS[name] ? name : "neutral";
+    this.mood = m;
+    this._moodT = MOODS[m];
+    return this;
+  }
+  /** Mouth moves while this is on.  `speaking` stays writable for old callers. */
+  setSpeaking(on) {
+    this.speaking = !!on;
+    return this;
+  }
+  /**
+   * Look at the player (or anything else) — pass null to let them go back to
+   * looking about the room.  A seated character answers with their head and
+   * eyes and only then their shoulders, so walking past a sofa does not spin
+   * anyone round; see the gaze block in update().
+   */
+  lookAtPlayer(p) {
+    this.lookAt = p || null;
+    return this;
   }
   // ── animation ────────────────────────────────────────────────────────────
   update(dt, t, playerPos) {
@@ -35896,6 +36534,23 @@ var Character = class {
       p[k] = damp2(p[k], tgt[k], 7, dt);
     }
     this.poseW = damp2(this.poseW, standing ? 0 : 1, 6, dt);
+    const md = this._mood;
+    for (const k in md) md[k] = damp2(md[k], this._moodT[k], 4, dt);
+    const gk = this.gestureDur > 0 ? clamp2(1 - this.gestureT / this.gestureDur, 0, 1) : 1;
+    this.gestureW = damp2(this.gestureW, this.gesture ? 1 : 0, 9, dt);
+    const G = this._gb;
+    const gtb = this.gesture ? this.gestureBody(this.gesture, gk, t) : null;
+    for (const k in G) G[k] = damp2(G[k], gtb && gtb[k] ? gtb[k] * this.gestureW : 0, 16, dt);
+    let wx = this.pos.x, wy = this.pos.y, wz = this.pos.z, wyaw = this.heading;
+    if (this._carried()) {
+      this.root.rotation.y = this.heading;
+      this.root.updateWorldMatrix(true, false);
+      const m = this.root.matrixWorld.elements;
+      wx = m[12];
+      wy = m[13];
+      wz = m[14];
+      wyaw = Math.atan2(m[8], m[10]);
+    }
     const it = t * 0.21 + this.seed;
     const shift = (Math.sin(it) * 0.62 + Math.sin(it * 0.43 + 1.7) * 0.38) * (1 - w);
     const breath = Math.sin(t * 0.95 + this.seed * 2);
@@ -35913,9 +36568,15 @@ var Character = class {
       const load = clamp2(-shift * side, -1, 1);
       const iHip = p.hip + load * 0.035;
       const iKnee = p.knee + Math.max(0, -load) * 0.1;
-      const hipX = lerp2(iHip, gHip, w);
-      const kneeX = Math.max(0, lerp2(iKnee, gKnee, w));
-      const ankX = lerp2(p.ankle, gAnk, w);
+      let hipX = lerp2(iHip, gHip, w);
+      let kneeX = Math.max(0, lerp2(iKnee, gKnee, w));
+      let ankX = lerp2(p.ankle, gAnk, w);
+      if (this.pose === "bowl") {
+        const q = this.poseW;
+        hipX += (side > 0 ? 0.55 : -0.36) * q;
+        kneeX = Math.max(0, kneeX + (side > 0 ? 0.08 : 0.1) * q);
+        ankX += (side > 0 ? 0.65 : 0) * q;
+      }
       Lg.hip.rotation.x = hipX;
       Lg.hip.rotation.z = side * (p.spread + p.splay) + shift * 0.02 * side;
       Lg.hip.rotation.y = side * p.splay * 0.8;
@@ -35939,22 +36600,25 @@ var Character = class {
     this.hips.rotation.y = p.yaw + Math.sin(ph) * 0.13 * w;
     this.hips.rotation.z = p.roll - shift * 0.045 * (1 - this.poseW) - Math.sin(ph + 0.6) * 0.05 * w + this._bank;
     const lean = clamp2(spd * 0.05, 0, 0.11) * w;
-    this.torso.rotation.x = p.torsoX + lean + breath * 6e-3;
+    this.torso.rotation.x = p.torsoX + lean + breath * 6e-3 + md.lean + G.lean;
     this.torso.rotation.y = -Math.sin(ph) * 0.31 * w;
     this.torso.rotation.z = p.torsoZ - this._bank * 0.5;
     if (this.chest) {
       const br = 1 + breath * 0.012;
       this.chest.scale.set(br, 1 + breath * 5e-3, 1 + breath * 0.018);
     }
-    let gazeY = 0, gazeX = 0;
+    let gazeY = 0, gazeX = 0, aimY = 0, aimX = 0, twist = 0;
     if (this.lookAt) {
-      const dx = this.lookAt.x - this.pos.x, dz = this.lookAt.z - this.pos.z;
-      const want = wrapPi(Math.atan2(dx, dz) - this.heading);
-      gazeY = clamp2(want, -1.15, 1.15);
-      const dy = this.lookAt.y - (this.pos.y + this.eyeY * this.S);
+      const dx = this.lookAt.x - wx, dz = this.lookAt.z - wz;
+      const want = wrapPi(Math.atan2(dx, dz) - wyaw);
+      const dy = this.lookAt.y - (wy + this.eyeY * this.S);
       const dist = Math.max(0.6, Math.hypot(dx, dz));
-      gazeX = clamp2(-Math.atan2(dy, dist), -0.5, 0.5);
-      this.torso.rotation.y += clamp2((want - gazeY) * 0.55, -0.45, 0.45) * (1 - w);
+      const reach = clamp2((2.5 - Math.abs(want)) / 0.55, 0, 1);
+      aimY = want * reach;
+      aimX = clamp2(-Math.atan2(dy, dist), -0.5, 0.5) * reach;
+      gazeY = clamp2(aimY, -NECK_YAW, NECK_YAW);
+      gazeX = aimX;
+      twist = clamp2((aimY - gazeY) * (this.sitting ? 0.9 : 0.55), -0.6, 0.6) * (1 - w);
     } else {
       this._gazeT -= dt;
       if (this._gazeT <= 0) {
@@ -35962,23 +36626,33 @@ var Character = class {
         this._gazeY = (Math.random() - 0.5) * (Math.random() < 0.3 ? 1.7 : 0.7);
         this._gazeX = (Math.random() - 0.5) * 0.34;
       }
-      gazeY = this._gazeY * (1 - w * 0.7);
-      gazeX = this._gazeX * (1 - w * 0.7);
+      aimY = gazeY = this._gazeY * (1 - w * 0.7);
+      aimX = gazeX = this._gazeX * (1 - w * 0.7);
     }
-    this.neck.rotation.y = damp2(this.neck.rotation.y, gazeY, 6, dt);
-    const levelX = -this.torso.rotation.x * 0.8 + p.headX;
-    this.neck.rotation.x = damp2(this.neck.rotation.x, clamp2(levelX + gazeX, -0.7, 0.8), 7, dt);
-    this.neck.rotation.z = damp2(this.neck.rotation.z, -gazeY * 0.12 + shift * 0.02, 5, dt);
+    this._twist = damp2(this._twist, twist, this.sitting ? 3.5 : 5.5, dt);
+    this.torso.rotation.y += this._twist;
+    this._neckY = damp2(this._neckY, gazeY, 6, dt);
+    const levelX = -this.torso.rotation.x * 0.8 + p.headX + md.head;
+    const chat = this.speaking ? Math.sin(t * 2.7 + this.seed) * 0.035 : 0;
+    this._neckX = damp2(this._neckX, clamp2(levelX + gazeX + chat, -0.7, 0.8), 7, dt);
+    this._neckZ = damp2(this._neckZ, -gazeY * 0.12 + shift * 0.02 + md.tilt * this._tilt, 5, dt);
+    this.neck.rotation.set(this._neckX + G.head, this._neckY + G.yaw, this._neckZ + G.tilt * this._tilt);
     this.neck.position.y = 0.475 + breath * 3e-3;
-    const gk = this.gestureDur > 0 ? clamp2(1 - this.gestureT / this.gestureDur, 0, 1) : 1;
-    this.gestureW = damp2(this.gestureW, this.gesture ? 1 : 0, 9, dt);
+    this._eyeU = damp2(this._eyeU, clamp2(aimY - this._neckY - this._twist, -0.55, 0.55), 12, dt);
+    this._eyeV = damp2(this._eyeV, clamp2(aimX - (this._neckX - levelX), -0.4, 0.4), 12, dt);
+    if (this.iris) {
+      const ex = this._eyeU * 0.011, ey = -this._eyeV * 9e-3;
+      this.iris.position.set(ex, ey, 0);
+      if (this.pupil) this.pupil.position.set(ex, ey, 0);
+    }
     for (const A of this.arms) {
       const ap = ph + (A.side > 0 ? 0 : Math.PI);
       let x = lerp2(p.armX, 0.42 * Math.sin(ap) + 0.05, w);
       let z = A.side * (p.armZ + 0.02 * w) + (this.pose === "swim" ? 0 : shift * 0.02 * A.side);
       let el = lerp2(p.elbow, -0.2 - 0.5 * Math.max(0, -Math.sin(ap)) - 0.1 * Math.max(0, Math.sin(ap)), w);
       let wr = p.wrist;
-      let wz = 0;
+      let wz2 = 0;
+      let sy = 0;
       if (this.pose === "swim") {
         const sp = t * 2.1 + (A.side > 0 ? 0 : Math.PI);
         x = -1.05 - Math.sin(sp) * 0.75;
@@ -35990,23 +36664,82 @@ var Character = class {
         z = A.side * (0.12 + Math.sin(t * 2.6) * 0.05);
       } else if (this.pose === "shoot") {
         x = -1.85 + Math.sin(t * 0.8 + A.side) * 0.05;
+      } else if (this.pose === "bowl") {
+        const sw = Math.sin(t * 1.35 + this.seed);
+        if (A.side > 0) {
+          x = 0.92 + sw * 0.26;
+          z = A.side * 0.1;
+          el = -0.2;
+          wr = -0.2;
+        } else {
+          x = -0.62 - sw * 0.1;
+          z = A.side * 0.48;
+          el = -0.55;
+        }
+      } else if (this.pose === "cheer") {
+        x = -2.72 + Math.sin(t * 3 + A.side) * 0.11;
+        z = A.side * (0.4 + Math.sin(t * 2.3 + A.side) * 0.06);
+        el = -0.28;
+      } else if (this.pose === "toast") {
+        if (A.side > 0) {
+          x = -1.3 + Math.sin(t * 1.1 + this.seed) * 0.035;
+          z = A.side * 0.34;
+          el = -1.9;
+          wr = -0.15;
+        } else {
+          x = -0.16;
+          z = A.side * 0.12;
+          el = -0.42;
+        }
+      } else if (this.pose === "homework") {
+        if (A.side > 0) {
+          x = -0.76 + Math.sin(t * 5.4) * 0.035;
+          z = A.side * (0.09 + Math.sin(t * 5.4 + 1.1) * 0.04);
+          el = -1.06 + Math.cos(t * 5.4) * 0.05;
+          wr = 0.16;
+        } else {
+          x = -0.7;
+          z = -A.side * 0.05;
+          el = -1.18;
+          wr = 0.1;
+        }
+      } else if (this.pose === "sulk") {
+        x = A.side > 0 ? -0.42 : -0.3;
+        el = A.side > 0 ? -1.7 : -1.55;
+        z = 0;
+        sy = -A.side * 1.2;
+        wr = -0.25;
+      } else if (this.pose === "blow") {
+        x = -0.6;
+        z = A.side * 0.14;
+        el = -0.6 + Math.sin(t * 0.9 + A.side) * 0.02;
+      } else if (this.pose === "dine") {
+        el += Math.sin(t * 1.7 + A.side * 1.4) * 0.035;
+        z = A.side * (p.armZ - 0.03);
+      } else if (this.pose === "passenger") {
+        el += Math.sin(t * 1.1 + A.side) * 0.02;
+        z = A.side * p.armZ - A.side * 0.03;
       } else if (this.pose === "read" || this.pose === "desk") {
         el += Math.sin(t * 3.1 + A.side * 1.4) * 0.03;
       }
       const g = this.gesture ? this.gestureArm(A, this.gesture, gk, t) : null;
+      const gw = this.gestureW;
       if (g) {
-        const gw = this.gestureW;
         x = lerp2(x, g.x, gw);
         z = lerp2(z, g.z, gw);
         el = lerp2(el, g.el, gw);
         wr = lerp2(wr, g.wr || 0, gw);
-        wz = lerp2(0, g.wz || 0, gw);
+        wz2 = lerp2(0, g.wz || 0, gw);
+        sy = lerp2(sy, g.sy || 0, gw);
       }
+      A.lift = damp2(A.lift, g && g.ly ? g.ly * gw : 0, 12, dt);
+      A.sh.position.y = A.shY + A.lift;
       A.sh.rotation.x = damp2(A.sh.rotation.x, x, 14, dt);
+      A.sh.rotation.y = damp2(A.sh.rotation.y, sy, 14, dt);
       A.sh.rotation.z = damp2(A.sh.rotation.z, z, 14, dt);
       A.el.rotation.x = damp2(A.el.rotation.x, el, 14, dt);
       A.wrist.rotation.x = damp2(A.wrist.rotation.x, wr, 16, dt);
-      A.wrist.rotation.z = damp2(A.wrist.rotation.z, wz, 16, dt);
+      A.wrist.rotation.z = damp2(A.wrist.rotation.z, wz2, 16, dt);
     }
     if (this.tail) {
       this.tail.rotation.x = 0.35 + Math.sin(ph * 2 + 0.6) * 0.16 * (0.25 + w) + this.neck.rotation.x * 0.3;
@@ -36028,19 +36761,31 @@ var Character = class {
       const u = 1 - this.blink / 0.15;
       close = u < 0.4 ? u / 0.4 : 1 - (u - 0.4) / 0.6;
     }
-    const lidRest = -0.2 + clamp2(gazeX, -0.3, 0.3) * 0.5;
+    const lidRest = clamp2(-0.2 + clamp2(gazeX, -0.3, 0.3) * 0.5 + (md.lid + G.lid) * 0.6, -0.5, 1);
     for (const g of this.lids) g.rotation.x = lerp2(lidRest, 1.42, close);
     if (this.browG) {
-      const raise = (this.speaking ? 0.35 : 0) + (this.gesture === "wave" || this.gesture === "cheer" ? 0.7 : 0) * this.gestureW;
+      const raise = md.brow + G.brow + (this.speaking ? 0.3 : 0);
       this.browY = damp2(this.browY, raise, 8, dt);
       this.browG.position.y = this.browY * 6e-3;
       this.browG.rotation.x = -this.browY * 0.12;
+      const ang = md.angle + G.angle;
+      if (this.brows) for (const b of this.brows) b.g.rotation.z = b.side * ang;
     }
     if (this.lipBot) {
-      const open = this.speaking ? clamp2(0.42 + Math.sin(t * 17.3) * 0.34 + Math.sin(t * 9.7 + 1.2) * 0.24, 0, 1) : 0;
+      const speak = this.speaking ? clamp2(0.42 + Math.sin(t * 17.3) * 0.34 + Math.sin(t * 9.7 + 1.2) * 0.24, 0, 1) : 0;
+      const open = clamp2(Math.max(speak, md.open + G.open), 0, 1);
       this._mouth = damp2(this._mouth, open, 22, dt);
       this.lipBot.position.y = this.lipBotY - this._mouth * 0.016;
       this.lipBot.rotation.x = this._mouth * 0.5;
+    }
+    if (this.corners) {
+      const curl = clamp2(md.curl + G.curl, -1, 1);
+      const puff = G.puff;
+      for (const c of this.corners) {
+        c.g.rotation.z = c.side * curl * 0.55;
+        c.g.position.x = c.x - c.side * puff * 6e-3;
+        c.g.position.y = c.y + curl * 4e-3 - puff * 15e-4;
+      }
     }
     this.root.rotation.y = this.heading;
     if (this.gestureT > 0) {
@@ -36099,7 +36844,105 @@ var Character = class {
         if (!lead) return { x: -0.1, z: s * 0.14, el: -0.2 };
         return { x: 0.8 - Math.sin(k * Math.PI) * 2.6, z: s * 0.1, el: -0.12 };
       }
+      // ── together: the family gestures ──
+      case "blowout": {
+        return { x: -0.62, z: s * 0.15, el: -0.95, wr: 0.15 };
+      }
+      case "applaud": {
+        const c = Math.abs(Math.sin(t * 8.2));
+        return { x: -0.76, z: -s * (0.28 + c * 0.24), el: -1.22, wr: -0.3 };
+      }
+      case "facepalm": {
+        if (!lead) return { x: -0.14, z: s * 0.1, el: -0.5 };
+        const up = clamp2(k / 0.28, 0, 1);
+        return { x: -1.55 * up, z: -s * 0.62 * up, el: -2 * up, wr: -0.4 };
+      }
+      case "shrug": {
+        const up = k < 0.3 ? k / 0.3 : k < 0.72 ? 1 : Math.max(0, 1 - (k - 0.72) / 0.28);
+        return { x: -0.18, z: s * (0.14 + 0.3 * up), el: -1.25 * up - 0.2, wr: 0.55 * up, wz: -s * 0.5 * up, ly: 0.024 * up };
+      }
+      case "handover": {
+        const ext = clamp2(k / 0.4, 0, 1);
+        return { x: -0.62 - 0.5 * ext, z: s * 0.06, el: -1.15 + 0.45 * ext, wr: 0.2 + 0.3 * ext };
+      }
+      case "write": {
+        if (!lead) return { x: -0.7, z: -s * 0.05, el: -1.18, wr: 0.1 };
+        const c = t * 6.4;
+        return {
+          x: -0.76 + Math.sin(c) * 0.045,
+          z: s * (0.09 + Math.sin(c * 0.5 + 1.1) * 0.05),
+          el: -1.06 + Math.cos(c) * 0.06,
+          wr: 0.16 + Math.sin(c * 2) * 0.05
+        };
+      }
+      case "sulk": {
+        return { x: lead ? -0.42 : -0.3, z: 0, sy: -s * 1.2, el: lead ? -1.7 : -1.55, wr: -0.25 };
+      }
       case "nod":
+      case "shake":
+      default:
+        return null;
+    }
+  }
+  /**
+   * The half of a gesture that isn't in the arms — a lean, a nod, a shake, a
+   * face.  Same `k` 0→1 as gestureArm(); every field is optional and is added
+   * on top of the pose and the mood, weighted by the gesture's blend:
+   *   lean torso pitch   head neck pitch   yaw neck yaw   tilt head roll
+   *   brow lift   angle brow angle   curl mouth   lid eyelids   open jaw
+   *   puff pursed lips
+   */
+  gestureBody(name, k, t) {
+    const env = Math.sin(Math.PI * clamp2(k, 0, 1));
+    switch (name) {
+      case "blowout": {
+        const inn = k < 0.32 ? k / 0.32 : k < 0.62 ? 1 : Math.max(0, 1 - (k - 0.62) / 0.3);
+        const puff = k > 0.34 && k < 0.66 ? Math.sin((k - 0.34) / 0.32 * Math.PI) : 0;
+        return {
+          lean: inn * 0.34,
+          head: inn * 0.12,
+          brow: puff * 0.45,
+          puff,
+          open: puff * 0.22,
+          curl: (1 - inn) * 0.5,
+          lid: puff * 0.25
+        };
+      }
+      case "nod":
+        return { head: 0.05 * env + Math.sin(k * TAU * 2.1) * 0.17 * env, brow: 0.25 * env, curl: 0.25 * env };
+      case "shake":
+        return { yaw: Math.sin(k * TAU * 2.3) * 0.3 * env, brow: -0.1 * env, curl: -0.12 * env };
+      case "shrug": {
+        const up = k < 0.3 ? k / 0.3 : k < 0.72 ? 1 : Math.max(0, 1 - (k - 0.72) / 0.28);
+        return { head: -0.05 * up, tilt: 0.13 * up, brow: 0.8 * up, curl: 0.2 * up, lean: -0.03 * up };
+      }
+      case "facepalm": {
+        const up = clamp2(k / 0.28, 0, 1);
+        return { lean: 0.1 * up, head: 0.26 * up, brow: -0.35 * up, angle: 0.22 * up, curl: -0.3 * up, lid: 0.55 * up };
+      }
+      case "sulk":
+        return { lean: 0.14, head: 0.26, brow: -0.2, angle: 0.28, curl: -0.45, lid: 0.25 };
+      case "handover":
+        return { lean: 0.09, head: 0.08, curl: 0.3, brow: 0.2 };
+      case "write":
+        return { lean: 0.05, head: 0.16, lid: 0.15 };
+      case "applaud":
+        return { head: -0.06, brow: 0.45, curl: 0.5, open: 0.15 };
+      case "clap":
+        return { brow: 0.25, curl: 0.35 };
+      case "cheer":
+        return { head: -0.18, brow: 0.65, curl: 0.55, open: 0.4, lean: -0.05 };
+      case "wave":
+        return { brow: 0.5, curl: 0.45 };
+      case "hug":
+        return { head: 0.06, lid: 0.35, curl: 0.5, tilt: 0.08 };
+      case "highfive":
+        return { brow: 0.4, curl: 0.45, head: -0.04 };
+      case "point":
+        return { brow: 0.3, curl: 0.2 };
+      case "swing":
+      case "shoot":
+        return { brow: 0.15, lid: 0.2 * env };
       default:
         return null;
     }
@@ -36111,7 +36954,12 @@ var Character = class {
    */
   eyePos(out = new Vector3()) {
     const above = (this.eyeY - this.hipBase) * Math.cos(this._cur.pitch || 0);
-    return out.set(this.pos.x, this.pos.y + (this.hips.position.y + above) * this.S, this.pos.z);
+    const h = (this.hips.position.y + above) * this.S;
+    if (this._carried()) {
+      this.root.updateWorldMatrix(true, false);
+      return out.set(0, h, 0).applyMatrix4(this.root.matrixWorld);
+    }
+    return out.set(this.pos.x, this.pos.y + h, this.pos.z);
   }
 };
 
@@ -36791,12 +37639,37 @@ var FamilyMember = class {
     const s = this.spec.schedule;
     let pick = s[s.length - 1];
     for (const e of s) if (hour >= e[0]) pick = e;
+    if (this.groundedNow && pick[1] === "r_Gaming Room") return this.sulkInstead(hour);
     return pick;
+  }
+  /**
+   * Where a grounded child goes when the gaming room is off the table.  The
+   * two entries are built once and handed back the same way a schedule entry
+   * is — `update()` compares them by identity to decide whether to re-route.
+   */
+  sulkInstead(hour) {
+    if (!this._sulk) {
+      this._sulk = {
+        room: [
+          0,
+          `r_${this.spec.name}'s Room`,
+          "sulking about the console",
+          { off: [0, 1.2], pose: "sulk", tag: "sulk" }
+        ],
+        down: [
+          0,
+          "r_Family Room",
+          "in a mood about the console",
+          { spot: "familyRoom", pose: "sulk", tag: "sulk" }
+        ]
+      };
+    }
+    return hour >= 20 || hour < 8 ? this._sulk.room : this._sulk.down;
   }
   /** Where in the room the activity actually happens. */
   anchorFor(opts, node) {
     const s = opts.spot ? this.world.spots?.[opts.spot] : null;
-    const base = s ? s.pos : node?.pos;
+    const base = opts.at || (s ? s.pos : node?.pos);
     if (!base) return null;
     const p = base.clone();
     if (opts.off) {
@@ -37097,9 +37970,10 @@ var ACTIVITIES = [
     label: "Hang out at the picnic area",
     ask: "Sit outside for a bit?",
     who: ["kaelie", "james", "chloie"],
+    // the bench is 2.5 cm taller than a dining chair, so lift them onto it
     node: "out_picnic",
-    spot: "picnic",
-    opts: { pose: "sit", tag: "picnic" },
+    spot: "picnicSeatA",
+    opts: { pose: "dine", tag: "picnic", dy: 0.03 },
     meet: "Meet {name} at the picnic table",
     day: [8, 20],
     yes: { kaelie: "Grab the blanket, it gets cold up here.", james: "Only if we can eat outside.", chloie: "Can I bring my drawing things?" },
@@ -37212,8 +38086,17 @@ function offeredTo(game, member) {
 var Together = class {
   constructor(game) {
     this.game = game;
+    this.activities = ACTIVITIES;
     this.current = null;
     this._v = new Vector3();
+  }
+  /** What this person could be asked to do right now. */
+  offered(member) {
+    return offeredTo(this.game, member);
+  }
+  /** The place an activity would happen, for anyone who needs to know. */
+  placeOf(act, member) {
+    return this.game.world.spots[spotFor(act, member)] || this.game.world.navIndex?.get(nodeFor(act, member));
   }
   /** Where the pair are meeting, for the HUD tracker. */
   get where() {
@@ -38412,16 +39295,17 @@ var Game = class {
         opts.splice(1, 0, {
           label: `Wish ${member.name} happy birthday`,
           action: () => {
-            member.char.playGesture?.("blowout", 2.6);
+            member.char.setMood?.("happy");
+            member.char.playGesture?.("nod", 1.6);
             show(`${member.name} beams at you.`);
             this.throwParty(member.id);
           }
         });
       }
       if (kid) {
-        if (this.grounded[member.id] > this.day - 1) {
+        if (this.isGrounded(member.id)) {
           opts.push({
-            label: "Give the console back",
+            label: member.id === "james" ? "Give the console back" : "Give the tablet back",
             action: () => {
               this.ungroundChild(member);
               show(`${member.name}: \u201CThanks, Dad. Sorry about earlier.\u201D`);
@@ -38490,18 +39374,20 @@ var Game = class {
     for (const [id, when] of Object.entries(this.birthdays)) if (when === d2) return id;
     return null;
   }
-  /** Screen time is over: the console goes in the cupboard until tomorrow. */
+  /** Is this child's screen time taken away right now? */
+  isGrounded(id) {
+    return (this.grounded[id] || 0) > this.day - 1;
+  }
+  /**
+   * Screen time is over: their own screens go in the cupboard until tomorrow.
+   * The gaming rooms are the whole family's, so those stay where they are —
+   * what changes is that the child stops drifting off to them.
+   */
   applyGrounding() {
-    const on = [];
     for (const c of this.world.consoles || []) {
-      const who = c.room && c.room.includes("James") ? "james" : null;
-      const off = who ? (this.grounded[who] || 0) > this.day - 1 : false;
-      c.mesh.visible = !off;
-      if (off) on.push(who);
+      if (c.owner) c.mesh.visible = !this.isGrounded(c.owner);
     }
-    for (const f of this.family || []) {
-      f.groundedNow = (this.grounded[f.id] || 0) > this.day - 1;
-    }
+    for (const f of this.family || []) f.groundedNow = this.isGrounded(f.id);
   }
   groundChild(member, days = 1) {
     this.grounded[member.id] = this.day + days;
@@ -38516,31 +39402,62 @@ var Game = class {
     delete this.grounded[member.id];
     this.applyGrounding();
     member.char.setMood?.("happy");
-    this.ui.toast(`${member.name} gets their console back`, "All forgiven");
+    this.ui.toast(`${member.name} gets their screens back`, "All forgiven");
     this.addBond(member.id, 1);
+  }
+  /**
+   * Sit the family down at the table, one to a chair.  `head` gets the place
+   * nearest the cake — that is the birthday chair — and the rest fill in
+   * around, leaving the last laid place for you.
+   */
+  seatFamily(tag, doing, head = null) {
+    const set = this.world.diningSet;
+    const seats = set ? set.seats.slice(0, 4) : [];
+    if (set) set.group.visible = true;
+    if (!seats.length) {
+      for (const f of this.family) {
+        f.sendTo("r_Dining Hall", { spot: "dining", pose: "dine", tag }, doing);
+      }
+      return;
+    }
+    const cake2 = this.world.party?.cakeSpot;
+    const order = seats.slice();
+    if (head && cake2) {
+      order.sort((a, b) => a.pos.distanceToSquared(cake2) - b.pos.distanceToSquared(cake2));
+    }
+    const queue = head ? [this.family.find((f) => f.id === head), ...this.family.filter((f) => f.id !== head)] : this.family.slice();
+    queue.forEach((f, i) => {
+      const seat = order[i % order.length];
+      f?.sendTo(
+        "r_Dining Hall",
+        { spot: "dining", at: seat.pos, face: seat.rotY, pose: "dine", tag },
+        doing
+      );
+    });
   }
   /** Everyone to the dining table. */
   callFamilyToDinner() {
-    for (const f of this.family) {
-      f.sendTo("r_Dining Hall", { spot: "dining", pose: "dine", tag: "table" }, "sitting down to eat");
-    }
+    this.seatFamily("table", "sitting down to eat");
     this.dinnerUntil = this.time + 180;
     this.ui.toast("Dinner is ready", "Everyone to the dining hall");
-    this.world.diningSet?.group && (this.world.diningSet.group.visible = true);
   }
   /** Decorations up, everyone to the table, cake on it. */
   throwParty(forId) {
     const who = this.family.find((f) => f.id === forId);
     if (!who) return;
     this.world.party?.show?.(true);
-    for (const f of this.family) {
-      f.sendTo("r_Dining Hall", { spot: "dining", pose: "dine", tag: "party" }, `celebrating ${who.name}'s birthday`);
-    }
+    this.seatFamily("party", `celebrating ${who.name}'s birthday`, forId);
     this.partyFor = forId;
     this.partyUntil = this.time + 300;
     this.ui.toast(`Happy birthday, ${who.name}`, "Everyone is in the dining hall");
     this.addBond(forId, 3);
     this.audio.play("chime");
+    setTimeout(() => {
+      if (this.partyFor !== forId) return;
+      who.char.setMood?.("happy");
+      who.char.playGesture?.("blowout", 2.6);
+      for (const f of this.family) if (f !== who) f.char.playGesture?.("applaud", 2.6);
+    }, 9e3);
   }
   updateFamilyLife(dt) {
     if (this.sky.time < this._lastHour - 6) {
