@@ -417,9 +417,15 @@ export class UI {
   }
 
   // ── journal ─────────────────────────────────────────────────────────────
-  updateJournal(family, world, objectives, discovered) {
-    $('j-family').innerHTML = family.map((f) => `
-      <div class="jrow"><b>${f.name}</b> — ${f.spec.role}<small>${f.activity}</small></div>`).join('');
+  updateJournal(family, world, objectives, discovered, game = null) {
+    const day = game ? `<div class="jrow"><b>Day ${game.day}</b><small>${game.birthdayToday()
+      ? `It's ${family.find((f) => f.id === game.birthdayToday())?.name}'s birthday today` : 'Nothing special on'}</small></div>` : '';
+    $('j-family').innerHTML = day + family.map((f) => {
+      const b = game ? Math.min(5, Math.floor((game.bond?.[f.id] || 0) / 4)) : 0;
+      const hearts = game ? `<span class="bond">${'♥'.repeat(b)}${'♡'.repeat(5 - b)}</span>` : '';
+      const gr = game && game.grounded?.[f.id] > game.day - 1 ? ' · no screens today' : '';
+      return `<div class="jrow"><b>${f.name}</b> — ${f.spec.role} ${hearts}<small>${f.activity}${gr}</small></div>`;
+    }).join('');
     const byFloor = {};
     for (const name of discovered) {
       const r = world.rooms.find((x) => x.name === name);

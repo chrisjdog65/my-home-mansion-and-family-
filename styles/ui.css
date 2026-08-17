@@ -282,3 +282,6 @@ button.primary:active{transform:translateY(1px)}
   .keys{grid-template-columns:1fr}
   .journal-cols{grid-template-columns:1fr}
 }
+
+/* ── journal: how close you are to each of them ──────────────── */
+.bond{color:var(--gold); letter-spacing:1px; font-size:11px; float:right; opacity:.85}

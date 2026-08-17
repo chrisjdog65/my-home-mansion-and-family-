@@ -69,6 +69,43 @@ walk the house on a navigation graph — up and down the stairs, out to the pool
 into the gaming room. Walk up and press **E** to talk, ask what they're up to,
 or give them a hug. Their positions show on the minimap in their own colours.
 
+### Doing things together
+
+Talking to any of them offers **"Do something together…"**, and what's on the
+list depends on who you asked and what time it is. They'll break off whatever
+they were doing, walk there and meet you:
+
+| | |
+| --- | --- |
+| **Go for a drive** | They get in the passenger seat and ride along while you drive |
+| **Go bowling** | Down to the alley for a couple of games |
+| **Watch a film** | Both of you in the theater — start the projector |
+| **Go for a swim** | Daylight hours, out to the pool |
+| **Sit in the hot tub** | Kaelie, after four in the afternoon |
+| **Hang out at the picnic area** | Sit outside together while it's light |
+| **Cook something together** | In the kitchen — it ends with dinner on the table |
+| **Shoot some hoops** | First to five on the home court |
+| **Look for frogs** | Chloie, down at the pond |
+| **Help with homework** | After school, at their own desk |
+| **Come to the skate park** | James, showing you what he's got |
+
+### Being a parent
+
+The kids can be told **that's enough screens for today** — the console goes
+away until tomorrow, they sulk about it, and they stop drifting to the gaming
+room. Give it back whenever you like. You can also tell them you're proud of
+them, which lands rather better.
+
+### Birthdays
+
+Everyone has one, on their own day of the month. When it comes round you'll be
+told at midnight; find them, wish them happy birthday, and the dining hall gets
+bunting, balloons, a banner and a cake with candles while the whole family sits
+down together.
+
+The journal (**Tab**) tracks the day, whose birthday is coming, what each of
+them is doing right now, and how close you've got to each of them.
+
 ## Things to do
 
 Ten objectives track down the left of the screen: greet Kaelie, catch up with

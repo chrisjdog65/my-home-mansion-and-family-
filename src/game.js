@@ -25,6 +25,7 @@ import { Interaction } from './systems/interaction.js';
 import { Audio } from './systems/audio.js';
 
 import { createFamily, separateFamily } from './entities/family.js';
+import { Together, offeredTo } from './systems/together.js';
 import { UI } from './ui/ui.js';
 import { ScreenFx } from './systems/screenfx.js';
 
@@ -136,6 +137,8 @@ export class Game {
       this.engine.scene.add(this.engine.camera);
       this.flashlightOn = false;
       this.buildFocusRing();
+      this.together = new Together(this);
+      this.setupFamilyLife();
       this.setupObjectives();
       this.applyShadowQuality();
       this.mats.setQuality(this.settings.quality);
@@ -318,6 +321,7 @@ export class Game {
       const save = Object.assign(this.loadSave(), {
         done: this.objectives.filter((o) => o.done).map((o) => o.id),
         discovered: [...this.discovered],
+        bond: this.bond, day: this.day, grounded: this.grounded,
       }, extra);
       if (this.player && this.player.mode === 'walk' && !this.player.skating) {
         const p = this.player.feet(this._tmp);
@@ -443,7 +447,7 @@ export class Game {
     this.journalOpen = open;
     this.ui.showJournal(open);
     if (open) {
-      this.ui.updateJournal(this.family, this.world, this.objectives, this.discovered);
+      this.ui.updateJournal(this.family, this.world, this.objectives, this.discovered, this);
       this.input.exitLock();
     } else {
       this.input.requestLock();
@@ -464,24 +468,90 @@ export class Game {
       if (member.spec.lines.pool && member.char.pos.z > 16 && member.char.pos.z < 30) return 'pool';
       return 'idle';
     };
-    const show = (text) => {
-      this.ui.showDialogue(member, text, [
-        { label: 'Keep talking', action: () => { show(member.say(kindFor())); this.audio.play('ui'); } },
-        {
-          label: 'Give a hug',
-          action: () => {
-            member.char.playGesture('hug', 2.2);
-            show(`${member.name} hugs you back.`);
-            this.audio.play('ui');
-            if (member.id === 'kaelie') this.complete('greet', 'Good morning, Kaelie');
-            this.hugged = this.hugged || new Set();
-            this.hugged.add(member.id);
-            if (this.hugged.has('james') && this.hugged.has('chloie')) this.complete('kids');
-          },
+    const kid = member.id !== 'kaelie';
+    const hug = {
+      label: kid ? 'Give them a hug' : 'Give her a hug',
+      action: () => {
+        member.char.playGesture('hug', 2.2);
+        member.char.setMood?.('happy');
+        show(`${member.name} hugs you back.`);
+        this.audio.play('ui');
+        this.addBond(member.id, 1);
+        if (member.id === 'kaelie') this.complete('greet', 'Good morning, Kaelie');
+        this.hugged = this.hugged || new Set();
+        this.hugged.add(member.id);
+        if (this.hugged.has('james') && this.hugged.has('chloie')) this.complete('kids');
+      },
+    };
+
+    // ── "let's do something" — the list depends on who, and on the hour ──
+    const doSomething = () => {
+      const opts = offeredTo(this, member).map((a) => ({
+        label: a.label,
+        action: () => {
+          this.together.start(a, member);
+          show(a.yes?.[member.id] || 'Alright, come on then.');
+          this.audio.play('ui');
         },
+      }));
+      opts.push({ label: 'Never mind', action: () => show(member.say(kindFor())) });
+      this.ui.showDialogue(member, 'What did you have in mind?', opts);
+    };
+
+    const show = (text) => {
+      const opts = [
+        { label: 'Keep talking', action: () => { show(member.say(kindFor())); this.audio.play('ui'); } },
+        { label: 'Do something together…', action: doSomething },
+        hug,
         { label: 'What are you up to?', action: () => { show(`${member.name} is ${member.activity}.`); this.audio.play('ui'); } },
-        { label: 'See you later', action: () => this.endDialogue() },
-      ]);
+      ];
+
+      // birthdays
+      if (this.birthdayToday() === member.id) {
+        opts.splice(1, 0, {
+          label: `Wish ${member.name} happy birthday`,
+          action: () => {
+            member.char.playGesture?.('blowout', 2.6);
+            show(`${member.name} beams at you.`);
+            this.throwParty(member.id);
+          },
+        });
+      }
+
+      // the kids get the parenting options
+      if (kid) {
+        if (this.grounded[member.id] > this.day - 1) {
+          opts.push({
+            label: 'Give the console back',
+            action: () => { this.ungroundChild(member); show(`${member.name}: “Thanks, Dad. Sorry about earlier.”`); },
+          });
+        } else {
+          opts.push({
+            label: 'That\'s enough screens for today',
+            action: () => {
+              this.groundChild(member, 1);
+              show(`${member.name}: “That's SO unfair.”`);
+            },
+          });
+        }
+        opts.push({
+          label: 'Tell them you\'re proud of them',
+          action: () => {
+            member.char.setMood?.('happy');
+            member.char.playGesture?.('nod', 1.6);
+            this.addBond(member.id, 2);
+            show(member.id === 'james'
+              ? '“…thanks.” He tries very hard to look like that did not land.'
+              : 'Chloie goes bright red and hides her face in your side.');
+          },
+        });
+      }
+
+      if (this.together?.current?.member === member) {
+        opts.push({ label: 'Actually, let\'s do it later', action: () => { this.together.cancel(); this.endDialogue(); } });
+      }
+      opts.push({ label: 'See you later', action: () => this.endDialogue() });
+      this.ui.showDialogue(member, text, opts);
     };
     member.char.playGesture('wave', 1.4);
     show(member.say(kindFor()));
@@ -498,6 +568,116 @@ export class Game {
     this.player.dialogue = false;
     this.ui.hideDialogue();
     if (this.state === 'play') this.input.requestLock();
+  }
+
+  // ── family life ─────────────────────────────────────────────────────────
+  setupFamilyLife() {
+    const save = this.loadSave();
+    this.bond = Object.assign({ kaelie: 0, james: 0, chloie: 0 }, save.bond);
+    this.day = save.day ?? 1;
+    this.grounded = Object.assign({}, save.grounded);      // id → day it lifts
+    this._lastHour = this.sky.time;
+    // birthdays land on their own day of a thirty-day month
+    this.birthdays = { kaelie: 9, james: 17, chloie: 24 };
+    this.applyGrounding();
+  }
+
+  addBond(id, n = 1) {
+    this.bond[id] = Math.min(100, (this.bond[id] || 0) + n);
+    this.persist();
+  }
+
+  /** Whose birthday it is today, if anyone's. */
+  birthdayToday() {
+    const d = ((this.day - 1) % 30) + 1;
+    for (const [id, when] of Object.entries(this.birthdays)) if (when === d) return id;
+    return null;
+  }
+
+  /** Screen time is over: the console goes in the cupboard until tomorrow. */
+  applyGrounding() {
+    const on = [];
+    for (const c of this.world.consoles || []) {
+      const who = c.room && c.room.includes('James') ? 'james' : null;
+      const off = who ? (this.grounded[who] || 0) > this.day - 1 : false;
+      c.mesh.visible = !off;
+      if (off) on.push(who);
+    }
+    // a grounded child stops going to the gaming room
+    for (const f of this.family || []) {
+      f.groundedNow = (this.grounded[f.id] || 0) > this.day - 1;
+    }
+  }
+
+  groundChild(member, days = 1) {
+    this.grounded[member.id] = this.day + days;
+    this.applyGrounding();
+    member.char.setMood?.('sad');
+    member.char.playGesture?.('sulk', 2.4);
+    this.ui.toast(`${member.name} loses screen time`, `Back in ${days} day${days > 1 ? 's' : ''}`);
+    this.addBond(member.id, 0);
+    this.persist();
+  }
+
+  ungroundChild(member) {
+    delete this.grounded[member.id];
+    this.applyGrounding();
+    member.char.setMood?.('happy');
+    this.ui.toast(`${member.name} gets their console back`, 'All forgiven');
+    this.addBond(member.id, 1);
+  }
+
+  /** Everyone to the dining table. */
+  callFamilyToDinner() {
+    for (const f of this.family) {
+      f.sendTo('r_Dining Hall', { spot: 'dining', pose: 'dine', tag: 'table' }, 'sitting down to eat');
+    }
+    this.dinnerUntil = this.time + 180;
+    this.ui.toast('Dinner is ready', 'Everyone to the dining hall');
+    this.world.diningSet?.group && (this.world.diningSet.group.visible = true);
+  }
+
+  /** Decorations up, everyone to the table, cake on it. */
+  throwParty(forId) {
+    const who = this.family.find((f) => f.id === forId);
+    if (!who) return;
+    this.world.party?.show?.(true);
+    for (const f of this.family) {
+      f.sendTo('r_Dining Hall', { spot: 'dining', pose: 'dine', tag: 'party' }, `celebrating ${who.name}'s birthday`);
+    }
+    this.partyFor = forId;
+    this.partyUntil = this.time + 300;
+    this.ui.toast(`Happy birthday, ${who.name}`, 'Everyone is in the dining hall');
+    this.addBond(forId, 3);
+    this.audio.play('chime');
+  }
+
+  updateFamilyLife(dt) {
+    // a new day rolls over at midnight
+    if (this.sky.time < this._lastHour - 6) {
+      this.day++;
+      this.applyGrounding();
+      const b = this.birthdayToday();
+      if (b) {
+        const who = this.family.find((f) => f.id === b);
+        this.ui.toast(`It's ${who.name}'s birthday`, 'Find them and wish them happy birthday');
+      }
+      this.persist();
+    }
+    this._lastHour = this.sky.time;
+
+    this.together?.update(dt);
+
+    if (this.dinnerUntil && this.time > this.dinnerUntil) {
+      this.dinnerUntil = 0;
+      for (const f of this.family) f.clearPlan();
+    }
+    if (this.partyUntil && this.time > this.partyUntil) {
+      this.partyUntil = 0;
+      this.partyFor = null;
+      this.world.party?.show?.(false);
+      for (const f of this.family) f.clearPlan();
+    }
   }
 
   /** Turn in for the night: fade out, run the clock round to morning. */
@@ -737,6 +917,7 @@ export class Game {
     const hour = this.sky.time;
     for (const f of this.family) f.update(dt, this.time, hour, this.engine.camera.position);
     separateFamily(this.family);
+    this.updateFamilyLife(dt);
     this.sky.update(dt, P.position, this.settings.timeScale);
     this.lights.update(this.engine.camera.position, this.sky.night, dt);
     this.screenFx.update(dt, this.time);
@@ -760,7 +941,14 @@ export class Game {
       this.persist();
     }
     this.ui.setClock(this.sky.clockString(), place);
-    this.ui.setHeading(P.yaw, this.trackedObjective(), P.position);
+    // whatever you're doing with someone outranks the objective list
+    const doing = this.together?.current;
+    this.ui.setHeading(P.yaw, doing
+      ? { text: doing.phase === 'travel'
+            ? doing.act.meet.replace('{name}', doing.member.name)
+            : `${doing.act.label} — with ${doing.member.name}`,
+          hint: doing.phase === 'travel' ? 'Head over' : '', where: this.together.where }
+      : this.trackedObjective(), P.position);
     // 30 Hz is plenty for a minimap
     this._mapT = (this._mapT || 0) - dt;
     if (this._mapT <= 0) { this._mapT = 0.033; this.ui.drawMinimap(W, P, this.family); }

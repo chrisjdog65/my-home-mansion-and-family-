@@ -489,6 +489,8 @@ export class FamilyMember {
     this.opts = {};
     this.faceTarget = null;
     this.arrived = false;
+    this.plan = null;           // set while the player has invited them along
+    this.riding = null;         // vehicle they are a passenger in
 
     const home = world.navIndex?.get(spec.schedule[0][1]);
     this.char.pos.copy(home ? home.pos : V(0, 0, 0));
@@ -524,6 +526,32 @@ export class FamilyMember {
     return null;
   }
 
+  /**
+   * Take them off their own schedule and send them somewhere with you.
+   * The schedule keeps running underneath; `clearPlan()` hands them back to
+   * whatever they were supposed to be doing at this hour.
+   */
+  sendTo(nodeName, opts = {}, activity = null) {
+    this.plan = { node: nodeName, opts, activity, entry: [0, nodeName, activity, opts] };
+    this.entry = null;
+    this.arrived = false;
+    this.setDestination(nodeName, opts);
+  }
+
+  clearPlan() {
+    if (!this.plan) return;
+    this.plan = null;
+    this.entry = null;          // forces a fresh route to the current goal
+    this.arrived = false;
+  }
+
+  /** Standing on the spot they were sent to. */
+  get atPlan() {
+    if (!this.plan) return false;
+    if (this.path.length) return false;
+    return !this.target || this.char.pos.distanceTo(this.target) < 1.1;
+  }
+
   setDestination(nodeName, opts = {}) {
     const node = this.world.navIndex?.get(nodeName);
     if (!node) return;
@@ -542,12 +570,27 @@ export class FamilyMember {
   update(dt, t, hour, playerPos) {
     const c = this.char;
     this.hour = hour;
+
+    // riding along: glued to the passenger seat, everything else on hold
+    if (this.riding) {
+      const v = this.riding;
+      const s = Math.sin(v.heading), co = Math.cos(v.heading);
+      const off = v.passengerSeat || { x: 0.55, y: v.halfH ? v.halfH * 0.9 : 0.8, z: 0.1 };
+      c.pos.set(v.pos.x + off.x * co + off.z * s, v.pos.y + off.y, v.pos.z - off.x * s + off.z * co);
+      c.heading = v.heading;
+      c.speed = 0;
+      c.setPose('passenger');
+      c.lookAt = null;
+      c.update(dt, t, playerPos);
+      return;
+    }
     // A conversation parks them where they stand; when it ends they need a
     // fresh route, or they would walk to the goal in a straight line.
     const justFinishedTalking = !this.talking && this.wasTalking;
     this.wasTalking = this.talking;
 
-    const entry = this.goalForTime(hour);
+    // an invitation from the player outranks the day's schedule
+    const entry = this.plan ? this.plan.entry : this.goalForTime(hour);
     const opts = entry[3] || {};
 
     if (!this.talking) {
