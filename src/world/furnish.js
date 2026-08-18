@@ -599,6 +599,10 @@ function masterSuite(k, R, C) {
   const mi = wallSpot(k, R, 'e', R.z - inward * 2.0, 0.6, { inset: 0.16 });
   if (mi) tallMirror(k, mi[0], R.y, mi[1], { rotY: mi[2], lean: true, h: 1.8 });
   k.world.spot('masterSitting', R.x - R.w / 2 + 2.6, R.y, R.z + inward * 2.0);
+  // the foot of the bed — bedroom() stands it 1.45 m off the window wall, and
+  // a king is two metres long, so this is just clear of it, facing back
+  const wallZ = inward > 0 ? R.z - R.d / 2 : R.z + R.d / 2;
+  k.world.spot('masterBed', R.x, R.y, wallZ + inward * 3.05, { rotY: inward > 0 ? Math.PI : 0 });
 }
 
 // ── bathrooms ──────────────────────────────────────────────────────────────

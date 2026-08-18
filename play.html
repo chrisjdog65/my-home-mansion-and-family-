@@ -32375,6 +32375,8 @@ function masterSuite(k, R, C) {
   const mi = wallSpot(k, R, "e", R.z - inward * 2, 0.6, { inset: 0.16 });
   if (mi) tallMirror(k, mi[0], R.y, mi[1], { rotY: mi[2], lean: true, h: 1.8 });
   k.world.spot("masterSitting", R.x - R.w / 2 + 2.6, R.y, R.z + inward * 2);
+  const wallZ = inward > 0 ? R.z - R.d / 2 : R.z + R.d / 2;
+  k.world.spot("masterBed", R.x, R.y, wallZ + inward * 3.05, { rotY: inward > 0 ? Math.PI : 0 });
 }
 function bathroom(k, R, rng) {
   const M = k.M;
@@ -38049,6 +38051,25 @@ var ACTIVITIES = [
     bond: 2
   },
   {
+    // The one that isn't shown.  You both go up, the screen goes to black and
+    // the night passes — the game has nothing to depict and doesn't try.
+    id: "bed",
+    label: "Head up to bed",
+    ask: "Come to bed?",
+    who: ["kaelie"],
+    node: "r_Master Bedroom",
+    spot: "masterBed",
+    opts: { pose: "stand", tag: "bed" },
+    meet: "Go up to the master bedroom",
+    day: [20.5, 24],
+    yes: { kaelie: "I was about to say the same thing." },
+    private: true,
+    bond: 3,
+    endGesture: "nod",
+    doing: "turning in for the night with you",
+    done: { kaelie: "Morning, you. I actually slept properly for once." }
+  },
+  {
     id: "skate",
     label: "Come to the skate park",
     ask: "Show me what you've got.",
@@ -38142,6 +38163,10 @@ var Together = class {
       }
       if (playerClose && theirsClose) {
         c.phase = "doing";
+        if (c.act.private) {
+          g.nightTogether(m);
+          return;
+        }
         g.ui.toast(`${c.act.label}`, `With ${m.name}`);
         m.char.playGesture?.("nod", 1.2);
       }
@@ -38176,7 +38201,7 @@ var Together = class {
     const line = c.act.done && c.act.done[m.id] || "That was good.";
     g.ui.toast(`${m.name}: \u201C${line}\u201D`, c.act.label);
     g.addBond(m.id, c.act.bond || 1);
-    m.char.playGesture?.("applaud", 1.4);
+    m.char.playGesture?.(c.act.endGesture || "applaud", 1.4);
     if (c.act.dinner) g.callFamilyToDinner();
     if (c.act.needs === "theater") {
     }
@@ -39482,6 +39507,26 @@ var Game = class {
       this.world.party?.show?.(false);
       for (const f of this.family) f.clearPlan();
     }
+  }
+  /**
+   * The two of you turn in together.  This is the same fade the bed itself
+   * uses — the screen goes to black, the night passes, and you wake up next
+   * to her in the morning.  There is nothing to show and the game shows
+   * nothing.
+   */
+  nightTogether(member) {
+    if (this._sleeping) return;
+    this._sleeping = true;
+    this.ui.fade(1, 1100);
+    this.audio.play("chime");
+    setTimeout(() => {
+      this.sky.setTime(7.6);
+      this.sky.updateEnv(true);
+      this.ui.fade(0, 1600);
+      this._sleeping = false;
+      if (this.together?.current?.member === member) this.together.finish();
+      this.persist();
+    }, 1300);
   }
   /** Turn in for the night: fade out, run the clock round to morning. */
   sleepIn() {

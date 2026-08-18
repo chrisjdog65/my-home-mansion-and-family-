@@ -119,6 +119,18 @@ export const ACTIVITIES = [
     bond: 2,
   },
   {
+    // The one that isn't shown.  You both go up, the screen goes to black and
+    // the night passes — the game has nothing to depict and doesn't try.
+    id: 'bed', label: 'Head up to bed', ask: 'Come to bed?',
+    who: ['kaelie'],
+    node: 'r_Master Bedroom', spot: 'masterBed', opts: { pose: 'stand', tag: 'bed' },
+    meet: 'Go up to the master bedroom', day: [20.5, 24],
+    yes: { kaelie: 'I was about to say the same thing.' },
+    private: true, bond: 3, endGesture: 'nod',
+    doing: 'turning in for the night with you',
+    done: { kaelie: 'Morning, you. I actually slept properly for once.' },
+  },
+  {
     id: 'skate', label: 'Come to the skate park', ask: 'Show me what you\'ve got.',
     who: ['james'],
     node: 'out_skate', spot: 'skatepark', opts: { pose: 'stand', tag: 'skate' },
@@ -216,6 +228,8 @@ export class Together {
       }
       if (playerClose && theirsClose) {
         c.phase = 'doing';
+        // a private one is not played out: the screen fades, the night goes by
+        if (c.act.private) { g.nightTogether(m); return; }
         g.ui.toast(`${c.act.label}`, `With ${m.name}`);
         m.char.playGesture?.('nod', 1.2);
       }
@@ -252,7 +266,7 @@ export class Together {
     const line = (c.act.done && c.act.done[m.id]) || 'That was good.';
     g.ui.toast(`${m.name}: “${line}”`, c.act.label);
     g.addBond(m.id, c.act.bond || 1);
-    m.char.playGesture?.('applaud', 1.4);
+    m.char.playGesture?.(c.act.endGesture || 'applaud', 1.4);
     if (c.act.dinner) g.callFamilyToDinner();
     if (c.act.needs === 'theater') { /* the projector is the player's to start */ }
     m.riding = null;

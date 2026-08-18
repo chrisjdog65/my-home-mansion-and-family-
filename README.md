@@ -88,6 +88,7 @@ they were doing, walk there and meet you:
 | **Look for frogs** | Chloie, down at the pond |
 | **Help with homework** | After school, at their own desk |
 | **Come to the skate park** | James, showing you what he's got |
+| **Head up to bed** | Kaelie, late on — the screen fades and you wake up in the morning |
 
 ### Being a parent
 

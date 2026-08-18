@@ -718,6 +718,28 @@ export class Game {
     }
   }
 
+  /**
+   * The two of you turn in together.  This is the same fade the bed itself
+   * uses — the screen goes to black, the night passes, and you wake up next
+   * to her in the morning.  There is nothing to show and the game shows
+   * nothing.
+   */
+  nightTogether(member) {
+    if (this._sleeping) return;
+    this._sleeping = true;
+    this.ui.fade(1, 1100);
+    this.audio.play('chime');
+    setTimeout(() => {
+      this.sky.setTime(7.6);
+      this.sky.updateEnv(true);
+      this.ui.fade(0, 1600);
+      this._sleeping = false;
+      // finish() does the talking, adds the bond and puts her back on her day
+      if (this.together?.current?.member === member) this.together.finish();
+      this.persist();
+    }, 1300);
+  }
+
   /** Turn in for the night: fade out, run the clock round to morning. */
   sleepIn() {
     if (this._sleeping) return;
