@@ -955,7 +955,10 @@ export class Game {
         this.audio.play(p.tag === 'ball' ? 'roll' : 'swish');
         this.thrown = p;
       } else if (inp.hit('drop')) {
-        this.props.drop(null);
+        // it kept the sleep it was in when you picked it up, and a sleeping
+        // prop is skipped by the solver — let go without waking it and it
+        // hangs in the air at chest height
+        this.props.drop(null).sleeping = false;
         this.ui.setHeld(null);
       }
     }

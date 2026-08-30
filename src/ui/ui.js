@@ -281,8 +281,10 @@ export class UI {
       this.el.compass.parentElement.appendChild(this._pip);
     }
     if (!tracked || !tracked.where || !from) { this._pip.style.display = 'none'; this.setTrack(null); return; }
-    const bearing = Math.atan2(tracked.where.x - from.x, -(tracked.where.z - from.z));
-    let rel = ((bearing - yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+    // in the same sense as yaw — you face (−sin yaw, −cos yaw), so turning
+    // right counts yaw down and the pip has to walk left with the letters
+    const bearing = Math.atan2(-(tracked.where.x - from.x), -(tracked.where.z - from.z));
+    let rel = ((yaw - bearing + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
     // the strip runs 640 px to the turn, so the 140 px either side of the
     // needle are worth this much — anything else and the pip drifts off the
     // letters it is meant to sit over

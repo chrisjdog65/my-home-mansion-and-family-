@@ -76,6 +76,8 @@ export class Interaction {
         this.player.sit(i.seat);
         return 'click';
       case 'prop': {
+        // swapping hands drops what was in them, and that one has to fall
+        if (this.props.held) this.props.held.sleeping = false;
         this.props.grab(i.data);
         game.ui.setHeld(i.data.name);
         return 'pickup';

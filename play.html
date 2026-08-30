@@ -37827,6 +37827,7 @@ var Interaction = class {
         this.player.sit(i.seat);
         return "click";
       case "prop": {
+        if (this.props.held) this.props.held.sleeping = false;
         this.props.grab(i.data);
         game.ui.setHeld(i.data.name);
         return "pickup";
@@ -40484,7 +40485,7 @@ var Together = class {
     const here = spot ? spot.pos : m.char.pos;
     if (c.phase === "travel") {
       c.travelT += dt;
-      if (c.travelT > 90) {
+      if (c.travelT > 180) {
         this.cancel();
         return;
       }
@@ -40496,7 +40497,7 @@ var Together = class {
         g.ui.toast(`${m.name} gets in`, "Take her out \u2014 the drive loops past the gate");
         return;
       }
-      if (playerClose && theirsClose) {
+      if (playerClose && theirsClose && !c.act.ride) {
         c.phase = "doing";
         if (c.act.private) {
           g.nightTogether(m);
@@ -40861,8 +40862,8 @@ var UI = class {
       this.setTrack(null);
       return;
     }
-    const bearing = Math.atan2(tracked.where.x - from.x, -(tracked.where.z - from.z));
-    let rel = ((bearing - yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+    const bearing = Math.atan2(-(tracked.where.x - from.x), -(tracked.where.z - from.z));
+    let rel = ((yaw - bearing + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
     const half = 140 / (this._compassWidth / (Math.PI * 2));
     if (Math.abs(rel) > half) {
       this._pip.style.display = "none";
@@ -42065,7 +42066,7 @@ ${info.calls} calls \xB7 ${(info.triangles / 1e3).toFixed(0)}k tris`);
         this.audio.play(p.tag === "ball" ? "roll" : "swish");
         this.thrown = p;
       } else if (inp.hit("drop")) {
-        this.props.drop(null);
+        this.props.drop(null).sleeping = false;
         this.ui.setHeld(null);
       }
     }

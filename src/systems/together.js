@@ -217,9 +217,11 @@ export class Together {
 
     // ── getting there ──
     if (c.phase === 'travel') {
-      // an invitation nobody turns up for shouldn't hang about all day
+      // an invitation nobody turns up for shouldn't hang about all day.  Long
+      // enough that the walk in from the skate park to the basement, at her
+      // pace and yours, is never mistaken for one that has gone wrong
       c.travelT += dt;
-      if (c.travelT > 90) { this.cancel(); return; }
+      if (c.travelT > 180) { this.cancel(); return; }
       const playerClose = P.position.distanceTo(here) < 6.5;
       const theirsClose = m.atPlan || m.char.pos.distanceTo(here) < 2.5;
       // a drive starts the moment you are both in the car
@@ -229,7 +231,10 @@ export class Together {
         g.ui.toast(`${m.name} gets in`, 'Take her out — the drive loops past the gate');
         return;
       }
-      if (playerClose && theirsClose) {
+      // a ride only ever begins in the car, above: standing next to it is not
+      // starting it, and letting proximity flip the phase leaves this and the
+      // ride branch below trading it back and forth, a toast every frame
+      if (playerClose && theirsClose && !c.act.ride) {
         c.phase = 'doing';
         // a private one is not played out: the screen fades, the night goes by
         if (c.act.private) { g.nightTogether(m); return; }
