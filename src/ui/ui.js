@@ -270,7 +270,9 @@ export class UI {
     // off its three-repetition band after a few full turns
     const deg = ((((-yaw * 180) / Math.PI) % 360) + 360) % 360;
     const px = (deg / 360) * this._compassWidth;
-    this.el.compass.style.transform = `translateX(${-px - this._compassWidth + 140}px)`;
+    // the needle sits at 140, mid-strip; a mark's glyph is centred in its own
+    // 40 px cell, so line the cell's centre up rather than its left edge
+    this.el.compass.style.transform = `translateX(${-px - this._compassWidth + 120}px)`;
 
     // a pip on the compass for whatever you still have to do
     if (!this._pip) {
@@ -281,7 +283,10 @@ export class UI {
     if (!tracked || !tracked.where || !from) { this._pip.style.display = 'none'; this.setTrack(null); return; }
     const bearing = Math.atan2(tracked.where.x - from.x, -(tracked.where.z - from.z));
     let rel = ((bearing - yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
-    const half = 1.15;                      // how much of the strip is on screen
+    // the strip runs 640 px to the turn, so the 140 px either side of the
+    // needle are worth this much — anything else and the pip drifts off the
+    // letters it is meant to sit over
+    const half = 140 / (this._compassWidth / (Math.PI * 2));
     if (Math.abs(rel) > half) { this._pip.style.display = 'none'; }
     else {
       this._pip.style.display = 'block';
@@ -423,7 +428,9 @@ export class UI {
     $('j-family').innerHTML = day + family.map((f) => {
       const b = game ? Math.min(5, Math.floor((game.bond?.[f.id] || 0) / 4)) : 0;
       const hearts = game ? `<span class="bond">${'♥'.repeat(b)}${'♡'.repeat(5 - b)}</span>` : '';
-      const gr = game && game.grounded?.[f.id] > game.day - 1 ? ' · no screens today' : '';
+      // ask the game rather than re-deriving it, or the journal and the house
+      // disagree on the day the console comes back
+      const gr = game?.isGrounded(f.id) ? ' · no screens today' : '';
       return `<div class="jrow"><b>${f.name}</b> — ${f.spec.role} ${hearts}<small>${f.activity}${gr}</small></div>`;
     }).join('');
     const byFloor = {};

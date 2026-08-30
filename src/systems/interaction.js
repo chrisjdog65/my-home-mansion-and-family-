@@ -6,7 +6,7 @@ import * as THREE from 'three';
 
 const _toTarget = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
-const _eye = new THREE.Vector3();
+const _ground = new THREE.Vector3();
 const _ray = new THREE.Ray();
 
 export class Interaction {
@@ -81,6 +81,16 @@ export class Interaction {
         return 'pickup';
       }
       case 'vehicle': {
+        // both hands on the wheel: whatever you were carrying goes down on the
+        // ground beside the door — left in hand it hangs in the windscreen and
+        // buries the speedo under the held-item readout
+        if (this.props.held) {
+          const p = this.props.drop(null);
+          p.pos.copy(this.player.feet(_ground));
+          p.pos.y += p.radius;
+          p.sleeping = false;                       // let it settle where you put it
+          game.ui.setHeld(null);
+        }
         this.player.drive(i.data);
         game.audio.startEngine();
         return 'engine';

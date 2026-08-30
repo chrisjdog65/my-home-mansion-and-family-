@@ -211,8 +211,16 @@ export class Game {
         if (this.sky.sun.shadow.map) { this.sky.sun.shadow.map.dispose(); this.sky.sun.shadow.map = null; }
       }
     }
-    // the filter type is baked into every program — recompile or the toggle is inert
-    if (typeChanged) {
+    // Whether shadows are on at all is baked into every program just as the
+    // filter type is, and three marks nothing dirty when only that flips. Both
+    // Off and Soft resolve to PCFShadowMap, so watching the type alone misses
+    // that pair: going High → Off → Soft left the shadows compiled out and
+    // never coming back, and Soft → Off left the last shadow map bound, frozen
+    // in world space, with the player walking out from under it.
+    const enabled = s > 0;
+    const dirty = typeChanged || enabled !== this._shadowsWereEnabled;
+    this._shadowsWereEnabled = enabled;
+    if (dirty) {
       this.engine.scene.traverse((o) => {
         if (!o.isMesh) return;
         const mats = Array.isArray(o.material) ? o.material : [o.material];
@@ -269,30 +277,37 @@ export class Game {
         this.props.add({ mesh: g, radius: 0.122, mass: 0.7, bounce: 0.74, friction: 1.4, name: 'basketball', tag: 'basketball' });
       } else if (s.kind === 'skateboard') {
         const g = new THREE.Group();
+        // the collision sphere is centred on the group origin, so that origin
+        // has to ride a radius above the wheels or the board rests hovering
+        // that far off the concrete — everything visible hangs off `vis`,
+        // which carries the offset back down onto the floor
+        const vis = new THREE.Group();
+        vis.position.y = -0.2;
+        g.add(vis);
         const deck = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.03, 0.66), M.solid(0x2b3a4a, 0.6));
         deck.position.y = 0.085;
-        g.add(deck);
+        vis.add(deck);
         // kicked nose and tail
         for (const s2 of [-1, 1]) {
           const kick = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.028, 0.16), M.solid(0x2b3a4a, 0.6));
           kick.position.set(0, 0.105, s2 * 0.395);
           kick.rotation.x = s2 * -0.38;
-          g.add(kick);
+          vis.add(kick);
         }
         for (const oz of [-0.26, 0.26]) {
           // truck hanger between deck and wheels
           const truck = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.035, 0.07), M.solid(0x9aa0a6, 0.35, 0.8));
           truck.position.set(0, 0.055, oz);
-          g.add(truck);
+          vis.add(truck);
           for (const ox of [-0.1, 0.1]) {
             const w = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.03, 10), M.solid(0xe8e2d2, 0.5));
             w.rotation.z = Math.PI / 2;
             w.position.set(ox, 0.032, oz);
-            g.add(w);
+            vis.add(w);
           }
         }
         g.position.set(s.x, s.y, s.z);
-        this.props.add({ mesh: g, radius: 0.2, mass: 1.4, bounce: 0.25, friction: 1.2, name: 'skateboard', tag: 'skate' });
+        this.props.add({ mesh: g, vis, visDrop: -0.2, radius: 0.2, mass: 1.4, bounce: 0.25, friction: 1.2, name: 'skateboard', tag: 'skate' });
       }
     }
     // a few loose things around the house
@@ -334,6 +349,10 @@ export class Game {
   resetProgress() {
     try { localStorage.removeItem('home.save'); } catch (_) { /* ignore */ }
     this.discovered.clear();
+    // who you have already said hello to counts as progress too — left behind,
+    // the kids objective ticks itself off on the next conversation with anyone
+    this.metFamily?.clear();
+    this.hugged?.clear();
     for (const o of this.objectives) o.done = false;
     this.ui.setObjectives(this.objectives);
     this.ui.toast('Progress reset', 'Objectives and discovered rooms cleared');
@@ -376,6 +395,10 @@ export class Game {
     for (const name of save.discovered || []) this.discovered.add(name);
     if (save.at) this.player.teleport(save.at[0], save.at[1], save.at[2], save.at[3]);
     if (save.hour !== undefined) { this.sky.setTime(save.hour); this.sky.updateEnv(true); }
+    // the day rolls over on the clock running backwards, and the clock has only
+    // just been restored — without this, loading a save made after midnight
+    // reads as a new day every single time
+    this._lastHour = this.sky.time;
     this.ui.setObjectives(this.objectives);
     this.ui.onResetProgress = () => this.resetProgress();
     // keep the save fresh without hammering localStorage
@@ -595,9 +618,13 @@ export class Game {
     return null;
   }
 
-  /** Is this child's screen time taken away right now? */
+  /**
+   * Is this child's screen time taken away right now?  `grounded[id]` is the
+   * day it lifts, so one day's grounding covers the rest of today and gives
+   * the screens back at the next midnight — which is what the toast promises.
+   */
   isGrounded(id) {
-    return (this.grounded[id] || 0) > this.day - 1;
+    return (this.grounded[id] || 0) > this.day;
   }
 
   /**
@@ -933,6 +960,12 @@ export class Game {
       }
     }
     this.ui.setCrosshairWide(!!this.props.held && !P.skating);
+    // a prop whose visuals hang below its collider centre (the board) gives
+    // that offset up once it's yours: in hand, and under your feet, the origin
+    // is the thing being placed and there is no floor under it
+    for (const p of this.props.list) {
+      if (p.vis) p.vis.position.y = damp(p.vis.position.y, p === this.props.held ? 0 : p.visDrop, 18, dt);
+    }
 
     // ── props & scoring ──
     this.props.update(dt, (p, impact, normal) => {

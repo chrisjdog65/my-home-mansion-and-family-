@@ -886,13 +886,18 @@ function buildExteriorShell(world, F, matStone, matStucco, matWall, matGlass, ma
 
       const step = 4.4;
       for (let p = -half + step / 2; p < half; p += step) {
+        // 60 / 4.4 leaves the last bay 0.6 m from the corner: the pane fits the
+        // hole but its 2.4 m sill (WIN either side) would hang off the end
+        if (Math.abs(p) > half - WIN) continue;
         // front door
         if (s.key === 'n' && Math.abs(p) < 4.6 && F.key === 'ground') continue;
         // garage doors
         if (s.key === 'n' && F.key === 'ground' && p > 20 && p < 30) continue;
         if (s.key === 's' && (GLASS_SPANS[F.key] || []).some((g) => p > g.x0 - 2.2 && p < g.x1 + 2.2)) continue;
         let q = p;
-        if (!parts.every((b) => Math.abs(p - b) >= WIN)) {
+        // the full clearance test, not just the partitions — a bay clear of
+        // every wall can still sit square on a terrace door
+        if (!fits(p)) {
           // straddles a partition — slide to the nearest clear spot in the
           // same room, or leave the bay blank rather than bunch the grid
           let best = null;
@@ -1048,6 +1053,10 @@ function buildStairs(world) {
     for (let i = 0; i < N; i++) {
       const h = (i + 1) * rise;
       world.collider(W, h, run, 0, h / 2, z0 + (i + 0.5) * run);
+      // the balustrade below is B.box joinery, so it stops nothing — a single
+      // box can't follow the rake with only rotY, so the guard is stepped too.
+      // Stand it on the stringer line the balusters use, not on a literal.
+      for (const s of [-1, 1]) world.collider(0.12, 1.0, run, s * (W / 2 + 0.035), h + 0.5, z0 + (i + 0.5) * run);
     }
     stairFlight(B, { x: 0, y: 0, z: z0, steps: N, rise, run, w: W, tread, riser, stringer: tread, soffit, tile: 1.2 });
     const topZ = z0 + N * run;
@@ -1087,9 +1096,15 @@ function buildStairs(world) {
   // ── Service stair: second → third, in the south half of the gallery ─────
   {
     const rise = 4.2 / 24, run = 0.29, W = 1.5, zc = 1.1, x0 = 16.2, N = 24;
+    // the flight climbs 4.2 m, so a level railing() would just bury itself in
+    // the treads — the gallery-side guard is raked, stepped like the stack, and
+    // its balusters stand on the north stringer
+    const gz = zc - (W / 2 + 0.035);
     for (let i = 0; i < N; i++) {
       const h = rise * (i + 1);
       world.collider(run, h, W, x0 + (i + 0.5) * run, 4.2 + h / 2, zc);
+      world.collider(run, 1.0, 0.12, x0 + (i + 0.5) * run, 4.2 + h + 0.5, gz);
+      if (i % 2 === 0) B.box(0.05, 1.0, 0.05, post, x0 + (i + 0.5) * run, 4.2 + h + 0.5, gz, { tile: 0.4 });
     }
     stairFlight(B, {
       x: x0, y: 4.2, z: zc, rotY: Math.PI / 2, steps: N, rise, run, w: W,
@@ -1098,7 +1113,10 @@ function buildStairs(world) {
     for (let i = 2; i < N; i += 6) {
       stepLight(world, x0 + (i + 0.5) * run, 4.2 + (i + 1) * rise + 0.13, zc + W / 2 + 0.075, 0, 1);
     }
-    railing(world, post, rail, x0 + 3.5, 4.2, zc - 0.8, 7.2, 0, 1.0);
+    // the raked handrail — it comes up to meet the gallery rail on the next
+    // line, which stands on the same z and carries on east from the landing
+    B.box(Math.hypot(N * run, 4.2), 0.09, 0.09, rail, x0 + (N * run) / 2, 4.2 + 2.1 + 1.0, gz,
+      { rotZ: Math.atan2(4.2, N * run), tile: 0.5 });
     railing(world, post, rail, 19.4, 8.4, 0.3, 8.0, 0, 1.05);
     railing(world, post, rail, 15.35, 8.4, 1.1, 1.5, Math.PI / 2, 1.05);   // west edge of the well
     // The well takes the gallery ceiling — and with it the run of gallery
@@ -1352,7 +1370,10 @@ function buildFoyerFeature(world) {
 
   // front double doors, hinged at the outer edges
   for (const s of [-1, 1]) {
-    const leafW = 1.22, leafH = 2.6;
+    // the leaves have to fill the shell opening exactly — 2.6 m wide off hinges
+    // at ±1.28, and tall enough to reach its 2.7 m head — or daylight from the
+    // porch comes through the meeting stiles and over the heads
+    const leafW = 1.28, leafH = 2.67;
     const pivot = new THREE.Group();
     pivot.position.set(s * 1.28, 0, HOUSE.z0 + 0.02);
     const leaf = boxMesh(leafW, leafH, 0.07, M.get('walnut'), -s * leafW / 2, leafH / 2 + 0.03, 0, { tile: 1.2 });
@@ -1365,7 +1386,7 @@ function buildFoyerFeature(world) {
     world.doors.push(door);
     world.addBlocker({
       get active() { return door.t < 0.35; },
-      pos: new THREE.Vector3(s * 0.66, 1.3, HOUSE.z0 + 0.02),
+      pos: new THREE.Vector3(s * (1.28 - leafW / 2), 1.3, HOUSE.z0 + 0.02),
       halfW: leafW / 2, halfH: leafH / 2, halfD: 0.1, rotY: 0,
     });
     world.addInteract({

@@ -319,9 +319,6 @@ export class SkySystem {
     this.ambient = new THREE.AmbientLight(0xffffff, 0.12);
     scene.add(this.ambient);
 
-    this.moon = new THREE.DirectionalLight(0x9db8e0, 0.0);
-    scene.add(this.moon);
-
     this.pmrem = new THREE.PMREMGenerator(engine.renderer);
     this.pmrem.compileEquirectangularShader();
     this._envScene = new THREE.Scene();
@@ -331,6 +328,7 @@ export class SkySystem {
 
     this.atmosphere = new Atmosphere(scene);
     this._sunDir = new THREE.Vector3();
+    this.lightDir = new THREE.Vector3();   // where this.sun is actually shining from
 
     this.time = 8.5;          // hours
     this.dayLength = 24 * 60; // seconds of real time for a full day
@@ -357,13 +355,28 @@ export class SkySystem {
     const day = clamp(dir.y * 3.2, 0, 1);
     const dusk = clamp(1 - Math.abs(dir.y) * 6, 0, 1);
 
-    this.sun.position.copy(dir).multiplyScalar(160);
-    this.sun.intensity = 3.1 * day;
-    this.sun.color.setRGB(1, 0.94 - dusk * 0.18, 0.86 - dusk * 0.36);
-    this.sun.visible = day > 0.01;
-
-    this.moon.position.set(-dir.x * 160, Math.abs(dir.y) * 90 + 40, -dir.z * 160);
-    this.moon.intensity = 1.15 * (1 - day);
+    // One directional light does both shifts. The moon used to be a second one
+    // with no shadow map of its own, so after dark its 1.15 came down through
+    // the roof: the basement and every windowless room lit up flatter and
+    // brighter than they are at noon, and the torch had nothing left to find.
+    // A second shadow pass is not the answer either — the estate is redrawn
+    // whole for each one — so the sun simply becomes the moon at night.
+    const moonlit = clamp(1 - day / 0.06, 0, 1);
+    if (moonlit > 0) {
+      // aimed at the moon disc the atmosphere draws, so the shadows on the
+      // lawn agree with the thing in the sky
+      this.lightDir.set(-dir.x, Math.max(0.12, -dir.y + 0.55), -dir.z).normalize();
+      this.sun.color.setHex(0x9db8e0);
+      this.sun.intensity = 1.05 * moonlit;
+    } else {
+      this.lightDir.copy(dir);
+      this.sun.color.setRGB(1, 0.94 - dusk * 0.18, 0.86 - dusk * 0.36);
+      // the last degree above the horizon fades out, so the handover happens
+      // while both are black instead of swinging every shadow round in a frame
+      this.sun.intensity = 3.1 * day * clamp((day - 0.06) / 0.06, 0, 1);
+    }
+    this.sun.position.copy(this.lightDir).multiplyScalar(160);
+    this.sun.visible = this.sun.intensity > 0.005;
 
     // Sky fill is kept deliberately low: without it every interior washes out,
     // and the house is meant to be lit by its own fixtures.
@@ -420,7 +433,7 @@ export class SkySystem {
     this.atmosphere.update(dt);
     // keep the shadow frustum on the player
     this.sunTarget.position.copy(playerPos);
-    this.sun.position.copy(playerPos).addScaledVector(this.dir, 120);
+    this.sun.position.copy(playerPos).addScaledVector(this.lightDir, 120);
     this.sun.target.updateMatrixWorld();
   }
 

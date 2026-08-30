@@ -451,10 +451,12 @@ function makeVehicle(world, cfg, x, z, rotY) {
   // dark it is without reaching across into the sky system.
   v.dayRef = world.mats.emissiveDim(0xfff2d8, 1.4);
 
-  // solid to the player — an OBB blocker that tracks the body
+  // solid to the player — an OBB blocker that tracks the body.  `vehicle` is
+  // the back-reference the other car reads when it runs into this one.
   v.blocker = world.addBlocker({
     pos: V(x, v.halfH, z), rotY,
     halfW: v.halfW, halfH: v.halfH, halfD: v.halfD, active: true,
+    vehicle: v,
   });
 
   world.vehicles.push(v);
@@ -474,6 +476,55 @@ const _dir = new THREE.Vector3();       // where it is actually travelling
 const _side = new THREE.Vector3();
 const _euler = new THREE.Euler();
 const _quat = new THREE.Quaternion();
+
+const _axX = [0, 0, 0, 0], _axZ = [0, 0, 0, 0];   // the four candidate SAT axes
+const _bhit = { blocker: null, normal: new THREE.Vector3(), depth: 0 };
+
+/**
+ * Door leaves and parked cars are props, not octree geometry — they exist only
+ * as OBBs in `world.blockers` — so a sub-step that tested the octree alone drove
+ * straight through the closed garage door and through the other car.
+ *
+ * Separating-axis test in the XZ plane against the vehicle's own footprint
+ * rather than its body sphere: the sphere is deliberately fat across the car but
+ * much shorter than it (truck radius 1.9 vs halfD 3.2), so a sphere test would
+ * bury the bonnet a metre inside the door before it stopped.  Returns the
+ * shallowest overlap found, or null.
+ */
+function blockerHit(v, world) {
+  const axX = Math.cos(v.heading), axZ = -Math.sin(v.heading);   // body local +X
+  const azX = Math.sin(v.heading), azZ = Math.cos(v.heading);    // body local +Z
+  const top = v.pos.y + v.halfH * 2;
+  let best = null, bestDepth = Infinity, bestX = 0, bestZ = 0;
+  for (const b of world.blockers) {
+    if (b.active === false || b === v.blocker) continue;         // never our own body
+    if (b.pos.y - b.halfH > top || b.pos.y + b.halfH < v.pos.y) continue;
+    const bxX = Math.cos(b.rotY), bxZ = -Math.sin(b.rotY);
+    const bzX = Math.sin(b.rotY), bzZ = Math.cos(b.rotY);
+    _axX[0] = axX; _axZ[0] = axZ; _axX[1] = azX; _axZ[1] = azZ;
+    _axX[2] = bxX; _axZ[2] = bxZ; _axX[3] = bzX; _axZ[3] = bzZ;
+    const dx = b.pos.x - v.pos.x, dz = b.pos.z - v.pos.z;
+    let depth = Infinity, nx = 0, nz = 0;
+    for (let i = 0; i < 4; i++) {
+      const px = _axX[i], pz = _axZ[i];
+      const ra = Math.abs(axX * px + axZ * pz) * v.halfW + Math.abs(azX * px + azZ * pz) * v.halfD;
+      const rb = Math.abs(bxX * px + bxZ * pz) * b.halfW + Math.abs(bzX * px + bzZ * pz) * b.halfD;
+      const along = dx * px + dz * pz;
+      const overlap = ra + rb - Math.abs(along);
+      if (overlap <= 0) { depth = 0; break; }                    // daylight on this axis
+      if (overlap < depth) {
+        depth = overlap;
+        nx = along > 0 ? -px : px; nz = along > 0 ? -pz : pz;    // push us off it
+      }
+    }
+    if (depth > 0 && depth < bestDepth) { bestDepth = depth; best = b; bestX = nx; bestZ = nz; }
+  }
+  if (!best) return null;
+  _bhit.blocker = best;
+  _bhit.normal.set(bestX, 0, bestZ);
+  _bhit.depth = bestDepth;
+  return _bhit;
+}
 
 /** 0 at noon, 1 in the dead of night. */
 function darkness(v) {
@@ -523,7 +574,8 @@ export function updateVehicle(v, world, dt, ctrl) {
   _side.set(Math.cos(v.heading), 0, -Math.sin(v.heading));   // body local +X
 
   // move in sub-steps so a flat-out Lambo can't skip through a wall between
-  // frames, testing the body sphere as it goes
+  // frames, testing the body sphere against the world and the footprint against
+  // door leaves and the other car as it goes
   let remaining = v.speed * dt;
   const stepLen = Math.max(0.5, v.radius * 0.7) * Math.sign(remaining || 1);
   while (remaining !== 0) {
@@ -536,6 +588,21 @@ export function updateVehicle(v, world, dt, ctrl) {
     if (c && Math.abs(c.normal.y) < 0.6) {
       v.pos.addScaledVector(c.normal, c.depth);
       const into = _dir.dot(c.normal) * Math.sign(v.speed || 1);
+      v.speed *= into < -0.2 ? 0.2 : Math.pow(0.9, dt * 60);
+      v.slip = damp(v.slip, 0, 20, dt);
+      break;
+    }
+    const bh = blockerHit(v, world);
+    if (bh) {
+      v.pos.addScaledVector(bh.normal, bh.depth);
+      const into = _dir.dot(bh.normal) * Math.sign(v.speed || 1);
+      // a parked car is not a wall: shove it along its own axis, split by mass,
+      // or ramming the Lambo with the truck reads as hitting a bollard
+      const other = bh.blocker.vehicle;
+      if (other && into < -0.2) {
+        const along = -(bh.normal.x * Math.sin(other.heading) + bh.normal.z * Math.cos(other.heading));
+        other.speed += Math.abs(v.speed) * (-into) * along * (v.mass / (v.mass + other.mass));
+      }
       v.speed *= into < -0.2 ? 0.2 : Math.pow(0.9, dt * 60);
       v.slip = damp(v.slip, 0, 20, dt);
       break;

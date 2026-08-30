@@ -82,6 +82,16 @@ export function plantGrass(world, count = 7000) {
   transformed.x += gBend * (sin(uTime * 1.8 + gPhase) * 0.055 + sin(uTime * 3.9 + gPhase * 1.7) * 0.022);
   transformed.z += gBend * cos(uTime * 1.5 + gPhase) * 0.03;
 #endif`);
+    // A tuft is two upright quads, so every one of its normals lies flat in the
+    // horizontal plane and the sun — 58° up at noon — only grazes them. Left
+    // alone the tufts shade at roughly a third of the lawn they stand in and
+    // read as dirt speckles on it. Leaning them half-way to world up sits them
+    // in the grass while keeping some blade-to-blade variation; all the way and
+    // they shade identically to the ground and there is no point drawing them.
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
+// after the include, so DOUBLE_SIDED has already flipped the back faces
+normal = normalize(mix(normal, (viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz, 0.55));`);
   };
 
   const quad = new THREE.PlaneGeometry(0.52, 0.44, 1, 2);
@@ -116,7 +126,13 @@ export function plantGrass(world, count = 7000) {
     scl.set(s, s * rng.range(0.8, 1.25), s);
     m4.compose(p, q, scl);
     mesh.setMatrixAt(placed, m4);
-    tint.setHSL(0.26 + rng.range(-0.02, 0.03), rng.range(0.38, 0.52), rng.range(0.28, 0.4));
+    // This multiplies the blade texture, which is already the grass colour, so
+    // what belongs here is a jitter about white — not a tint. It used to be a
+    // 0.3-lightness green, and setHSL writes straight into the linear working
+    // space, so that landed as a 0.3× multiply: every tuft came out at a third
+    // of the lawn's albedo and the 7000 of them read as dirt on it.
+    const v = rng.range(0.86, 1.12);
+    tint.setRGB(v * 0.97, v, v * 0.9);
     mesh.setColorAt(placed, tint);
     placed++;
   }

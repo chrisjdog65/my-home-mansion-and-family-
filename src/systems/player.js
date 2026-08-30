@@ -41,6 +41,7 @@ export class Player {
     this.mode = 'walk';       // walk | sit | drive
     this.seat = null;
     this.vehicle = null;
+    this._lastHeading = 0;    // vehicle heading the view was last aligned to
     this.landImpact = 0;
     this.fallSpeed = 0;
     this.coyote = 0;
@@ -385,9 +386,16 @@ export class Player {
     this.onGround = grounded;
   }
 
-  /** Capsule vs. rotated box (used for door leaves and vehicle bodies). */
+  /**
+   * Capsule vs. rotated box (used for door leaves and vehicle bodies).
+   * `rotY` means what it means everywhere else in the project — a three.js
+   * Object3D yaw, whose local +X points along (cos rotY, -sin rotY).  Getting
+   * that handedness backwards mirrors the box about the world axes, which is
+   * invisible on a door (every leaf sits at rotY 0 or ±π/2, where the mirror
+   * lands on the same footprint) but wrong on a car parked at any other angle.
+   */
   resolveBox(b) {
-    const c = Math.cos(-b.rotY), s = Math.sin(-b.rotY);
+    const c = Math.cos(b.rotY), s = Math.sin(b.rotY);
     for (const p of [this.capsule.start, this.capsule.end]) {
       const dx = p.x - b.pos.x, dz = p.z - b.pos.z;
       const lx = dx * c - dz * s;
@@ -411,10 +419,9 @@ export class Player {
         else if (ez < ey) { nx = 0; ny = 0; nz = Math.sign(lz) || 1; depth = ez + this.capsule.radius; }
         else { nx = 0; ny = Math.sign(ly) || 1; nz = 0; depth = ey + this.capsule.radius; }
       }
-      // back to world space
-      const wc = Math.cos(b.rotY), ws = Math.sin(b.rotY);
-      const wx = nx * wc - nz * ws;
-      const wz = nx * ws + nz * wc;
+      // back to world space — the inverse of the rotation used above
+      const wx = nx * c + nz * s;
+      const wz = -nx * s + nz * c;
       this._v.set(wx * depth, ny * depth, wz * depth);
       this.capsule.translate(this._v);
       const vn = this.velocity.x * wx + this.velocity.y * ny + this.velocity.z * wz;
@@ -466,6 +473,7 @@ export class Player {
     this.mode = 'drive';
     v.occupied = true;
     this.yaw = v.heading + Math.PI;
+    this._lastHeading = v.heading;
     this.velocity.set(0, 0, 0);
   }
   exitVehicle() {
@@ -484,6 +492,11 @@ export class Player {
     this.capsule.start.copy(seat);
     this.capsule.end.copy(seat).setY(seat.y + 0.4);
     this.bobAmount = 0;
+    // the head has to turn with the car: the camera's yaw is a world angle, so
+    // carry the frame's steering into it or one corner leaves you driving
+    // forwards while looking out of the passenger window
+    this.yaw += v.heading - this._lastHeading;
+    this._lastHeading = v.heading;
   }
 
   vehicleControls() {

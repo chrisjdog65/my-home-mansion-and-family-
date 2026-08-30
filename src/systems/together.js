@@ -194,7 +194,7 @@ export class Together {
     const opts = { ...act.opts, spot: spotFor(act, member) };
     member.sendTo(node, opts, act.doing);
     member.char.setMood?.('happy');
-    this.current = { act, member, phase: 'travel', timer: 0, ran: 0 };
+    this.current = { act, member, phase: 'travel', timer: 0, ran: 0, travelT: 0 };
     this.game.ui.toast(`${member.name} is coming`, act.meet.replace('{name}', member.name));
   }
 
@@ -217,6 +217,9 @@ export class Together {
 
     // ── getting there ──
     if (c.phase === 'travel') {
+      // an invitation nobody turns up for shouldn't hang about all day
+      c.travelT += dt;
+      if (c.travelT > 90) { this.cancel(); return; }
       const playerClose = P.position.distanceTo(here) < 6.5;
       const theirsClose = m.atPlan || m.char.pos.distanceTo(here) < 2.5;
       // a drive starts the moment you are both in the car
@@ -249,7 +252,13 @@ export class Together {
       if (P.mode !== 'drive') {
         m.riding = null;
         if (c.ran > 12) this.finish();
-        else { c.phase = 'travel'; }
+        else {
+          // stepping out early leaves her sitting at seat height with no path
+          // left to walk — re-issue the plan so she climbs back down to the drive
+          m.sendTo(nodeFor(c.act, m), { ...c.act.opts, spot: spotFor(c.act, m) }, c.act.doing);
+          c.phase = 'travel';
+          c.travelT = 0;
+        }
       }
       return;
     }

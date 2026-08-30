@@ -61,6 +61,14 @@ const GradeShader = {
       vec2 d = vUv - 0.5;
       c *= 1.0 - vignette * dot(d, d) * 1.6;
 
+      // Ordered dither before the 8-bit blit. The sky is one long smooth ramp
+      // and the grade stretches it — 1.07 contrast, then corners multiplied by
+      // 0.744 — so it arrives with about fifty levels to spend on it and bands
+      // every twenty pixels. Keyed off gl_FragCoord so the pattern is pinned to
+      // the screen: a hash of uv would crawl and shimmer as the camera turns.
+      float b = fract(dot(floor(gl_FragCoord.xy), vec2(0.0625, 0.140625)) * 4.0);
+      c += (b - 0.5) / 255.0;
+
       gl_FragColor = vec4(max(c, 0.0), 1.0);
     }`,
 };
@@ -80,6 +88,7 @@ export class Engine {
     this.renderer.toneMappingExposure = 1.0;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this._shadowsWereEnabled = true;
     this.renderer.info.autoReset = false;   // reset once per frame, not per pass
 
     this.scene = new THREE.Scene();
@@ -134,7 +143,21 @@ export class Engine {
     this.camera.updateProjectionMatrix();
     this.bloom.enabled = !!s.bloom;
     this.smaa.enabled = s.quality > 0;
-    this.renderer.shadowMap.enabled = s.shadows > 0;
+    // shadowMap.enabled belongs to Game.applyShadowQuality — one owner for the
+    // flag, or the two paths set it out of step. What has to happen here is the
+    // recompile: the flag is baked into every program and three marks nothing
+    // dirty when it flips (shadowMap.needsUpdate only re-renders the maps), so
+    // Off → Soft used to leave USE_SHADOWMAP compiled out and the shadows never
+    // came back, while On → Off left the last map bound and froze them in place.
+    const shadows = s.shadows > 0;
+    if (shadows !== this._shadowsWereEnabled) {
+      this._shadowsWereEnabled = shadows;
+      this.scene.traverse((o) => {
+        if (!o.isMesh) return;
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        for (const m of mats) m.needsUpdate = true;
+      });
+    }
     this.renderer.shadowMap.needsUpdate = true;
     this.grade.uniforms.sharpness.value = s.sharpness ?? 0.35;
     this.resize();

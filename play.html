@@ -24896,6 +24896,14 @@ var GradeShader = {
       vec2 d = vUv - 0.5;
       c *= 1.0 - vignette * dot(d, d) * 1.6;
 
+      // Ordered dither before the 8-bit blit. The sky is one long smooth ramp
+      // and the grade stretches it \u2014 1.07 contrast, then corners multiplied by
+      // 0.744 \u2014 so it arrives with about fifty levels to spend on it and bands
+      // every twenty pixels. Keyed off gl_FragCoord so the pattern is pinned to
+      // the screen: a hash of uv would crawl and shimmer as the camera turns.
+      float b = fract(dot(floor(gl_FragCoord.xy), vec2(0.0625, 0.140625)) * 4.0);
+      c += (b - 0.5) / 255.0;
+
       gl_FragColor = vec4(max(c, 0.0), 1.0);
     }`
   )
@@ -24918,6 +24926,7 @@ var Engine = class {
     this.renderer.toneMappingExposure = 1;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = PCFSoftShadowMap;
+    this._shadowsWereEnabled = true;
     this.renderer.info.autoReset = false;
     this.scene = new Scene();
     this.camera = new PerspectiveCamera(settings.fov, 1, 0.08, 2600);
@@ -24958,7 +24967,15 @@ var Engine = class {
     this.camera.updateProjectionMatrix();
     this.bloom.enabled = !!s.bloom;
     this.smaa.enabled = s.quality > 0;
-    this.renderer.shadowMap.enabled = s.shadows > 0;
+    const shadows = s.shadows > 0;
+    if (shadows !== this._shadowsWereEnabled) {
+      this._shadowsWereEnabled = shadows;
+      this.scene.traverse((o) => {
+        if (!o.isMesh) return;
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        for (const m of mats) m.needsUpdate = true;
+      });
+    }
     this.renderer.shadowMap.needsUpdate = true;
     this.grade.uniforms.sharpness.value = s.sharpness ?? 0.35;
     this.resize();
@@ -27909,11 +27926,12 @@ function buildExteriorShell(world, F, matStone, matStucco, matWall, matGlass, ma
       const fits = (q) => parts.every((b) => Math.abs(q - b) >= WIN - EPS2) && openings.every((o) => Math.abs(q - o.x) >= 1.05 + o.w / 2 + 0.25);
       const step2 = 4.4;
       for (let p = -half + step2 / 2; p < half; p += step2) {
+        if (Math.abs(p) > half - WIN) continue;
         if (s.key === "n" && Math.abs(p) < 4.6 && F.key === "ground") continue;
         if (s.key === "n" && F.key === "ground" && p > 20 && p < 30) continue;
         if (s.key === "s" && (GLASS_SPANS[F.key] || []).some((g) => p > g.x0 - 2.2 && p < g.x1 + 2.2)) continue;
         let q = p;
-        if (!parts.every((b) => Math.abs(p - b) >= WIN)) {
+        if (!fits(p)) {
           let best = null;
           for (const [a, b] of segs) {
             if (b - a < WIN * 2) continue;
@@ -28087,6 +28105,7 @@ function buildStairs(world) {
     for (let i = 0; i < N3; i++) {
       const h = (i + 1) * rise;
       world.collider(W, h, run, 0, h / 2, z0 + (i + 0.5) * run);
+      for (const s of [-1, 1]) world.collider(0.12, 1, run, s * (W / 2 + 0.035), h + 0.5, z0 + (i + 0.5) * run);
     }
     stairFlight(B2, { x: 0, y: 0, z: z0, steps: N3, rise, run, w: W, tread, riser, stringer: tread, soffit, tile: 1.2 });
     const topZ = z0 + N3 * run;
@@ -28117,9 +28136,12 @@ function buildStairs(world) {
   }
   {
     const rise = 4.2 / 24, run = 0.29, W = 1.5, zc = 1.1, x0 = 16.2, N3 = 24;
+    const gz = zc - (W / 2 + 0.035);
     for (let i = 0; i < N3; i++) {
       const h = rise * (i + 1);
       world.collider(run, h, W, x0 + (i + 0.5) * run, 4.2 + h / 2, zc);
+      world.collider(run, 1, 0.12, x0 + (i + 0.5) * run, 4.2 + h + 0.5, gz);
+      if (i % 2 === 0) B2.box(0.05, 1, 0.05, post, x0 + (i + 0.5) * run, 4.2 + h + 0.5, gz, { tile: 0.4 });
     }
     stairFlight(B2, {
       x: x0,
@@ -28139,7 +28161,16 @@ function buildStairs(world) {
     for (let i = 2; i < N3; i += 6) {
       stepLight(world, x0 + (i + 0.5) * run, 4.2 + (i + 1) * rise + 0.13, zc + W / 2 + 0.075, 0, 1);
     }
-    railing(world, post, rail, x0 + 3.5, 4.2, zc - 0.8, 7.2, 0, 1);
+    B2.box(
+      Math.hypot(N3 * run, 4.2),
+      0.09,
+      0.09,
+      rail,
+      x0 + N3 * run / 2,
+      4.2 + 2.1 + 1,
+      gz,
+      { rotZ: Math.atan2(4.2, N3 * run), tile: 0.5 }
+    );
     railing(world, post, rail, 19.4, 8.4, 0.3, 8, 0, 1.05);
     railing(world, post, rail, 15.35, 8.4, 1.1, 1.5, Math.PI / 2, 1.05);
     world.addLight({
@@ -28374,7 +28405,7 @@ function buildFoyerFeature(world) {
   world.spot("frontDoor", 0, 0, -12);
   world.spot("foyer", 0, 0, -7);
   for (const s of [-1, 1]) {
-    const leafW = 1.22, leafH = 2.6;
+    const leafW = 1.28, leafH = 2.67;
     const pivot = new Group();
     pivot.position.set(s * 1.28, 0, HOUSE.z0 + 0.02);
     const leaf2 = boxMesh(leafW, leafH, 0.07, M.get("walnut"), -s * leafW / 2, leafH / 2 + 0.03, 0, { tile: 1.2 });
@@ -28389,7 +28420,7 @@ function buildFoyerFeature(world) {
       get active() {
         return door.t < 0.35;
       },
-      pos: new Vector3(s * 0.66, 1.3, HOUSE.z0 + 0.02),
+      pos: new Vector3(s * (1.28 - leafW / 2), 1.3, HOUSE.z0 + 0.02),
       halfW: leafW / 2,
       halfH: leafH / 2,
       halfD: 0.1,
@@ -31498,6 +31529,9 @@ function plantGrass(world, count = 7e3) {
   transformed.x += gBend * (sin(uTime * 1.8 + gPhase) * 0.055 + sin(uTime * 3.9 + gPhase * 1.7) * 0.022);
   transformed.z += gBend * cos(uTime * 1.5 + gPhase) * 0.03;
 #endif`);
+    shader.fragmentShader = shader.fragmentShader.replace("#include <normal_fragment_begin>", `#include <normal_fragment_begin>
+// after the include, so DOUBLE_SIDED has already flipped the back faces
+normal = normalize(mix(normal, (viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz, 0.55));`);
   };
   const quad = new PlaneGeometry(0.52, 0.44, 1, 2);
   quad.translate(0, 0.22, 0);
@@ -31528,7 +31562,8 @@ function plantGrass(world, count = 7e3) {
     scl.set(s, s * rng.range(0.8, 1.25), s);
     m4.compose(p, q, scl);
     mesh2.setMatrixAt(placed, m4);
-    tint2.setHSL(0.26 + rng.range(-0.02, 0.03), rng.range(0.38, 0.52), rng.range(0.28, 0.4));
+    const v = rng.range(0.86, 1.12);
+    tint2.setRGB(v * 0.97, v, v * 0.9);
     mesh2.setColorAt(placed, tint2);
     placed++;
   }
@@ -31798,8 +31833,6 @@ var SkySystem = class {
     scene.add(this.hemi);
     this.ambient = new AmbientLight(16777215, 0.12);
     scene.add(this.ambient);
-    this.moon = new DirectionalLight(10336480, 0);
-    scene.add(this.moon);
     this.pmrem = new PMREMGenerator(engine.renderer);
     this.pmrem.compileEquirectangularShader();
     this._envScene = new Scene();
@@ -31808,6 +31841,7 @@ var SkySystem = class {
     this._envScene.add(this._envSky);
     this.atmosphere = new Atmosphere(scene);
     this._sunDir = new Vector3();
+    this.lightDir = new Vector3();
     this.time = 8.5;
     this.dayLength = 24 * 60;
     this._lastEnv = -99;
@@ -31828,12 +31862,18 @@ var SkySystem = class {
     u.sunPosition.value.copy(dir);
     const day = clamp2(dir.y * 3.2, 0, 1);
     const dusk = clamp2(1 - Math.abs(dir.y) * 6, 0, 1);
-    this.sun.position.copy(dir).multiplyScalar(160);
-    this.sun.intensity = 3.1 * day;
-    this.sun.color.setRGB(1, 0.94 - dusk * 0.18, 0.86 - dusk * 0.36);
-    this.sun.visible = day > 0.01;
-    this.moon.position.set(-dir.x * 160, Math.abs(dir.y) * 90 + 40, -dir.z * 160);
-    this.moon.intensity = 1.15 * (1 - day);
+    const moonlit = clamp2(1 - day / 0.06, 0, 1);
+    if (moonlit > 0) {
+      this.lightDir.set(-dir.x, Math.max(0.12, -dir.y + 0.55), -dir.z).normalize();
+      this.sun.color.setHex(10336480);
+      this.sun.intensity = 1.05 * moonlit;
+    } else {
+      this.lightDir.copy(dir);
+      this.sun.color.setRGB(1, 0.94 - dusk * 0.18, 0.86 - dusk * 0.36);
+      this.sun.intensity = 3.1 * day * clamp2((day - 0.06) / 0.06, 0, 1);
+    }
+    this.sun.position.copy(this.lightDir).multiplyScalar(160);
+    this.sun.visible = this.sun.intensity > 5e-3;
     this.hemi.intensity = 0.28 + 0.3 * day;
     this.hemi.color.setHex(day > 0.3 ? 11060968 : 2898518);
     this.hemi.groundColor.setHex(4866616);
@@ -31876,7 +31916,7 @@ var SkySystem = class {
     this.updateEnv();
     this.atmosphere.update(dt);
     this.sunTarget.position.copy(playerPos);
-    this.sun.position.copy(playerPos).addScaledVector(this.dir, 120);
+    this.sun.position.copy(playerPos).addScaledVector(this.lightDir, 120);
     this.sun.target.updateMatrixWorld();
   }
   clockString() {
@@ -36312,7 +36352,8 @@ function makeVehicle(world, cfg, x, z, rotY) {
     halfW: v.halfW,
     halfH: v.halfH,
     halfD: v.halfD,
-    active: true
+    active: true,
+    vehicle: v
   });
   world.vehicles.push(v);
   world.addInteract({
@@ -36333,6 +36374,58 @@ var _dir = new Vector3();
 var _side = new Vector3();
 var _euler = new Euler();
 var _quat = new Quaternion();
+var _axX = [0, 0, 0, 0];
+var _axZ = [0, 0, 0, 0];
+var _bhit = { blocker: null, normal: new Vector3(), depth: 0 };
+function blockerHit(v, world) {
+  const axX = Math.cos(v.heading), axZ = -Math.sin(v.heading);
+  const azX = Math.sin(v.heading), azZ = Math.cos(v.heading);
+  const top = v.pos.y + v.halfH * 2;
+  let best = null, bestDepth = Infinity, bestX = 0, bestZ = 0;
+  for (const b of world.blockers) {
+    if (b.active === false || b === v.blocker) continue;
+    if (b.pos.y - b.halfH > top || b.pos.y + b.halfH < v.pos.y) continue;
+    const bxX = Math.cos(b.rotY), bxZ = -Math.sin(b.rotY);
+    const bzX = Math.sin(b.rotY), bzZ = Math.cos(b.rotY);
+    _axX[0] = axX;
+    _axZ[0] = axZ;
+    _axX[1] = azX;
+    _axZ[1] = azZ;
+    _axX[2] = bxX;
+    _axZ[2] = bxZ;
+    _axX[3] = bzX;
+    _axZ[3] = bzZ;
+    const dx = b.pos.x - v.pos.x, dz = b.pos.z - v.pos.z;
+    let depth = Infinity, nx = 0, nz2 = 0;
+    for (let i = 0; i < 4; i++) {
+      const px3 = _axX[i], pz2 = _axZ[i];
+      const ra = Math.abs(axX * px3 + axZ * pz2) * v.halfW + Math.abs(azX * px3 + azZ * pz2) * v.halfD;
+      const rb = Math.abs(bxX * px3 + bxZ * pz2) * b.halfW + Math.abs(bzX * px3 + bzZ * pz2) * b.halfD;
+      const along = dx * px3 + dz * pz2;
+      const overlap = ra + rb - Math.abs(along);
+      if (overlap <= 0) {
+        depth = 0;
+        break;
+      }
+      if (overlap < depth) {
+        depth = overlap;
+        nx = along > 0 ? -px3 : px3;
+        nz2 = along > 0 ? -pz2 : pz2;
+      }
+    }
+    if (depth > 0 && depth < bestDepth) {
+      bestDepth = depth;
+      best = b;
+      bestX = nx;
+      bestZ = nz2;
+    }
+  }
+  if (!best) return null;
+  _bhit.blocker = best;
+  _bhit.normal.set(bestX, 0, bestZ);
+  _bhit.depth = bestDepth;
+  return _bhit;
+}
 function darkness(v) {
   const m = v.dayRef;
   const base = m && m.userData ? m.userData.baseEmissive : 0;
@@ -36381,6 +36474,19 @@ function updateVehicle(v, world, dt, ctrl) {
     if (c && Math.abs(c.normal.y) < 0.6) {
       v.pos.addScaledVector(c.normal, c.depth);
       const into = _dir.dot(c.normal) * Math.sign(v.speed || 1);
+      v.speed *= into < -0.2 ? 0.2 : Math.pow(0.9, dt * 60);
+      v.slip = damp2(v.slip, 0, 20, dt);
+      break;
+    }
+    const bh = blockerHit(v, world);
+    if (bh) {
+      v.pos.addScaledVector(bh.normal, bh.depth);
+      const into = _dir.dot(bh.normal) * Math.sign(v.speed || 1);
+      const other = bh.blocker.vehicle;
+      if (other && into < -0.2) {
+        const along = -(bh.normal.x * Math.sin(other.heading) + bh.normal.z * Math.cos(other.heading));
+        other.speed += Math.abs(v.speed) * -into * along * (v.mass / (v.mass + other.mass));
+      }
       v.speed *= into < -0.2 ? 0.2 : Math.pow(0.9, dt * 60);
       v.slip = damp2(v.slip, 0, 20, dt);
       break;
@@ -36891,6 +36997,7 @@ var Player = class {
     this.mode = "walk";
     this.seat = null;
     this.vehicle = null;
+    this._lastHeading = 0;
     this.landImpact = 0;
     this.fallSpeed = 0;
     this.coyote = 0;
@@ -37217,9 +37324,16 @@ var Player = class {
     this.fallSpeed = grounded ? 0 : Math.max(this.fallSpeed, -this.velocity.y);
     this.onGround = grounded;
   }
-  /** Capsule vs. rotated box (used for door leaves and vehicle bodies). */
+  /**
+   * Capsule vs. rotated box (used for door leaves and vehicle bodies).
+   * `rotY` means what it means everywhere else in the project — a three.js
+   * Object3D yaw, whose local +X points along (cos rotY, -sin rotY).  Getting
+   * that handedness backwards mirrors the box about the world axes, which is
+   * invisible on a door (every leaf sits at rotY 0 or ±π/2, where the mirror
+   * lands on the same footprint) but wrong on a car parked at any other angle.
+   */
   resolveBox(b) {
-    const c = Math.cos(-b.rotY), s = Math.sin(-b.rotY);
+    const c = Math.cos(b.rotY), s = Math.sin(b.rotY);
     for (const p of [this.capsule.start, this.capsule.end]) {
       const dx = p.x - b.pos.x, dz = p.z - b.pos.z;
       const lx = dx * c - dz * s;
@@ -37257,9 +37371,8 @@ var Player = class {
           depth = ey + this.capsule.radius;
         }
       }
-      const wc = Math.cos(b.rotY), ws = Math.sin(b.rotY);
-      const wx = nx * wc - nz2 * ws;
-      const wz = nx * ws + nz2 * wc;
+      const wx = nx * c + nz2 * s;
+      const wz = -nx * s + nz2 * c;
       this._v.set(wx * depth, ny * depth, wz * depth);
       this.capsule.translate(this._v);
       const vn = this.velocity.x * wx + this.velocity.y * ny + this.velocity.z * wz;
@@ -37312,6 +37425,7 @@ var Player = class {
     this.mode = "drive";
     v.occupied = true;
     this.yaw = v.heading + Math.PI;
+    this._lastHeading = v.heading;
     this.velocity.set(0, 0, 0);
   }
   exitVehicle() {
@@ -37333,6 +37447,8 @@ var Player = class {
     this.capsule.start.copy(seat);
     this.capsule.end.copy(seat).setY(seat.y + 0.4);
     this.bobAmount = 0;
+    this.yaw += v.heading - this._lastHeading;
+    this._lastHeading = v.heading;
   }
   vehicleControls() {
     const inp = this.input;
@@ -37587,10 +37703,13 @@ var LightManager = class {
     }
     this._scored = [];
     this._slots = [];
+    this._frame = 0;
   }
   /** night: outdoor lights only matter after dark. */
   update(cameraPos, night, dt = 0.016) {
     const list = this._scored;
+    const frame = ++this._frame;
+    for (const slot of this.pool) if (slot.src) slot.src._lmHeld = frame;
     let n = 0;
     for (const L of this.world.lights) {
       if (!L.on) continue;
@@ -37599,26 +37718,37 @@ var LightManager = class {
       const d2 = L.pos.distanceToSquared(cameraPos);
       if (d2 > (L.distance + 12) ** 2) continue;
       let rec = this._slots[n];
-      if (!rec) rec = this._slots[n] = { L: null, d: 0 };
+      if (!rec) rec = this._slots[n] = { L: null, d: 0, k: 0 };
       rec.L = L;
       rec.d = d2;
+      rec.k = L._lmHeld === frame ? d2 * 0.7225 : d2;
       list[n++] = rec;
     }
     list.length = n;
-    list.sort((a, b) => a.d - b.d);
-    for (let i = 0; i < this.pool.length; i++) {
-      const slot = this.pool[i];
+    list.sort((a, b) => a.k - b.k);
+    const cap = Math.min(n, this.pool.length);
+    for (let i = 0; i < cap; i++) list[i].L._lmKeep = frame;
+    for (const slot of this.pool) {
+      if (slot.src && slot.src._lmKeep !== frame) slot.src = null;
+    }
+    let free = 0;
+    for (let i = 0; i < cap; i++) {
+      const L = list[i].L;
+      if (L._lmHeld === frame) continue;
+      while (free < this.pool.length && this.pool[free].src) free++;
+      if (free >= this.pool.length) break;
+      const slot = this.pool[free++];
+      slot.src = L;
+      slot.light.intensity = 0;
+    }
+    for (const slot of this.pool) {
+      const s = slot.src;
       const p = slot.light;
-      const s = i < n ? list[i].L : null;
-      if (slot.src !== s) {
-        slot.src = s;
-        if (s) {
-          p.position.copy(s.pos);
-          p.color.setHex(s.color);
-          p.distance = s.distance;
-          p.decay = s.decay ?? 2;
-          p.intensity = 0;
-        }
+      if (s) {
+        p.position.copy(s.pos);
+        p.color.setHex(s.color);
+        p.distance = s.distance;
+        p.decay = s.decay ?? 2;
       }
       slot.target = s ? s.intensity : 0;
       p.intensity = damp2(p.intensity, slot.target, 9, dt);
@@ -37630,7 +37760,7 @@ var LightManager = class {
 // src/systems/interaction.js
 var _toTarget = new Vector3();
 var _fwd2 = new Vector3();
-var _eye = new Vector3();
+var _ground = new Vector3();
 var _ray4 = new Ray();
 var Interaction = class {
   constructor(world, camera, player, props) {
@@ -37702,6 +37832,13 @@ var Interaction = class {
         return "pickup";
       }
       case "vehicle": {
+        if (this.props.held) {
+          const p = this.props.drop(null);
+          p.pos.copy(this.player.feet(_ground));
+          p.pos.y += p.radius;
+          p.sleeping = false;
+          game.ui.setHeld(null);
+        }
         this.player.drive(i.data);
         game.audio.startEngine();
         return "engine";
@@ -40325,7 +40462,7 @@ var Together = class {
     const opts = { ...act.opts, spot: spotFor(act, member) };
     member.sendTo(node, opts, act.doing);
     member.char.setMood?.("happy");
-    this.current = { act, member, phase: "travel", timer: 0, ran: 0 };
+    this.current = { act, member, phase: "travel", timer: 0, ran: 0, travelT: 0 };
     this.game.ui.toast(`${member.name} is coming`, act.meet.replace("{name}", member.name));
   }
   cancel(say = true) {
@@ -40346,6 +40483,11 @@ var Together = class {
     const spot = g.world.spots[spotFor(c.act, m)];
     const here = spot ? spot.pos : m.char.pos;
     if (c.phase === "travel") {
+      c.travelT += dt;
+      if (c.travelT > 90) {
+        this.cancel();
+        return;
+      }
       const playerClose = P.position.distanceTo(here) < 6.5;
       const theirsClose = m.atPlan || m.char.pos.distanceTo(here) < 2.5;
       if (c.act.ride && P.mode === "drive" && P.vehicle && m.char.pos.distanceTo(P.vehicle.pos) < 6) {
@@ -40376,7 +40518,9 @@ var Together = class {
         m.riding = null;
         if (c.ran > 12) this.finish();
         else {
+          m.sendTo(nodeFor(c.act, m), { ...c.act.opts, spot: spotFor(c.act, m) }, c.act.doing);
           c.phase = "travel";
+          c.travelT = 0;
         }
       }
       return;
@@ -40706,7 +40850,7 @@ var UI = class {
   setHeading(yaw, tracked = null, from = null) {
     const deg = (-yaw * 180 / Math.PI % 360 + 360) % 360;
     const px3 = deg / 360 * this._compassWidth;
-    this.el.compass.style.transform = `translateX(${-px3 - this._compassWidth + 140}px)`;
+    this.el.compass.style.transform = `translateX(${-px3 - this._compassWidth + 120}px)`;
     if (!this._pip) {
       this._pip = document.createElement("div");
       this._pip.id = "obj-pip";
@@ -40719,7 +40863,7 @@ var UI = class {
     }
     const bearing = Math.atan2(tracked.where.x - from.x, -(tracked.where.z - from.z));
     let rel = ((bearing - yaw + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
-    const half = 1.15;
+    const half = 140 / (this._compassWidth / (Math.PI * 2));
     if (Math.abs(rel) > half) {
       this._pip.style.display = "none";
     } else {
@@ -40881,7 +41025,7 @@ var UI = class {
     $("j-family").innerHTML = day + family.map((f) => {
       const b = game ? Math.min(5, Math.floor((game.bond?.[f.id] || 0) / 4)) : 0;
       const hearts = game ? `<span class="bond">${"\u2665".repeat(b)}${"\u2661".repeat(5 - b)}</span>` : "";
-      const gr = game && game.grounded?.[f.id] > game.day - 1 ? " \xB7 no screens today" : "";
+      const gr = game?.isGrounded(f.id) ? " \xB7 no screens today" : "";
       return `<div class="jrow"><b>${f.name}</b> \u2014 ${f.spec.role} ${hearts}<small>${f.activity}${gr}</small></div>`;
     }).join("");
     const byFloor = {};
@@ -41213,7 +41357,10 @@ var Game = class {
         }
       }
     }
-    if (typeChanged) {
+    const enabled = s > 0;
+    const dirty = typeChanged || enabled !== this._shadowsWereEnabled;
+    this._shadowsWereEnabled = enabled;
+    if (dirty) {
       this.engine.scene.traverse((o) => {
         if (!o.isMesh) return;
         const mats = Array.isArray(o.material) ? o.material : [o.material];
@@ -41266,28 +41413,31 @@ var Game = class {
         this.props.add({ mesh: g, radius: 0.122, mass: 0.7, bounce: 0.74, friction: 1.4, name: "basketball", tag: "basketball" });
       } else if (s.kind === "skateboard") {
         const g = new Group();
+        const vis = new Group();
+        vis.position.y = -0.2;
+        g.add(vis);
         const deck = new Mesh(new BoxGeometry(0.22, 0.03, 0.66), M.solid(2832970, 0.6));
         deck.position.y = 0.085;
-        g.add(deck);
+        vis.add(deck);
         for (const s2 of [-1, 1]) {
           const kick = new Mesh(new BoxGeometry(0.22, 0.028, 0.16), M.solid(2832970, 0.6));
           kick.position.set(0, 0.105, s2 * 0.395);
           kick.rotation.x = s2 * -0.38;
-          g.add(kick);
+          vis.add(kick);
         }
         for (const oz of [-0.26, 0.26]) {
           const truck = new Mesh(new BoxGeometry(0.16, 0.035, 0.07), M.solid(10133670, 0.35, 0.8));
           truck.position.set(0, 0.055, oz);
-          g.add(truck);
+          vis.add(truck);
           for (const ox of [-0.1, 0.1]) {
             const w = new Mesh(new CylinderGeometry(0.032, 0.032, 0.03, 10), M.solid(15262418, 0.5));
             w.rotation.z = Math.PI / 2;
             w.position.set(ox, 0.032, oz);
-            g.add(w);
+            vis.add(w);
           }
         }
         g.position.set(s.x, s.y, s.z);
-        this.props.add({ mesh: g, radius: 0.2, mass: 1.4, bounce: 0.25, friction: 1.2, name: "skateboard", tag: "skate" });
+        this.props.add({ mesh: g, vis, visDrop: -0.2, radius: 0.2, mass: 1.4, bounce: 0.25, friction: 1.2, name: "skateboard", tag: "skate" });
       }
     }
     const rng = makeRng(5150);
@@ -41337,6 +41487,8 @@ var Game = class {
     } catch (_) {
     }
     this.discovered.clear();
+    this.metFamily?.clear();
+    this.hugged?.clear();
     for (const o of this.objectives) o.done = false;
     this.ui.setObjectives(this.objectives);
     this.ui.toast("Progress reset", "Objectives and discovered rooms cleared");
@@ -41381,6 +41533,7 @@ var Game = class {
       this.sky.setTime(save.hour);
       this.sky.updateEnv(true);
     }
+    this._lastHour = this.sky.time;
     this.ui.setObjectives(this.objectives);
     this.ui.onResetProgress = () => this.resetProgress();
     setInterval(() => {
@@ -41592,9 +41745,13 @@ var Game = class {
     for (const [id, when] of Object.entries(this.birthdays)) if (when === d2) return id;
     return null;
   }
-  /** Is this child's screen time taken away right now? */
+  /**
+   * Is this child's screen time taken away right now?  `grounded[id]` is the
+   * day it lifts, so one day's grounding covers the rest of today and gives
+   * the screens back at the next midnight — which is what the toast promises.
+   */
   isGrounded(id) {
-    return (this.grounded[id] || 0) > this.day - 1;
+    return (this.grounded[id] || 0) > this.day;
   }
   /**
    * Screen time is over: their own screens go in the cupboard until tomorrow.
@@ -41913,6 +42070,9 @@ ${info.calls} calls \xB7 ${(info.triangles / 1e3).toFixed(0)}k tris`);
       }
     }
     this.ui.setCrosshairWide(!!this.props.held && !P.skating);
+    for (const p of this.props.list) {
+      if (p.vis) p.vis.position.y = damp2(p.vis.position.y, p === this.props.held ? 0 : p.visDrop, 18, dt);
+    }
     this.props.update(dt, (p, impact, normal) => {
       const att = clamp2(1.15 - p.pos.distanceTo(P.position) / 26, 0.03, 1);
       if (p.inWater) this.audio.play("splash", { gain: att });
