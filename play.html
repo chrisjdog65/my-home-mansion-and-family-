@@ -33144,7 +33144,6 @@ function buildGuestHouse(world) {
     gold: M.get("gold"),
     brick: M.get("brick"),
     wall: M.paint(15920611, 0.66, "ghWall"),
-    wetWall: M.paint(15133929, 0.5, "ghWetWall"),
     ceil: M.paint(16250353, 0.92, "ghCeil"),
     trim: M.paint(16250094, 0.5, "ghTrim"),
     board: M.paint(6253411, 0.7, "ghBoard"),
@@ -33223,7 +33222,7 @@ function runZ(world, k, pos, z0, z1, baseY, h, t, mat, openings = [], o = {}) {
   if (o.col !== false) wallCols(world, pos, cz2, len, h, o.colT ?? t, ops, HALF, baseY);
 }
 function trimRun2(k, mat, alongZ, pos, a0, a1, y, th, td, openings) {
-  const cuts = openings.filter((o) => (o.y0 ?? 0) < y - (y > 2 ? 99 : 0) || true).map((o) => [o.at - o.w / 2, o.at + o.w / 2]);
+  const cuts = openings.filter((o) => (o.y0 ?? 0) < 0.4).map((o) => [o.at - o.w / 2, o.at + o.w / 2]);
   const spans = [];
   let cur = a0;
   for (const [b0, b1] of cuts.sort((p, q) => p[0] - q[0])) {
@@ -33309,7 +33308,17 @@ function houseGroundShell(world, k, P, win) {
   ];
   runX(world, k, HZ0 + TO / 2, HX0, HX1, y, h, TO, P.stone, N3, { col: false, tile: 2.6 });
   runX(world, k, HZ0 + TO + TI / 2, HX0, HX1, y, h, TI, P.wall, N3, { col: false });
-  runX(world, k, HZ0 + TE / 2, HX0, HX1, y, h, TE + 0.02, P.wall, N3, { tile: 2.2, colT: TE + 0.02 });
+  wallCols(
+    world,
+    (HX0 + HX1) / 2,
+    HZ0 + TE / 2,
+    HX1 - HX0,
+    h,
+    TE + 0.02,
+    localOpenings(N3, (HX0 + HX1) / 2, false),
+    0,
+    y
+  );
   runX(world, k, HZ1 - TO / 2, HX0, HX1, y, h, TO, P.stone, S2, { col: false, tile: 2.6 });
   runX(world, k, HZ1 - TO - TI / 2, HX0, HX1, y, h, TI, P.wall, S2, { col: false });
   wallCols(
@@ -33414,7 +33423,17 @@ function houseFirstShell(world, k, P, win) {
   ];
   runX(world, k, HZ0 + TO / 2, HX0, HX1, y, h, TO, P.stucco, N3, { col: false, tile: 2.6 });
   runX(world, k, HZ0 + TO + TI / 2, HX0, HX1, y, h, TI, P.wall, N3, { col: false });
-  runX(world, k, HZ0 + TE / 2, HX0, HX1, y, h, TE + 0.02, P.wall, N3, { tile: 2.2 });
+  wallCols(
+    world,
+    45.5,
+    HZ0 + TE / 2,
+    HX1 - HX0,
+    h,
+    TE + 0.02,
+    localOpenings(N3, 45.5, false),
+    0,
+    y
+  );
   runX(world, k, HZ1 - TO / 2, HX0, HX1, y, h, TO, P.stucco, S2, { col: false, tile: 2.6 });
   runX(world, k, HZ1 - TO - TI / 2, HX0, HX1, y, h, TI, P.wall, S2, { col: false });
   wallCols(
@@ -33557,15 +33576,16 @@ function partitions(world, k, P) {
   case1(true, 45.9, -35.9, 1.1, 2.3);
   case1(true, 45.9, -32.6, 1.1, 2.3);
   case1(false, -31.2, 49, 2.4, 2.6);
-  const dado = (x0, x1, z0, z1, y) => {
-    k.box(x1 - x0, 1.3, 0.02, P.tile, (x0 + x1) / 2, y + 0.8, z0 + 0.02, { tile: 0.8 });
-    k.box(x1 - x0, 1.3, 0.02, P.tile, (x0 + x1) / 2, y + 0.8, z1 - 0.02, { tile: 0.8 });
-    k.box(0.02, 1.3, z1 - z0, P.tile, x0 + 0.02, y + 0.8, (z0 + z1) / 2, { tile: 0.8 });
-    k.box(0.02, 1.3, z1 - z0, P.tile, x1 - 0.02, y + 0.8, (z0 + z1) / 2, { tile: 0.8 });
+  const H = 1.15, MID = 0.695;
+  const dado = (sides, x0, x1, z0, z1, y) => {
+    if (sides.includes("n")) k.box(x1 - x0, H, 0.02, P.tile, (x0 + x1) / 2, y + MID, z0 + 0.02, { tile: 0.8 });
+    if (sides.includes("s")) k.box(x1 - x0, H, 0.02, P.tile, (x0 + x1) / 2, y + MID, z1 - 0.02, { tile: 0.8 });
+    if (sides.includes("w")) k.box(0.02, H, z1 - z0, P.tile, x0 + 0.02, y + MID, (z0 + z1) / 2, { tile: 0.8 });
+    if (sides.includes("e")) k.box(0.02, H, z1 - z0, P.tile, x1 - 0.02, y + MID, (z0 + z1) / 2, { tile: 0.8 });
   };
-  dado(IX0, 45.83, IZ0, -34.2, F0);
-  dado(IX0, 45.83, -31.13, -25.74, F1);
-  dado(47.47, IX1, -21.36, IZ1, F1);
+  dado(["n", "s", "w"], IX0, 45.83, IZ0, -34.2, F0);
+  dado(["n", "s", "w"], IX0, 45.83, -31.13, -25.74, F1);
+  dado(["w"], 47.47, IX1, -21.36, IZ1, F1);
 }
 function upperStructure(world, k, P) {
   const shell = { x0: IX0, x1: IX1, z0: IZ0, z1: IZ1 };
@@ -33574,7 +33594,7 @@ function upperStructure(world, k, P) {
     const w = r.x1 - r.x0, d2 = r.z1 - r.z0;
     const x = (r.x0 + r.x1) / 2, z = (r.z0 + r.z1) / 2;
     world.collider(w, 0.3, d2, x, F1 - 0.15, z);
-    k.box(w, 0.03, d2, P.ceil, x, C0 - 0.015, z, { tile: 2 });
+    k.box(w, 0.03, d2, P.ceil, x, C0 + 0.015, z, { tile: 2 });
   }
   const fin = (mat, x0, x1, z0, z1, tile) => {
     for (const r of rectSubtract({ x0, x1, z0, z1 }, holes)) {
@@ -33664,7 +33684,6 @@ function pitched(world, k, P, o) {
     }
     const overhangs = s < 0 ? true : o.eastEave !== false;
     if (!overhangs) continue;
-    const wallFace = s < 0 ? o.wallX0 : o.wallX1;
     const uMid = Math.abs(edge - o.rx) - 0.4;
     const xMid = o.rx + s * uMid;
     const yMid = o.ry - o.drop * uMid - vt / 2;
@@ -33682,7 +33701,6 @@ function pitched(world, k, P, o) {
     const fx = edge + s * 0.06;
     const fTop = o.ry - o.drop * Math.abs(fx - o.rx);
     k.box(0.07, 0.34, lenZ, P.board, fx, fTop - 0.15, cz2, { tile: 0.7 });
-    void wallFace;
   }
   for (const g of o.gables) {
     const shape = new Shape();
@@ -33953,8 +33971,8 @@ function lighting(world, k, P, R) {
   set(
     R.bed1,
     C1,
-    [[42.5, -22.6], [48.4, -20]],
-    [[40.2, -24.8], [40.2, -17.4], [45, -17], [46.6, -24.4]],
+    [[42.5, -22.6], [44.8, -18.4]],
+    [[40.2, -24.8], [40.2, -17.4], [45.6, -17], [49.6, -23.6]],
     "flush",
     warm,
     { i: 13 }
@@ -33972,9 +33990,9 @@ function lighting(world, k, P, R) {
   k.box(0.34, 0.5, 0.34, P.gold, ST_X, C1 - 2.15, -35.6, { tile: 0.3 });
   k.box(0.26, 0.08, 0.26, k.M.emissive(WARM2, 2.2), ST_X, C1 - 2.42, -35.6, { tile: 0.2 });
   world.addLight({ pos: V4(ST_X, C1 - 2.5, -35.6), color: 16768180, intensity: 18, decay: 1.9, distance: 15, room: R.hall.name, floor: R.hall.floor });
-  outLamp(k, world, 38.86, F0 + 2.3, -22, 0.34, 0.06);
+  outLamp(k, 38.86, F0 + 2.3, -22, 0.34);
   world.addLight({ pos: V4(38.3, F0 + 2.2, -22), color: 16765850, intensity: 26, decay: 1.8, distance: 12, outdoor: true, night: true });
-  outLamp(k, world, 52.14, F0 + 2.5, -19.6, 0.34, 0.06);
+  outLamp(k, 52.14, F0 + 2.5, -19.6, 0.34);
   world.addLight({ pos: V4(52.7, F0 + 2.4, -19.6), color: 16765850, intensity: 26, decay: 1.8, distance: 12, outdoor: true, night: true });
   for (const z of [-34.6, -27.4]) {
     k.box(0.3, 0.16, 0.24, P.black, GX0 - 0.16, 3.55, z, { tile: 0.3 });
@@ -33982,11 +34000,10 @@ function lighting(world, k, P, R) {
     world.addLight({ pos: V4(GX0 - 0.9, 3.35, z), color: 16767392, intensity: 34, decay: 1.8, distance: 15, outdoor: true, night: true });
   }
 }
-function outLamp(k, world, x, y, z, w, d2) {
+function outLamp(k, x, y, z, w) {
   k.box(0.06, 0.36, 0.16, k.M.get("blackMetal"), x, y + 0.2, z, { tile: 0.3 });
   k.box(w, 0.34, w, k.M.get("blackMetal"), x, y, z, { tile: 0.3 });
   k.box(w - 0.1, 0.26, w - 0.1, k.M.emissive(16764810, 2), x, y, z, { tile: 0.2 });
-  void d2;
 }
 function leaf(world, k, o) {
   const part = hingePanel(k, o.x, o.y + o.h / 2 + 0.03, o.z, {
@@ -34166,7 +34183,17 @@ function garageShell(world, k, P, win) {
   wallCols(world, GX0 + GE / 2, -31, GZ1 - GZ0, h, GE + 0.02, localOpenings(W, -31, true), HALF, y);
   runX(world, k, GZ0 + GO / 2, GX0, GX1, y, h, GO, P.stone, N3, { col: false, tile: 2.4 });
   runX(world, k, GZ0 + GO + GI / 2, GX0, GX1, y, h, GI, P.garageWall, N3, { col: false });
-  runX(world, k, GZ0 + GE / 2, GX0, GX1, y, h, GE + 0.02, P.garageWall, N3, { tile: 2.2 });
+  wallCols(
+    world,
+    34.5,
+    GZ0 + GE / 2,
+    GX1 - GX0,
+    h,
+    GE + 0.02,
+    localOpenings(N3, 34.5, false),
+    0,
+    y
+  );
   runX(world, k, GZ1 - GO / 2, GX0, GX1, y, h, GO, P.stone, S2, { col: false, tile: 2.4 });
   runX(world, k, GZ1 - GO - GI / 2, GX0, GX1, y, h, GI, P.garageWall, S2, { col: false });
   wallCols(world, 34.5, GZ1 - GE / 2, GX1 - GX0, h, GE + 0.02, localOpenings(S2, 34.5, false), 0, y);
@@ -34203,11 +34230,9 @@ function dressLiving(world, k, P, R) {
   curtains(k, IX0 + 0.22, CUR0, -18.6, 1.9, Math.PI / 2, 12563622);
   k.box(0.16, 0.26, 0.1, M.paint(13227211, 0.5, "ghMantelPot"), 44.6, F0 + 1.63, -16.86, { tile: 0.2 });
   photoFrame(k, 46.3, F0 + 1.5, -16.86, { rotY: Math.PI, seed: 1 });
-  wallClock(k, 51.58, F0 + 2.15, -19.6 - 2.9, -Math.PI / 2, { hour: 8, minute: 20 });
-  lightSwitch(k, R, IX0 + 0.06, F0 + 1.15, -21.3, { rotY: Math.PI / 2 });
+  lightSwitch(k, R, IX0 + 0.06, F0 + 1.15, -21.25, { rotY: Math.PI / 2 });
 }
 function dressDining(world, k, P, R) {
-  const M = k.M;
   const tx = 45.4, tz = -25.3;
   k.box(2.3, 0.07, 1.1, P.walnut, tx, F0 + 0.75, tz, { tile: 1 });
   k.box(2, 0.1, 0.86, P.walnut, tx, F0 + 0.66, tz, { tile: 1 });
@@ -34242,10 +34267,9 @@ function dressDining(world, k, P, R) {
   fruitBowl(k, 39.72, F0 + 0.91, -25.6, {});
   photoFrame(k, 39.72, F0 + 0.91, -26.3, { rotY: Math.PI / 2, seed: 3 });
   artwork(k, 39.42, F0 + 2.05, -24.6, 1.2, 0.85, Math.PI / 2, 7035717);
-  wallShelf(k, 51.55, F0 + 1.75, -26.9, { rotY: -Math.PI / 2, w: 1.1, items: 3 });
+  wallShelf(k, 51.55, F0 + 1.75, -26.8, { rotY: -Math.PI / 2, w: 1.1, items: 3 });
   plant(k, 51, F0, -23.6, 1.05);
   curtains(k, IX1 - 0.22, CUR0, -25.2, 2.1, -Math.PI / 2, 11055803);
-  void M;
   void R;
   void world;
 }
@@ -34263,10 +34287,11 @@ function dressKitchen(world, k, P, R) {
   cookPot(k, 44.4, F0 + 0.95, back - 0.16, {});
   fruitBowl(k, 46.1, F0 + 0.93, back + 0.02, {});
   bookStack(k, 46.9, F0 + 0.93, back + 0.02, { n: 2, w: 0.2 });
-  wallShelf(k, 51.55, F0 + 1.8, -28, { rotY: -Math.PI / 2, w: 1, items: 2 });
+  wallShelf(k, 39.44, F0 + 1.8, -28.1, { rotY: Math.PI / 2, w: 1, items: 2 });
   wastebasket(k, 47.3, F0, -30.55, { metal: true });
-  plant(k, 40.1, F0, -27.9, 0.95);
-  lightSwitch(k, R, 48.1, F0 + 1.15, -31.06, { rotY: Math.PI });
+  plant(k, 40.2, F0, -27.85, 0.95);
+  wallClock(k, 50.7, F0 + 2.3, -31.09, 0, { hour: 8, minute: 20 });
+  lightSwitch(k, R, 47.62, F0 + 1.15, -31.09, { rotY: 0 });
   void P;
   void world;
 }
@@ -34282,7 +34307,7 @@ function dressHall(world, k, P, R) {
   artwork(k, 51.58, F0 + 2.05, -31.9, 0.9, 0.7, -Math.PI / 2, 5925719);
   plant(k, 51.2, F0, -31.6, 1);
   curtains(k, IX1 - 0.22, CUR0, -34.5, 1.5, -Math.PI / 2, 13221038);
-  lightSwitch(k, R, 47.9, F0 + 1.15, -31.2 - 0.09, { rotY: 0 });
+  lightSwitch(k, R, 47.6, F0 + 1.15, -31.31, { rotY: Math.PI });
   void P;
   void world;
 }
@@ -34292,19 +34317,19 @@ function dressShowerRoom(world, k, P, R) {
   vanity(k, 42.6, F0, -34.5, { rotY: Math.PI, w: 1.4 });
   laundryBasket(k, 45.3, F0, -34.7, {});
   wastebasket(k, 44.1, F0, -34.6, {});
-  k.box(0.05, 0.05, 0.9, P.chrome, IX0 + 0.1, F0 + 1.45, -35.9, { tile: 0.3 });
+  k.box(0.05, 0.05, 0.9, P.chrome, IX0 + 0.1, F0 + 1.45, -35.35, { tile: 0.3 });
   for (const dz of [-0.25, 0.25]) {
-    k.box(0.1, 0.62, 0.34, k.M.paint(15265522, 0.95, "ghTowel"), IX0 + 0.14, F0 + 1.16, -35.9 + dz, { tile: 0.4 });
+    k.box(0.1, 0.62, 0.34, k.M.paint(15265522, 0.95, "ghTowel"), IX0 + 0.14, F0 + 1.16, -35.35 + dz, { tile: 0.4 });
   }
-  k.box(0.24, 0.16, 0.34, k.M.paint(15265522, 0.95, "ghTowel"), 44.9, F0 + 0.6, -36.2, { tile: 0.3 });
+  k.box(0.24, 0.16, 0.34, k.M.paint(15265522, 0.95, "ghTowel"), 44.9, F0 + 0.87, -37.54, { tile: 0.3 });
   rug(k, 42.6, F0, -35.4, 1.3, 0.8, 13358808);
-  lightSwitch(k, R, 45.72, F0 + 1.15, -35.3, { rotY: -Math.PI / 2 });
+  lightSwitch(k, R, 45.72, F0 + 1.15, -35.1, { rotY: -Math.PI / 2 });
   void world;
 }
 function dressUtility(world, k, P, R) {
   const M = k.M;
   const app = M.paint(15527664, 0.42, "ghAppliance");
-  const back = -33.8;
+  const back = -33.72;
   for (const x of [40.1, 40.85]) {
     k.box(0.66, 0.86, 0.62, app, x, F0 + 0.43, back, { tile: 0.5 });
     k.box(0.36, 0.36, 0.03, M.get("carGlass"), x, F0 + 0.46, back + 0.32, { tile: 0.3 });
@@ -34325,17 +34350,17 @@ function dressUtility(world, k, P, R) {
       0.26,
       0.2,
       M.solid([6991948, 3113471, 15774761, 13644844][i % 4], 0.6),
-      40 + i * 0.36,
+      40.2 + i * 0.36,
       F0 + 1.71,
       back - 0.1,
       { tile: 0.2 }
     );
-    k.box(0.24, 0.18, 0.22, M.paint(10128248, 0.9, "ghSack"), 40 + i * 0.36, F0 + 2.12, back - 0.1, { tile: 0.2 });
+    k.box(0.24, 0.18, 0.22, M.paint(10128248, 0.9, "ghSack"), 40.2 + i * 0.36, F0 + 2.12, back - 0.1, { tile: 0.2 });
   }
   k.box(0.56, 0.86, 0.36, M.paint(15790836, 0.4, "ghBoiler"), 44.9, F0 + 1.72, back - 0.02, { tile: 0.4 });
   k.box(0.12, 0.7, 0.12, P.chrome, 44.9, F0 + 2.5, back - 0.02, { tile: 0.3 });
-  laundryBasket(k, 44.6, F0, -32.1, {});
-  coatHooks(k, 39.44, F0 + 1.7, -33.1, { rotY: Math.PI / 2, w: 1.2, n: 3 });
+  laundryBasket(k, 43.6, F0, -31.6, {});
+  coatHooks(k, 45.75, F0 + 1.7, -33.65, { rotY: -Math.PI / 2, w: 0.8, n: 3 });
   for (let i = 0; i < 3; i++) {
     k.box(
       0.16,
@@ -34344,12 +34369,12 @@ function dressUtility(world, k, P, R) {
       M.solid([3100523, 4152378, 7033648][i], 0.7),
       39.7,
       F0 + 0.14,
-      -32.4 + i * 0.26,
+      -31.9 + i * 0.26,
       { tile: 0.2 }
     );
   }
   wastebasket(k, 45.3, F0, -31.55, { metal: true });
-  lightSwitch(k, R, 45.72, F0 + 1.15, -32.05, { rotY: -Math.PI / 2 });
+  lightSwitch(k, R, 45.72, F0 + 1.15, -31.5, { rotY: -Math.PI / 2 });
   void world;
 }
 function dressBedTwo(world, k, P, R) {
@@ -34361,17 +34386,17 @@ function dressBedTwo(world, k, P, R) {
   tv(k, 43.6, F1, -31.36, { rotY: Math.PI, w: 1.2, h: 1.55, wall: true });
   desk(k, 39.78, F1, -34.5, { rotY: Math.PI / 2, w: 1.4, d: 0.68 });
   officeChair(k, 40.85, F1, -34.5, { rotY: -Math.PI / 2, color: 7043668 });
-  tableLamp(k, 39.78, -35.05, F1 + 0.79, {});
-  bookStack(k, 39.78, F1 + 0.77, -33.95, { n: 3, w: 0.22 });
+  tableLamp(k, 39.78, -35.05, F1 + 0.765, {});
+  bookStack(k, 39.78, F1 + 0.765, -33.95, { n: 3, w: 0.22 });
   rug(k, 42.6, F1, -34.6, 3.2, 2.6, 6977156);
   bookshelf(k, 39.62, F1, -36.6, { rotY: Math.PI / 2, w: 1.3, h: 1.7 });
-  floorLamp(k, 44.9, F1, -32.6, { h: 1.5 });
+  floorLamp(k, 44.6, F1, -33.4, { h: 1.5 });
   artwork(k, 42.6, F1 + 2.05, -31.24, 1.1, 0.8, Math.PI, 3623004);
   photoFrame(k, 43.6, F1 + 0.92, -31.82, { rotY: Math.PI, seed: 0 });
   wastebasket(k, 40.9, F1, -33.3, {});
   curtains(k, 41.2, CUR1, IZ0 + 0.22, 1.9, 0, 12563622);
   curtains(k, 44, CUR1, IZ0 + 0.22, 1.7, 0, 12563622);
-  lightSwitch(k, R, 45.74, F1 + 1.15, -31.9, { rotY: -Math.PI / 2 });
+  lightSwitch(k, R, 45.74, F1 + 1.15, -31.6, { rotY: -Math.PI / 2 });
   void P;
   void world;
 }
@@ -34402,7 +34427,7 @@ function dressFamilyBath(world, k, P, R) {
       { tile: 0.1 }
     );
   }
-  lightSwitch(k, R, 45.74, F1 + 1.15, -29.2, { rotY: -Math.PI / 2 });
+  lightSwitch(k, R, 45.74, F1 + 1.15, -29.45, { rotY: -Math.PI / 2 });
   void world;
 }
 function dressLanding(world, k, P, R) {
@@ -34419,7 +34444,7 @@ function dressLanding(world, k, P, R) {
   wastebasket(k, 51.2, F1, -26.1, {});
   curtains(k, IX1 - 0.22, CUR1, -35, 1.7, -Math.PI / 2, 13221038);
   curtains(k, IX1 - 0.22, CUR1, -29, 1.7, -Math.PI / 2, 13221038);
-  lightSwitch(k, R, 48.1, F1 + 1.15, -25.72, { rotY: Math.PI });
+  lightSwitch(k, R, 48.05, F1 + 1.15, -25.8, { rotY: Math.PI });
   void P;
   void world;
 }
@@ -34435,10 +34460,10 @@ function dressBedOne(world, k, P, R) {
   armchair(k, 40.45, F1, -18.6, { rotY: Math.PI / 2, color: 8096402 });
   sideTable(k, 40.6, F1, -17.4, { w: 0.5, lamp: true });
   floorLamp(k, 41.6, F1, -19.8, { h: 1.55 });
-  bookshelf(k, 51.4, F1, -23.6, { rotY: -Math.PI / 2, w: 1.5, h: 1.8 });
-  desk(k, 50.9, F1, -19.6, { rotY: -Math.PI / 2, w: 1.4, d: 0.68 });
-  officeChair(k, 49.9, F1, -19.6, { rotY: Math.PI / 2, color: 3623004 });
-  bookStack(k, 50.9, F1 + 0.77, -20.1, { n: 3, w: 0.22 });
+  bookshelf(k, 50.3, F1, -25.42, { rotY: 0, w: 1.5, h: 1.8 });
+  desk(k, 51.2, F1, -22.6, { rotY: -Math.PI / 2, w: 1.4, d: 0.68 });
+  officeChair(k, 50.1, F1, -22.6, { rotY: Math.PI / 2, color: 3623004 });
+  bookStack(k, 51.2, F1 + 0.765, -23.1, { n: 3, w: 0.22 });
   photoFrame(k, 45.84, F1 + 0.92, -16.85, { rotY: Math.PI, seed: 2 });
   artwork(k, 39.42, F1 + 2.1, -21.9, 1.2, 0.85, Math.PI / 2, 4938344);
   wastebasket(k, 44.6, F1, -19.2, {});
@@ -34446,19 +34471,19 @@ function dressBedOne(world, k, P, R) {
   curtains(k, 41.4, CUR1, IZ1 - 0.22, 2, Math.PI, 13221038);
   curtains(k, IX0 + 0.22, CUR1, -18.6, 1.9, Math.PI / 2, 13221038);
   curtains(k, IX0 + 0.22, CUR1, -22.5, 1.7, Math.PI / 2, 13221038);
-  lightSwitch(k, R, 48.1, F1 + 1.15, -25.48, { rotY: 0 });
+  lightSwitch(k, R, 48.05, F1 + 1.15, -25.56, { rotY: 0 });
   void P;
   void world;
 }
 function dressEnsuite(world, k, P, R) {
   vanity(k, 50.2, F1, -21.05, { rotY: 0, w: 1.5 });
   shower(k, 48.3, F1, -17.05, { w: 1.4, d: 1.4, rotY: Math.PI });
-  toilet(k, 51.35, F1, -19.4, { rotY: -Math.PI / 2 });
+  toilet(k, 51.32, F1, -19.4, { rotY: -Math.PI / 2 });
   wastebasket(k, 47.85, F1, -20.7, {});
   rug(k, 49.6, F1, -19.4, 1.2, 0.8, 14081762);
   k.box(0.05, 0.05, 0.9, P.chrome, 47.62, F1 + 1.4, -18.9, { tile: 0.3 });
   k.box(0.1, 0.62, 0.34, k.M.paint(15265522, 0.95, "ghTowel"), 47.66, F1 + 1.11, -18.9, { tile: 0.4 });
-  lightSwitch(k, R, 47.56, F1 + 1.15, -21.05, { rotY: Math.PI / 2 });
+  lightSwitch(k, R, 47.53, F1 + 1.15, -20.2, { rotY: Math.PI / 2 });
   void world;
 }
 function dressGarage(world, k, P, R) {
@@ -34478,7 +34503,7 @@ function dressGarage(world, k, P, R) {
   const tools = [9080726, 7033648, 3113471, 13644844, 15774761];
   for (let i = 0; i < 12; i++) {
     const tz = b0 + 0.35 + i * ((b1 - b0 - 0.7) / 11);
-    k.box(0.05, 0.3 + i % 3 * 0.08, 0.07, M.solid(tools[i % 4], 0.6), GIX1 - 0.08, F0 + 1.72, tz, { tile: 0.2 });
+    k.box(0.05, 0.3 + i % 3 * 0.08, 0.07, M.solid(tools[i % 5], 0.6), GIX1 - 0.08, F0 + 1.72, tz, { tile: 0.2 });
   }
   for (const y of [0.5, 1.05, 1.6, 2.15]) {
     k.box(0.42, 0.05, 3.4, P.walnut, GIX1 - 0.23, F0 + y, -35.2, { tile: 0.7 });
@@ -34498,17 +34523,17 @@ function dressGarage(world, k, P, R) {
       { tile: 0.2 }
     );
   }
-  k.box(0.7, 0.95, 1.2, M.paint(11739935, 0.45, "ghToolChest"), 37.8, F0 + 0.48, -24.9, { tile: 0.5 });
-  for (let i = 0; i < 4; i++) k.box(0.66, 0.06, 1.1, P.black, 37.8, F0 + 0.24 + i * 0.2, -24.86, { tile: 0.3 });
-  k.col(0.74, 1, 1.24, 37.8, F0 + 0.48, -24.9);
+  k.box(0.7, 0.95, 1.2, M.paint(11739935, 0.45, "ghToolChest"), 37.8, F0 + 0.48, -25.1, { tile: 0.5 });
+  for (let i = 0; i < 4; i++) k.box(0.66, 0.06, 1.1, P.black, 37.8, F0 + 0.24 + i * 0.2, -25.06, { tile: 0.3 });
+  k.col(0.74, 1, 1.24, 37.8, F0 + 0.48, -25.1);
   for (let i = 0; i < 3; i++) {
-    k.box(0.66, 0.22, 0.66, M.get("rubber"), 31.3, F0 + 0.11 + i * 0.22, -37.1, { tile: 0.3 });
+    k.box(0.66, 0.22, 0.66, M.get("rubber"), 31.4, F0 + 0.11 + i * 0.22, -37.3, { tile: 0.3 });
   }
-  k.col(0.7, 0.7, 0.7, 31.3, F0 + 0.35, -37.1);
-  bikeAgainstWall(k, P, 31.1, F0, -25.1);
-  k.box(0.56, 0.9, 0.56, M.paint(3884880, 0.6, "ghBin"), 30.9, F0 + 0.45, -37, { tile: 0.4 });
-  k.box(0.6, 0.06, 0.6, M.paint(2765626, 0.6, "ghBinLid"), 30.9, F0 + 0.93, -37, { tile: 0.3 });
-  k.col(0.6, 0.96, 0.6, 30.9, F0 + 0.48, -37);
+  k.col(0.7, 0.7, 0.7, 31.4, F0 + 0.35, -37.3);
+  bikeAgainstWall(k, P, 31.1, F0, -25.4);
+  k.box(0.56, 0.9, 0.56, M.paint(3884880, 0.6, "ghBin"), 30.8, F0 + 0.45, -36.3, { tile: 0.4 });
+  k.box(0.6, 0.06, 0.6, M.paint(2765626, 0.6, "ghBinLid"), 30.8, F0 + 0.93, -36.3, { tile: 0.3 });
+  k.col(0.6, 0.96, 0.6, 30.8, F0 + 0.48, -36.3);
   for (const z of [-34.26, -31, -27.74]) {
     k.box(6.4, 0.012, 0.1, M.paint(15262934, 0.8, "ghBayLine"), 34.2, F0 + 6e-3, z, { tile: 0.6 });
   }

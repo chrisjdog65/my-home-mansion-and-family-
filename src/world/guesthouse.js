@@ -104,7 +104,6 @@ export function buildGuestHouse(world) {
     gold: M.get('gold'),
     brick: M.get('brick'),
     wall: M.paint(0xf2ede3, 0.66, 'ghWall'),
-    wetWall: M.paint(0xe6ece9, 0.5, 'ghWetWall'),
     ceil: M.paint(0xf7f5f1, 0.92, 'ghCeil'),
     trim: M.paint(0xf7f4ee, 0.5, 'ghTrim'),
     board: M.paint(0x5f6b63, 0.7, 'ghBoard'),
@@ -206,10 +205,10 @@ function runZ(world, k, pos, z0, z1, baseY, h, t, mat, openings = [], o = {}) {
   if (o.col !== false) wallCols(world, pos, cz, len, h, o.colT ?? t, ops, HALF, baseY);
 }
 
-/** Baseboard and cornice along a run, stopping short of every doorway. */
+/** Baseboard along a run, stopping short of every opening that reaches it. */
 function trimRun(k, mat, alongZ, pos, a0, a1, y, th, td, openings) {
   const cuts = openings
-    .filter((o) => (o.y0 ?? 0) < y - (y > 2 ? 99 : 0) || true)
+    .filter((o) => (o.y0 ?? 0) < 0.4)
     .map((o) => [o.at - o.w / 2, o.at + o.w / 2]);
   const spans = [];
   let cur = a0;
@@ -314,7 +313,8 @@ function houseGroundShell(world, k, P, win) {
   // north
   runX(world, k, HZ0 + TO / 2, HX0, HX1, y, h, TO, P.stone, N, { col: false, tile: 2.6 });
   runX(world, k, HZ0 + TO + TI / 2, HX0, HX1, y, h, TI, P.wall, N, { col: false });
-  runX(world, k, HZ0 + TE / 2, HX0, HX1, y, h, TE + 0.02, P.wall, N, { tile: 2.2, colT: TE + 0.02 });
+  wallCols(world, (HX0 + HX1) / 2, HZ0 + TE / 2, HX1 - HX0, h, TE + 0.02,
+    localOpenings(N, (HX0 + HX1) / 2, false), 0, y);
   // south
   runX(world, k, HZ1 - TO / 2, HX0, HX1, y, h, TO, P.stone, S, { col: false, tile: 2.6 });
   runX(world, k, HZ1 - TO - TI / 2, HX0, HX1, y, h, TI, P.wall, S, { col: false });
@@ -390,7 +390,8 @@ function houseFirstShell(world, k, P, win) {
 
   runX(world, k, HZ0 + TO / 2, HX0, HX1, y, h, TO, P.stucco, N, { col: false, tile: 2.6 });
   runX(world, k, HZ0 + TO + TI / 2, HX0, HX1, y, h, TI, P.wall, N, { col: false });
-  runX(world, k, HZ0 + TE / 2, HX0, HX1, y, h, TE + 0.02, P.wall, N, { tile: 2.2 });
+  wallCols(world, 45.5, HZ0 + TE / 2, HX1 - HX0, h, TE + 0.02,
+    localOpenings(N, 45.5, false), 0, y);
 
   runX(world, k, HZ1 - TO / 2, HX0, HX1, y, h, TO, P.stucco, S, { col: false, tile: 2.6 });
   runX(world, k, HZ1 - TO - TI / 2, HX0, HX1, y, h, TI, P.wall, S, { col: false });
@@ -501,16 +502,19 @@ function partitions(world, k, P) {
   case1(true, 45.90, -32.6, 1.10, 2.30);
   case1(false, -31.20, 49.0, 2.40, 2.60);
 
-  // wet-room dados
-  const dado = (x0, x1, z0, z1, y) => {
-    k.box(x1 - x0, 1.30, 0.02, P.tile, (x0 + x1) / 2, y + 0.80, z0 + 0.02, { tile: 0.8 });
-    k.box(x1 - x0, 1.30, 0.02, P.tile, (x0 + x1) / 2, y + 0.80, z1 - 0.02, { tile: 0.8 });
-    k.box(0.02, 1.30, z1 - z0, P.tile, x0 + 0.02, y + 0.80, (z0 + z1) / 2, { tile: 0.8 });
-    k.box(0.02, 1.30, z1 - z0, P.tile, x1 - 0.02, y + 0.80, (z0 + z1) / 2, { tile: 0.8 });
+  // Wet-room dados, run wall by wall.  The tiling stops 1.27 m up — under
+  // every cill in these rooms — and no side that carries a door gets any, or
+  // a two-centimetre band would run straight across the opening.
+  const H = 1.15, MID = 0.695;
+  const dado = (sides, x0, x1, z0, z1, y) => {
+    if (sides.includes('n')) k.box(x1 - x0, H, 0.02, P.tile, (x0 + x1) / 2, y + MID, z0 + 0.02, { tile: 0.8 });
+    if (sides.includes('s')) k.box(x1 - x0, H, 0.02, P.tile, (x0 + x1) / 2, y + MID, z1 - 0.02, { tile: 0.8 });
+    if (sides.includes('w')) k.box(0.02, H, z1 - z0, P.tile, x0 + 0.02, y + MID, (z0 + z1) / 2, { tile: 0.8 });
+    if (sides.includes('e')) k.box(0.02, H, z1 - z0, P.tile, x1 - 0.02, y + MID, (z0 + z1) / 2, { tile: 0.8 });
   };
-  dado(IX0, 45.83, IZ0, -34.20, F0);          // shower room
-  dado(IX0, 45.83, -31.13, -25.74, F1);       // family bathroom
-  dado(47.47, IX1, -21.36, IZ1, F1);          // ensuite
+  dado(['n', 's', 'w'], IX0, 45.83, IZ0, -34.20, F0);          // shower room
+  dado(['n', 's', 'w'], IX0, 45.83, -31.13, -25.74, F1);       // family bathroom
+  dado(['w'], 47.47, IX1, -21.36, IZ1, F1);                    // ensuite
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -526,7 +530,7 @@ function upperStructure(world, k, P) {
     const w = r.x1 - r.x0, d = r.z1 - r.z0;
     const x = (r.x0 + r.x1) / 2, z = (r.z0 + r.z1) / 2;
     world.collider(w, 0.30, d, x, F1 - 0.15, z);                      // the slab you stand on
-    k.box(w, 0.03, d, P.ceil, x, C0 - 0.015, z, { tile: 2.0 });       // seen from below
+    k.box(w, 0.03, d, P.ceil, x, C0 + 0.015, z, { tile: 2.0 });       // seen from below
   }
   // finishes on the first floor
   const fin = (mat, x0, x1, z0, z1, tile) => {
@@ -615,7 +619,6 @@ function pitched(world, k, P, o) {
     // house wall on its east side and gets no fascia there)
     const overhangs = s < 0 ? true : (o.eastEave !== false);
     if (!overhangs) continue;
-    const wallFace = s < 0 ? o.wallX0 : o.wallX1;
     const uMid = Math.abs(edge - o.rx) - 0.4;
     const xMid = o.rx + s * uMid;
     const yMid = o.ry - o.drop * uMid - vt / 2;
@@ -626,7 +629,6 @@ function pitched(world, k, P, o) {
     const fx = edge + s * 0.06;
     const fTop = o.ry - o.drop * Math.abs(fx - o.rx);
     k.box(0.07, 0.34, lenZ, P.board, fx, fTop - 0.15, cz, { tile: 0.7 });
-    void wallFace;
   }
 
   // closed gable ends
@@ -824,8 +826,8 @@ function lighting(world, k, P, R) {
     [[40.3, -30.4], [40.3, -26.5], [44.9, -30.4], [44.9, -26.5]], 'flush', bright, { i: 12 });
   set(R.landing, C1, [[49.6, -35.6], [49.6, -28.4]],
     [[47.0, -31.5], [51.1, -31.5], [51.1, -26.5], [47.0, -26.5]], 'flush', warm, { i: 13 });
-  set(R.bed1, C1, [[42.5, -22.6], [48.4, -20.0]],
-    [[40.2, -24.8], [40.2, -17.4], [45.0, -17.0], [46.6, -24.4]], 'flush', warm, { i: 13 });
+  set(R.bed1, C1, [[42.5, -22.6], [44.8, -18.4]],
+    [[40.2, -24.8], [40.2, -17.4], [45.6, -17.0], [49.6, -23.6]], 'flush', warm, { i: 13 });
   set(R.ensuite, C1, [[49.5, -18.9]],
     [[48.2, -20.7], [50.9, -20.7], [48.2, -17.1], [50.9, -17.1]], 'flush', bright, { i: 12 });
 
@@ -838,9 +840,9 @@ function lighting(world, k, P, R) {
 
   // outside: a lantern over each outside door and a pair of floods on the
   // garage, which is the face that looks at the drive
-  outLamp(k, world, 38.86, F0 + 2.30, -22.0, 0.34, 0.06);
+  outLamp(k, 38.86, F0 + 2.30, -22.0, 0.34);
   world.addLight({ pos: V(38.3, F0 + 2.2, -22.0), color: 0xffd39a, intensity: 26, decay: 1.8, distance: 12, outdoor: true, night: true });
-  outLamp(k, world, 52.14, F0 + 2.50, -19.6, 0.34, 0.06);
+  outLamp(k, 52.14, F0 + 2.50, -19.6, 0.34);
   world.addLight({ pos: V(52.7, F0 + 2.4, -19.6), color: 0xffd39a, intensity: 26, decay: 1.8, distance: 12, outdoor: true, night: true });
   for (const z of [-34.6, -27.4]) {
     k.box(0.30, 0.16, 0.24, P.black, GX0 - 0.16, 3.55, z, { tile: 0.3 });
@@ -849,11 +851,10 @@ function lighting(world, k, P, R) {
   }
 }
 
-function outLamp(k, world, x, y, z, w, d) {
+function outLamp(k, x, y, z, w) {
   k.box(0.06, 0.36, 0.16, k.M.get('blackMetal'), x, y + 0.20, z, { tile: 0.3 });
   k.box(w, 0.34, w, k.M.get('blackMetal'), x, y, z, { tile: 0.3 });
   k.box(w - 0.10, 0.26, w - 0.10, k.M.emissive(0xffcf8a, 2.0), x, y, z, { tile: 0.2 });
-  void d;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -1036,7 +1037,8 @@ function garageShell(world, k, P, win) {
 
   runX(world, k, GZ0 + GO / 2, GX0, GX1, y, h, GO, P.stone, N, { col: false, tile: 2.4 });
   runX(world, k, GZ0 + GO + GI / 2, GX0, GX1, y, h, GI, P.garageWall, N, { col: false });
-  runX(world, k, GZ0 + GE / 2, GX0, GX1, y, h, GE + 0.02, P.garageWall, N, { tile: 2.2 });
+  wallCols(world, 34.5, GZ0 + GE / 2, GX1 - GX0, h, GE + 0.02,
+    localOpenings(N, 34.5, false), 0, y);
 
   runX(world, k, GZ1 - GO / 2, GX0, GX1, y, h, GO, P.stone, S, { col: false, tile: 2.4 });
   runX(world, k, GZ1 - GO - GI / 2, GX0, GX1, y, h, GI, P.garageWall, S, { col: false });
@@ -1087,12 +1089,10 @@ function dressLiving(world, k, P, R) {
   // a mantel that is lived on
   k.box(0.16, 0.26, 0.10, M.paint(0xc9d4cb, 0.5, 'ghMantelPot'), 44.6, F0 + 1.63, -16.86, { tile: 0.2 });
   photoFrame(k, 46.3, F0 + 1.50, -16.86, { rotY: Math.PI, seed: 1 });
-  wallClock(k, 51.58, F0 + 2.15, -19.6 - 2.9, -Math.PI / 2, { hour: 8, minute: 20 });
-  lightSwitch(k, R, IX0 + 0.06, F0 + 1.15, -21.3, { rotY: Math.PI / 2 });
+  lightSwitch(k, R, IX0 + 0.06, F0 + 1.15, -21.25, { rotY: Math.PI / 2 });
 }
 
 function dressDining(world, k, P, R) {
-  const M = k.M;
   const tx = 45.4, tz = -25.30;
   k.box(2.30, 0.07, 1.10, P.walnut, tx, F0 + 0.75, tz, { tile: 1.0 });
   k.box(2.00, 0.10, 0.86, P.walnut, tx, F0 + 0.66, tz, { tile: 1.0 });
@@ -1117,10 +1117,10 @@ function dressDining(world, k, P, R) {
   fruitBowl(k, 39.72, F0 + 0.91, -25.60, {});
   photoFrame(k, 39.72, F0 + 0.91, -26.30, { rotY: Math.PI / 2, seed: 3 });
   artwork(k, 39.42, F0 + 2.05, -24.6, 1.2, 0.85, Math.PI / 2, 0x6b5b45);
-  wallShelf(k, 51.55, F0 + 1.75, -26.9, { rotY: -Math.PI / 2, w: 1.1, items: 3 });
+  wallShelf(k, 51.55, F0 + 1.75, -26.8, { rotY: -Math.PI / 2, w: 1.1, items: 3 });
   plant(k, 51.0, F0, -23.6, 1.05);
   curtains(k, IX1 - 0.22, CUR0, -25.2, 2.1, -Math.PI / 2, 0xa8b2bb);
-  void M; void R; void world;
+  void R; void world;
 }
 
 function dressKitchen(world, k, P, R) {
@@ -1138,10 +1138,11 @@ function dressKitchen(world, k, P, R) {
   cookPot(k, 44.40, F0 + 0.95, back - 0.16, {});
   fruitBowl(k, 46.10, F0 + 0.93, back + 0.02, {});
   bookStack(k, 46.90, F0 + 0.93, back + 0.02, { n: 2, w: 0.2 });
-  wallShelf(k, 51.55, F0 + 1.80, -28.0, { rotY: -Math.PI / 2, w: 1.0, items: 2 });
+  wallShelf(k, 39.44, F0 + 1.80, -28.10, { rotY: Math.PI / 2, w: 1.0, items: 2 });
   wastebasket(k, 47.30, F0, -30.55, { metal: true });
-  plant(k, 40.10, F0, -27.90, 0.95);
-  lightSwitch(k, R, 48.10, F0 + 1.15, -31.06, { rotY: Math.PI });
+  plant(k, 40.20, F0, -27.85, 0.95);
+  wallClock(k, 50.70, F0 + 2.30, -31.09, 0, { hour: 8, minute: 20 });
+  lightSwitch(k, R, 47.62, F0 + 1.15, -31.09, { rotY: 0 });
   void P; void world;
 }
 
@@ -1157,7 +1158,7 @@ function dressHall(world, k, P, R) {
   artwork(k, 51.58, F0 + 2.05, -31.9, 0.9, 0.7, -Math.PI / 2, 0x5a6b57);
   plant(k, 51.20, F0, -31.60, 1.0);
   curtains(k, IX1 - 0.22, CUR0, -34.5, 1.5, -Math.PI / 2, 0xc9bcae);
-  lightSwitch(k, R, 47.90, F0 + 1.15, -31.20 - 0.09, { rotY: 0 });
+  lightSwitch(k, R, 47.60, F0 + 1.15, -31.31, { rotY: Math.PI });
   void P; void world;
 }
 
@@ -1168,20 +1169,20 @@ function dressShowerRoom(world, k, P, R) {
   laundryBasket(k, 45.30, F0, -34.70, {});
   wastebasket(k, 44.10, F0, -34.60, {});
   // towel rail and a folded stack
-  k.box(0.05, 0.05, 0.9, P.chrome, IX0 + 0.10, F0 + 1.45, -35.9, { tile: 0.3 });
+  k.box(0.05, 0.05, 0.9, P.chrome, IX0 + 0.10, F0 + 1.45, -35.35, { tile: 0.3 });
   for (const dz of [-0.25, 0.25]) {
-    k.box(0.10, 0.62, 0.34, k.M.paint(0xe8eef2, 0.95, 'ghTowel'), IX0 + 0.14, F0 + 1.16, -35.9 + dz, { tile: 0.4 });
+    k.box(0.10, 0.62, 0.34, k.M.paint(0xe8eef2, 0.95, 'ghTowel'), IX0 + 0.14, F0 + 1.16, -35.35 + dz, { tile: 0.4 });
   }
-  k.box(0.24, 0.16, 0.34, k.M.paint(0xe8eef2, 0.95, 'ghTowel'), 44.90, F0 + 0.60, -36.20, { tile: 0.3 });
+  k.box(0.24, 0.16, 0.34, k.M.paint(0xe8eef2, 0.95, 'ghTowel'), 44.90, F0 + 0.87, -37.54, { tile: 0.3 });
   rug(k, 42.60, F0, -35.40, 1.3, 0.8, 0xcbd6d8);
-  lightSwitch(k, R, 45.72, F0 + 1.15, -35.30, { rotY: -Math.PI / 2 });
+  lightSwitch(k, R, 45.72, F0 + 1.15, -35.10, { rotY: -Math.PI / 2 });
   void world;
 }
 
 function dressUtility(world, k, P, R) {
   const M = k.M;
   const app = M.paint(0xeceef0, 0.42, 'ghAppliance');
-  const back = -33.80;
+  const back = -33.72;
   for (const x of [40.10, 40.85]) {
     k.box(0.66, 0.86, 0.62, app, x, F0 + 0.43, back, { tile: 0.5 });
     k.box(0.36, 0.36, 0.03, M.get('carGlass'), x, F0 + 0.46, back + 0.32, { tile: 0.3 });
@@ -1200,19 +1201,19 @@ function dressUtility(world, k, P, R) {
   }
   for (let i = 0; i < 7; i++) {
     k.box(0.22, 0.26, 0.20, M.solid([0x6ab04c, 0x2f81ff, 0xf0b429, 0xd0342c][i % 4], 0.6),
-      40.00 + i * 0.36, F0 + 1.71, back - 0.10, { tile: 0.2 });
-    k.box(0.24, 0.18, 0.22, M.paint(0x9a8b78, 0.9, 'ghSack'), 40.00 + i * 0.36, F0 + 2.12, back - 0.10, { tile: 0.2 });
+      40.20 + i * 0.36, F0 + 1.71, back - 0.10, { tile: 0.2 });
+    k.box(0.24, 0.18, 0.22, M.paint(0x9a8b78, 0.9, 'ghSack'), 40.20 + i * 0.36, F0 + 2.12, back - 0.10, { tile: 0.2 });
   }
   k.box(0.56, 0.86, 0.36, M.paint(0xf0f2f4, 0.4, 'ghBoiler'), 44.90, F0 + 1.72, back - 0.02, { tile: 0.4 });
   k.box(0.12, 0.70, 0.12, P.chrome, 44.90, F0 + 2.50, back - 0.02, { tile: 0.3 });
-  laundryBasket(k, 44.60, F0, -32.10, {});
-  coatHooks(k, 39.44, F0 + 1.70, -33.10, { rotY: Math.PI / 2, w: 1.2, n: 3 });
+  laundryBasket(k, 43.60, F0, -31.60, {});
+  coatHooks(k, 45.75, F0 + 1.70, -33.65, { rotY: -Math.PI / 2, w: 0.8, n: 3 });
   for (let i = 0; i < 3; i++) {
     k.box(0.16, 0.28, 0.30, M.solid([0x2f4f6b, 0x3f5c3a, 0x6b5330][i], 0.7),
-      39.70, F0 + 0.14, -32.4 + i * 0.26, { tile: 0.2 });
+      39.70, F0 + 0.14, -31.90 + i * 0.26, { tile: 0.2 });
   }
   wastebasket(k, 45.30, F0, -31.55, { metal: true });
-  lightSwitch(k, R, 45.72, F0 + 1.15, -32.05, { rotY: -Math.PI / 2 });
+  lightSwitch(k, R, 45.72, F0 + 1.15, -31.50, { rotY: -Math.PI / 2 });
   void world;
 }
 
@@ -1225,17 +1226,17 @@ function dressBedTwo(world, k, P, R) {
   tv(k, 43.60, F1, -31.36, { rotY: Math.PI, w: 1.2, h: 1.55, wall: true });
   desk(k, 39.78, F1, -34.50, { rotY: Math.PI / 2, w: 1.4, d: 0.68 });
   officeChair(k, 40.85, F1, -34.50, { rotY: -Math.PI / 2, color: 0x6b7a54 });
-  tableLamp(k, 39.78, -35.05, F1 + 0.79, {});
-  bookStack(k, 39.78, F1 + 0.77, -33.95, { n: 3, w: 0.22 });
+  tableLamp(k, 39.78, -35.05, F1 + 0.765, {});
+  bookStack(k, 39.78, F1 + 0.765, -33.95, { n: 3, w: 0.22 });
   rug(k, 42.60, F1, -34.60, 3.2, 2.6, 0x6a7684);
   bookshelf(k, 39.62, F1, -36.60, { rotY: Math.PI / 2, w: 1.3, h: 1.7 });
-  floorLamp(k, 44.90, F1, -32.60, { h: 1.5 });
+  floorLamp(k, 44.60, F1, -33.40, { h: 1.5 });
   artwork(k, 42.60, F1 + 2.05, -31.24, 1.1, 0.8, Math.PI, 0x37485c);
   photoFrame(k, 43.60, F1 + 0.92, -31.82, { rotY: Math.PI, seed: 0 });
   wastebasket(k, 40.90, F1, -33.30, {});
   curtains(k, 41.2, CUR1, IZ0 + 0.22, 1.9, 0, 0xbfb4a6);
   curtains(k, 44.0, CUR1, IZ0 + 0.22, 1.7, 0, 0xbfb4a6);
-  lightSwitch(k, R, 45.74, F1 + 1.15, -31.90, { rotY: -Math.PI / 2 });
+  lightSwitch(k, R, 45.74, F1 + 1.15, -31.60, { rotY: -Math.PI / 2 });
   void P; void world;
 }
 
@@ -1259,7 +1260,7 @@ function dressFamilyBath(world, k, P, R) {
     k.box(0.08, 0.18, 0.08, M.solid([0x6ab04c, 0x3f6ea8, 0xd8e3ea, 0xb56fa8][i], 0.5),
       39.60, F1 + 1.67, -27.15 + i * 0.26, { tile: 0.1 });
   }
-  lightSwitch(k, R, 45.74, F1 + 1.15, -29.20, { rotY: -Math.PI / 2 });
+  lightSwitch(k, R, 45.74, F1 + 1.15, -29.45, { rotY: -Math.PI / 2 });
   void world;
 }
 
@@ -1277,7 +1278,7 @@ function dressLanding(world, k, P, R) {
   wastebasket(k, 51.20, F1, -26.10, {});
   curtains(k, IX1 - 0.22, CUR1, -35.0, 1.7, -Math.PI / 2, 0xc9bcae);
   curtains(k, IX1 - 0.22, CUR1, -29.0, 1.7, -Math.PI / 2, 0xc9bcae);
-  lightSwitch(k, R, 48.10, F1 + 1.15, -25.72, { rotY: Math.PI });
+  lightSwitch(k, R, 48.05, F1 + 1.15, -25.80, { rotY: Math.PI });
   void P; void world;
 }
 
@@ -1293,10 +1294,10 @@ function dressBedOne(world, k, P, R) {
   armchair(k, 40.45, F1, -18.60, { rotY: Math.PI / 2, color: 0x7b8a92 });
   sideTable(k, 40.60, F1, -17.40, { w: 0.5, lamp: true });
   floorLamp(k, 41.60, F1, -19.80, { h: 1.55 });
-  bookshelf(k, 51.40, F1, -23.60, { rotY: -Math.PI / 2, w: 1.5, h: 1.8 });
-  desk(k, 50.90, F1, -19.60, { rotY: -Math.PI / 2, w: 1.4, d: 0.68 });
-  officeChair(k, 49.90, F1, -19.60, { rotY: Math.PI / 2, color: 0x37485c });
-  bookStack(k, 50.90, F1 + 0.77, -20.10, { n: 3, w: 0.22 });
+  bookshelf(k, 50.30, F1, -25.42, { rotY: 0, w: 1.5, h: 1.8 });
+  desk(k, 51.20, F1, -22.60, { rotY: -Math.PI / 2, w: 1.4, d: 0.68 });
+  officeChair(k, 50.10, F1, -22.60, { rotY: Math.PI / 2, color: 0x37485c });
+  bookStack(k, 51.20, F1 + 0.765, -23.10, { n: 3, w: 0.22 });
   photoFrame(k, 45.84, F1 + 0.92, -16.85, { rotY: Math.PI, seed: 2 });
   artwork(k, 39.42, F1 + 2.10, -21.90, 1.2, 0.85, Math.PI / 2, 0x4b5a68);
   wastebasket(k, 44.60, F1, -19.20, {});
@@ -1304,19 +1305,19 @@ function dressBedOne(world, k, P, R) {
   curtains(k, 41.4, CUR1, IZ1 - 0.22, 2.0, Math.PI, 0xc9bcae);
   curtains(k, IX0 + 0.22, CUR1, -18.6, 1.9, Math.PI / 2, 0xc9bcae);
   curtains(k, IX0 + 0.22, CUR1, -22.5, 1.7, Math.PI / 2, 0xc9bcae);
-  lightSwitch(k, R, 48.10, F1 + 1.15, -25.48, { rotY: 0 });
+  lightSwitch(k, R, 48.05, F1 + 1.15, -25.56, { rotY: 0 });
   void P; void world;
 }
 
 function dressEnsuite(world, k, P, R) {
   vanity(k, 50.20, F1, -21.05, { rotY: 0, w: 1.5 });
   shower(k, 48.30, F1, -17.05, { w: 1.4, d: 1.4, rotY: Math.PI });
-  toilet(k, 51.35, F1, -19.40, { rotY: -Math.PI / 2 });
+  toilet(k, 51.32, F1, -19.40, { rotY: -Math.PI / 2 });
   wastebasket(k, 47.85, F1, -20.70, {});
   rug(k, 49.60, F1, -19.40, 1.2, 0.8, 0xd6dee2);
   k.box(0.05, 0.05, 0.90, P.chrome, 47.62, F1 + 1.40, -18.90, { tile: 0.3 });
   k.box(0.10, 0.62, 0.34, k.M.paint(0xe8eef2, 0.95, 'ghTowel'), 47.66, F1 + 1.11, -18.90, { tile: 0.4 });
-  lightSwitch(k, R, 47.56, F1 + 1.15, -21.05, { rotY: Math.PI / 2 });
+  lightSwitch(k, R, 47.53, F1 + 1.15, -20.20, { rotY: Math.PI / 2 });
   void world;
 }
 
@@ -1338,7 +1339,7 @@ function dressGarage(world, k, P, R) {
   const tools = [0x8a8f96, 0x6b5330, 0x2f81ff, 0xd0342c, 0xf0b429];
   for (let i = 0; i < 12; i++) {
     const tz = b0 + 0.35 + i * ((b1 - b0 - 0.7) / 11);
-    k.box(0.05, 0.30 + (i % 3) * 0.08, 0.07, M.solid(tools[i % 4], 0.6), GIX1 - 0.08, F0 + 1.72, tz, { tile: 0.2 });
+    k.box(0.05, 0.30 + (i % 3) * 0.08, 0.07, M.solid(tools[i % 5], 0.6), GIX1 - 0.08, F0 + 1.72, tz, { tile: 0.2 });
   }
   // shelving north of the bench
   for (const y of [0.5, 1.05, 1.60, 2.15]) {
@@ -1351,18 +1352,19 @@ function dressGarage(world, k, P, R) {
     k.box(0.30, 0.22, 0.28, M.solid([0xd0342c, 0x2f81ff, 0xf0b429, 0x6ab04c, 0x8a5b3a][i % 5], 0.6),
       GIX1 - 0.24, F0 + yy, -36.5 + (i % 7) * 0.44, { tile: 0.2 });
   }
-  // a tool chest, tyres, a bike and a bin down the middle of the far bay
-  k.box(0.70, 0.95, 1.20, M.paint(0xb3231f, 0.45, 'ghToolChest'), 37.80, F0 + 0.48, -24.90, { tile: 0.5 });
-  for (let i = 0; i < 4; i++) k.box(0.66, 0.06, 1.10, P.black, 37.80, F0 + 0.24 + i * 0.20, -24.86, { tile: 0.3 });
-  k.col(0.74, 1.00, 1.24, 37.80, F0 + 0.48, -24.90);
+  // a tool chest, tyres, a bike and a bin, all pushed into the corners the
+  // cars do not use
+  k.box(0.70, 0.95, 1.20, M.paint(0xb3231f, 0.45, 'ghToolChest'), 37.80, F0 + 0.48, -25.10, { tile: 0.5 });
+  for (let i = 0; i < 4; i++) k.box(0.66, 0.06, 1.10, P.black, 37.80, F0 + 0.24 + i * 0.20, -25.06, { tile: 0.3 });
+  k.col(0.74, 1.00, 1.24, 37.80, F0 + 0.48, -25.10);
   for (let i = 0; i < 3; i++) {
-    k.box(0.66, 0.22, 0.66, M.get('rubber'), 31.30, F0 + 0.11 + i * 0.22, -37.10, { tile: 0.3 });
+    k.box(0.66, 0.22, 0.66, M.get('rubber'), 31.40, F0 + 0.11 + i * 0.22, -37.30, { tile: 0.3 });
   }
-  k.col(0.70, 0.70, 0.70, 31.30, F0 + 0.35, -37.10);
-  bikeAgainstWall(k, P, 31.10, F0, -25.10);
-  k.box(0.56, 0.90, 0.56, M.paint(0x3b4750, 0.6, 'ghBin'), 30.90, F0 + 0.45, -37.00, { tile: 0.4 });
-  k.box(0.60, 0.06, 0.60, M.paint(0x2a333a, 0.6, 'ghBinLid'), 30.90, F0 + 0.93, -37.00, { tile: 0.3 });
-  k.col(0.60, 0.96, 0.60, 30.90, F0 + 0.48, -37.00);
+  k.col(0.70, 0.70, 0.70, 31.40, F0 + 0.35, -37.30);
+  bikeAgainstWall(k, P, 31.10, F0, -25.40);
+  k.box(0.56, 0.90, 0.56, M.paint(0x3b4750, 0.6, 'ghBin'), 30.80, F0 + 0.45, -36.30, { tile: 0.4 });
+  k.box(0.60, 0.06, 0.60, M.paint(0x2a333a, 0.6, 'ghBinLid'), 30.80, F0 + 0.93, -36.30, { tile: 0.3 });
+  k.col(0.60, 0.96, 0.60, 30.80, F0 + 0.48, -36.30);
   // bay markings on the slab
   for (const z of [-34.26, -31.00, -27.74]) {
     k.box(6.4, 0.012, 0.10, M.paint(0xe8e4d6, 0.8, 'ghBayLine'), 34.2, F0 + 0.006, z, { tile: 0.6 });
