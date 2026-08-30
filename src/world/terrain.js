@@ -46,6 +46,7 @@ const LEVELLED = [
   { x0: 7, x1: 45, z0: 48, z1: 77, rx: 26, rz: 62 },      // skate park
   { x0: 12, x1: 32, z0: 30, z1: 46, rx: 22, rz: 40 },     // picnic area
   { x0: -45, x1: -31, z0: 18, z1: 34, rx: -38, rz: 26 },  // shed
+  { x0: 17, x1: 53, z0: -41, z1: -15, rx: 34, rz: -28 },  // guest house, garage, forecourt
 ];
 const FEATHER = 5;
 const levelY = LEVELLED.map(() => null);
@@ -262,9 +263,16 @@ function plantTrees(world) {
     if (r < 110) world.collider(1.0, 5 * s, 1.0, x, y + 2.5 * s, z);
   }
 
-  // ornamental trees close to the house (none near the shed — a canopy
-  // through its roof reads terribly from inside)
-  for (const [x, z] of [[-38, -20], [38, -20], [-42, 12], [40, 22], [-34, 46], [34, 46]]) {
+  // Ornamental trees close to the house (none near the shed or the guest
+  // house — a canopy through a roof reads terribly from inside). The one that
+  // used to stand at (38, -20) had the guest house built around it: its 4.4 m
+  // crown punched 1.2 m through that west wall and its trunk collider stood
+  // 0.55 m off it, so it has moved south into the guest garden.
+  //
+  // Note this is a literal list placed AFTER the scatter loop, so editing it
+  // has no effect on the RNG stream. Widening the scatter's own keepOut, by
+  // contrast, would re-roll all four hundred remaining trees.
+  for (const [x, z] of [[-38, -20], [42, -6], [-42, 12], [40, 22], [-34, 46], [34, 46]]) {
     const y = groundHeight(x, z);
     B.box(0.45, 3.2, 0.45, bark, x, y + 1.6, z, { tile: 1 });
     for (let t = 0; t < 3; t++) {

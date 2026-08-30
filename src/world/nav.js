@@ -85,7 +85,15 @@ export function buildNav(world) {
   // straight into whatever room is on the other side of them.
   const rooms = [];
   for (const R of world.rooms) {
-    if (!R.floor || !spine[R.floor] || R.type === 'shed') continue;
+    // A detached building's rooms must never be wired to the mansion's own
+    // gallery spine: the guest house is forty metres away through two
+    // exterior walls, and the family would path straight through them. Such
+    // buildings carry their own nodes and links. This tests the room's
+    // position rather than trusting a flag, so a new outbuilding cannot join
+    // the spine by forgetting to set one.
+    const detached = R.detached || R.type === 'shed'
+      || R.x < HOUSE.x0 || R.x > HOUSE.x1 || R.z < HOUSE.z0 || R.z > HOUSE.z1;
+    if (!R.floor || !spine[R.floor] || detached) continue;
     if (R.type === 'corridor') {
       // the galleries *are* the spine; one node on it is enough
       const n = world.navNode(`r_${R.name}`, 0, R.y, 0, ['room', 'corridor']);
@@ -238,6 +246,12 @@ export function buildNav(world) {
     out_firepit: spot('firePit', 22, 0, 45),
     out_skate: spot('skatepark', 20, 0, 55),
     out_bowl: spot('skateBowl', 20, 0, 60),
+    // out to the guest house, by way of the apron's north-east corner: the
+    // direct chord from out_drive skims the lamp post at (13.5, -22) and the
+    // string-pull's line test keeps failing on it
+    out_apronNE: [25, 0, -25],
+    out_guestdrive: [24, 0, -31],
+    out_guestcourt: [35, 0, -20],
   };
   const nodes = {};
   for (const n in outside) {
@@ -276,6 +290,16 @@ export function buildNav(world) {
   link('out_picnic', 'out_firepit');
   link('out_picnic', 'out_skate');
   link('out_skate', 'out_bowl');
+  // the guest house sits off the north-east corner; its forecourt runs into
+  // the parking apron, so the walk out to it starts at the drive
+  link('out_drive', 'out_apronNE');
+  link('out_apronNE', 'out_guestdrive');
+  link('out_guestdrive', 'out_guestcourt');
+  const byName = (n) => world.nav.nodes.find((x) => x.name === n);
+  const ghFront = byName('gh_front');
+  if (ghFront) world.navLink(nodes.out_guestcourt, ghFront);
+  const ghGarage = byName('gh_garage');
+  if (ghGarage) world.navLink(nodes.out_guestdrive, ghGarage);
 
   // front door ties to the foyer, back doors to the rooms they open from
   const room = (name) => world.rooms.find((r) => r.name === name)?.navNode;

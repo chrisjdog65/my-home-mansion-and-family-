@@ -31430,8 +31430,16 @@ var KEEPOUT = [
   // shed
   { x0: 0, x1: 12, z0: -60, z1: -13 },
   // straight drive
-  { x0: 1, x1: 28, z0: -28, z1: -13 }
+  { x0: 1, x1: 28, z0: -28, z1: -13 },
   // parking apron
+  // The guest house, kept as three rectangles rather than one box so the L's
+  // courtyard between the garage and the front door keeps its lawn.
+  { x0: 37, x1: 54, z0: -40, z1: -14 },
+  // guest house + skirt
+  { x0: 28, x1: 41, z0: -40, z1: -22 },
+  // its garage + skirt
+  { x0: 17, x1: 31, z0: -41, z1: -23 }
+  // the forecourt
 ];
 var KEEPOUT_R = [
   { x: -22, z: 48, r: 15 },
@@ -31563,8 +31571,10 @@ var LEVELLED = [
   // skate park
   { x0: 12, x1: 32, z0: 30, z1: 46, rx: 22, rz: 40 },
   // picnic area
-  { x0: -45, x1: -31, z0: 18, z1: 34, rx: -38, rz: 26 }
+  { x0: -45, x1: -31, z0: 18, z1: 34, rx: -38, rz: 26 },
   // shed
+  { x0: 17, x1: 53, z0: -41, z1: -15, rx: 34, rz: -28 }
+  // guest house, garage, forecourt
 ];
 var FEATHER = 5;
 var levelY = LEVELLED.map(() => null);
@@ -31749,7 +31759,7 @@ function plantTrees(world) {
     }
     if (r < 110) world.collider(1, 5 * s, 1, x, y + 2.5 * s, z);
   }
-  for (const [x, z] of [[-38, -20], [38, -20], [-42, 12], [40, 22], [-34, 46], [34, 46]]) {
+  for (const [x, z] of [[-38, -20], [42, -6], [-42, 12], [40, 22], [-34, 46], [34, 46]]) {
     const y = groundHeight(x, z);
     B2.box(0.45, 3.2, 0.45, bark, x, y + 1.6, z, { tile: 1 });
     for (let t = 0; t < 3; t++) {
@@ -33051,6 +33061,11 @@ function gallery(k, R, rng) {
   }
 }
 
+// src/world/guesthouse.js
+function buildGuestHouse(world) {
+  void world;
+}
+
 // src/world/backyard.js
 var V4 = (x, y, z) => new Vector3(x, y, z);
 function buildBackyard(world) {
@@ -33066,6 +33081,7 @@ function buildBackyard(world) {
   shed(world, k, M, B2);
   driveway(world, k, M, B2);
   fencing(world, k, M, B2, rng);
+  buildGuestHouse(world);
   return k;
 }
 function terrace(world, k, M, B2) {
@@ -33669,6 +33685,18 @@ function driveway(world, k, M, B2) {
   }
   B2.box(26, 0.16, 14, asphalt, 14, 0.02, -20, { tile: 3 });
   world.collider(26, 0.2, 14, 14, 0, -20);
+  for (const r of rectSubtract(
+    { x0: 18, x1: 30, z0: -40, z1: -24 },
+    [{ x0: 1, x1: 27, z0: -27, z1: -13 }]
+  )) {
+    const cw = r.x1 - r.x0, cd = r.z1 - r.z0;
+    B2.box(cw, 0.16, cd, asphalt, (r.x0 + r.x1) / 2, 0.02, (r.z0 + r.z1) / 2, { tile: 3 });
+    world.collider(cw, 0.2, cd, (r.x0 + r.x1) / 2, 0, (r.z0 + r.z1) / 2);
+  }
+  for (const [cx2, cz2, cw, cd] of [[24, -40.1, 12.4, 0.35], [17.8, -33.9, 0.35, 12.6]]) {
+    B2.box(cw, 0.22, cd, M.get("stone"), cx2, 0.07, cz2, { tile: 0.8 });
+    world.collider(cw, 0.24, cd, cx2, 0.07, cz2);
+  }
   for (let i = 0; i < 28; i++) {
     const a = i / 28 * Math.PI * 2;
     B2.box(6.2, 0.16, 6.2, asphalt, -8 + Math.cos(a) * 9, 0.02, -26 + Math.sin(a) * 9, { rotY: -a, tile: 3 });
@@ -34454,7 +34482,8 @@ function buildNav(world) {
   };
   const rooms = [];
   for (const R of world.rooms) {
-    if (!R.floor || !spine[R.floor] || R.type === "shed") continue;
+    const detached = R.detached || R.type === "shed" || R.x < HOUSE.x0 || R.x > HOUSE.x1 || R.z < HOUSE.z0 || R.z > HOUSE.z1;
+    if (!R.floor || !spine[R.floor] || detached) continue;
     if (R.type === "corridor") {
       const n = world.navNode(`r_${R.name}`, 0, R.y, 0, ["room", "corridor"]);
       n.room = R;
@@ -34593,7 +34622,13 @@ function buildNav(world) {
     out_picnic: spot("picnic", 22, 0, 37),
     out_firepit: spot("firePit", 22, 0, 45),
     out_skate: spot("skatepark", 20, 0, 55),
-    out_bowl: spot("skateBowl", 20, 0, 60)
+    out_bowl: spot("skateBowl", 20, 0, 60),
+    // out to the guest house, by way of the apron's north-east corner: the
+    // direct chord from out_drive skims the lamp post at (13.5, -22) and the
+    // string-pull's line test keeps failing on it
+    out_apronNE: [25, 0, -25],
+    out_guestdrive: [24, 0, -31],
+    out_guestcourt: [35, 0, -20]
   };
   const nodes = {};
   for (const n in outside) {
@@ -34628,6 +34663,14 @@ function buildNav(world) {
   link("out_picnic", "out_firepit");
   link("out_picnic", "out_skate");
   link("out_skate", "out_bowl");
+  link("out_drive", "out_apronNE");
+  link("out_apronNE", "out_guestdrive");
+  link("out_guestdrive", "out_guestcourt");
+  const byName = (n) => world.nav.nodes.find((x) => x.name === n);
+  const ghFront = byName("gh_front");
+  if (ghFront) world.navLink(nodes.out_guestcourt, ghFront);
+  const ghGarage = byName("gh_garage");
+  if (ghGarage) world.navLink(nodes.out_guestdrive, ghGarage);
   const room = (name) => world.rooms.find((r) => r.name === name)?.navNode;
   const foyer2 = room("Grand Foyer");
   if (foyer2) world.navLink(nodes.out_porch, foyer2);

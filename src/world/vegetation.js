@@ -17,6 +17,11 @@ const KEEPOUT = [
   { x0: -47, x1: -29, z0: 16, z1: 36 },       // shed
   { x0: 0, x1: 12, z0: -60, z1: -13 },        // straight drive
   { x0: 1, x1: 28, z0: -28, z1: -13 },        // parking apron
+  // The guest house, kept as three rectangles rather than one box so the L's
+  // courtyard between the garage and the front door keeps its lawn.
+  { x0: 37, x1: 54, z0: -40, z1: -14 },       // guest house + skirt
+  { x0: 28, x1: 41, z0: -40, z1: -22 },       // its garage + skirt
+  { x0: 17, x1: 31, z0: -41, z1: -23 },       // the forecourt
 ];
 const KEEPOUT_R = [
   { x: -22, z: 48, r: 15 },                   // pond

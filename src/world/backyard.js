@@ -8,6 +8,7 @@ import { rectSubtract } from './mansion.js';
 import { makeRng, clamp, smoothstep } from '../core/rng.js';
 import { groundHeight } from './terrain.js';
 import { Kit, diningChair, armchair, plant } from './furniture.js';
+import { buildGuestHouse } from './guesthouse.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
@@ -25,6 +26,7 @@ export function buildBackyard(world) {
   shed(world, k, M, B);
   driveway(world, k, M, B);
   fencing(world, k, M, B, rng);
+  buildGuestHouse(world);
   return k;
 }
 
@@ -692,6 +694,21 @@ function driveway(world, k, M, B) {
   // apron in front of the garage
   B.box(26, 0.16, 14, asphalt, 14, 0.02, -20, { tile: 3 });
   world.collider(26, 0.2, 14, 14, 0.0, -20);
+  // The forecourt that runs on to the guest house garage. It has to meet the
+  // apron edge to edge — laid as one rectangle it would overlap it between
+  // z -27 and -24 and the two coplanar surfaces would z-fight — so the part
+  // the apron already covers is subtracted out and the join is a butt seam.
+  for (const r of rectSubtract({ x0: 18, x1: 30, z0: -40, z1: -24 },
+    [{ x0: 1, x1: 27, z0: -27, z1: -13 }])) {
+    const cw = r.x1 - r.x0, cd = r.z1 - r.z0;
+    B.box(cw, 0.16, cd, asphalt, (r.x0 + r.x1) / 2, 0.02, (r.z0 + r.z1) / 2, { tile: 3 });
+    world.collider(cw, 0.2, cd, (r.x0 + r.x1) / 2, 0.0, (r.z0 + r.z1) / 2);
+  }
+  // a kerb down the two open sides so it reads as a made surface
+  for (const [cx, cz, cw, cd] of [[24, -40.1, 12.4, 0.35], [17.8, -33.9, 0.35, 12.6]]) {
+    B.box(cw, 0.22, cd, M.get('stone'), cx, 0.07, cz, { tile: 0.8 });
+    world.collider(cw, 0.24, cd, cx, 0.07, cz);
+  }
   // circular turnaround
   for (let i = 0; i < 28; i++) {
     const a = (i / 28) * Math.PI * 2;
