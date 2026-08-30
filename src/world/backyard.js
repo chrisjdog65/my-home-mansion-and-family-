@@ -177,6 +177,19 @@ function hotTub(world, k, M, B) {
     B.box(sw, 0.3, sd, M.get('paver'), cxp + sx, -0.14, czp + sz, { tile: 1.2 });
     world.collider(sw, 0.3, sd, cxp + sx, -0.14, czp + sz);
   }
+  // A square frame cannot reach the corners a round tub leaves open: on the
+  // diagonal the frame's inner edge stands off at 2.76 while the shell only
+  // reaches 2.28, so four wedges stayed open. These four sit ON the diagonal,
+  // turned to it, spanning 1.95..2.95 — under the shell at the near end and
+  // still inside the deck hole at the far one.
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI / 4 + i * Math.PI / 2;
+    B.box(1.5, 0.3, 1.0, M.get('paver'),
+      cxp + Math.cos(a) * 2.45, -0.14, czp + Math.sin(a) * 2.45,
+      { rotY: Math.PI / 2 - a, tile: 1.2 });
+    world.collider(1.5, 0.3, 1.0,
+      cxp + Math.cos(a) * 2.45, -0.14, czp + Math.sin(a) * 2.45, Math.PI / 2 - a);
+  }
   B.box(4.6, 0.3, 4.6, M.get('poolTile'), cxp, -0.9, czp, { tile: 0.8 });
   world.collider(4.6, 0.3, 4.6, cxp, -0.9, czp);
   // bench seat inside

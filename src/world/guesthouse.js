@@ -1654,10 +1654,12 @@ function bedOneSecond(k, P) {
 
 // ── the ensuite ────────────────────────────────────────────────────────────
 function ensuiteSecond(k, P) {
-  // shelf over the cistern, towels rolled along it
-  k.box(0.24, 0.04, 0.90, P.walnut, 51.55, F1 + 1.45, -19.40, { tile: 0.3 });
-  for (const s of [-1, 1]) k.box(0.18, 0.14, 0.04, P.chrome, 51.55, F1 + 1.37, -19.40 + s * 0.36, { tile: 0.2 });
-  towelRolls(k, 51.55, F1 + 1.47, -19.40, { n: 3, alongZ: true });
+  // Towel shelf on the east wall — south of the window, not across it: the
+  // pane runs z −19.5 → −18.5 and a shelf hung on the glass is the sort of
+  // thing you only see once it is built.
+  k.box(0.24, 0.04, 0.90, P.walnut, 51.55, F1 + 1.45, -17.95, { tile: 0.3 });
+  for (const s of [-1, 1]) k.box(0.18, 0.14, 0.04, P.chrome, 51.55, F1 + 1.37, -17.95 + s * 0.36, { tile: 0.2 });
+  towelRolls(k, 51.55, F1 + 1.47, -17.95, { n: 3, alongZ: true });
   robeHook(k, P, 47.49, F1 + 1.66, -19.60, HALF, 0x8a7f6d);
   plant(k, 49.90, F1 + 0.855, -16.30, 0.34);
 }
@@ -1701,12 +1703,22 @@ function logBasket(k, P, x, y, z) {
   const bark = M.get('bark');
   const cut = M.paint(0xc7a878, 0.9, 'ghLogEnd');
   for (const [dx, dz, w, d] of [[0, -0.25, 0.52, 0.04], [0, 0.25, 0.52, 0.04], [-0.25, 0, 0.04, 0.54], [0.25, 0, 0.04, 0.54]]) {
-    k.box(w, 0.40, d, wire, x + dx, y + 0.20, z + dz, { tile: 0.3 });
+    k.box(w, 0.34, d, wire, x + dx, y + 0.17, z + dz, { tile: 0.3 });
   }
   k.box(0.50, 0.03, 0.50, wire, x, y + 0.02, z, { tile: 0.3 });
-  for (const [ox, oy, oz, r] of [[-0.10, 0.24, -0.06, 0.10], [0.08, 0.26, 0.05, -0.07], [-0.02, 0.38, -0.01, 0.22], [0.11, 0.40, 0.07, -0.16]]) {
-    k.box(0.40, 0.12, 0.12, bark, x + ox, y + oy, z + oz, { rotY: r, rotZ: 0.03, tile: 0.2 });
-    k.box(0.02, 0.11, 0.11, cut, x + ox + 0.20, y + oy + 0.006, z + oz + 0.20 * Math.sin(r), { rotY: r, tile: 0.1 });
+  // Split logs, stacked with a gap between each and both sawn ends showing:
+  // packed tight they merge into one brown slab the moment they are batched.
+  for (const [ox, oy, oz, r, len] of [
+    [-0.06, 0.20, -0.13, 0.10, 0.40], [0.04, 0.20, 0.05, -0.08, 0.42],
+    [-0.02, 0.33, -0.05, 0.26, 0.38], [0.05, 0.34, 0.12, -0.20, 0.36],
+    [-0.04, 0.45, 0.02, 0.55, 0.34],
+  ]) {
+    k.box(len, 0.11, 0.11, bark, x + ox, y + oy, z + oz, { rotY: r, rotZ: 0.03, tile: 0.2 });
+    for (const s of [-1, 1]) {
+      k.box(0.03, 0.105, 0.105, cut,
+        x + ox + s * (len / 2) * Math.cos(r), y + oy + 0.004, z + oz - s * (len / 2) * Math.sin(r),
+        { rotY: r, tile: 0.1 });
+    }
   }
   k.col(0.56, 0.46, 0.58, x, y + 0.23, z);
   void P;
