@@ -193,6 +193,24 @@ export function buildTerrain(world) {
     colors[i * 3] = tmp.r * k; colors[i * 3 + 1] = tmp.g * k; colors[i * 3 + 2] = tmp.b * k;
   }
   far.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  // Punch the middle out.  Inside the lawn's own square this plane is just
+  // groundHeight again — the same shape drawn twice — and being 20 m to a
+  // cell it could not be cut around anything. Sitting 0.4 m under the floor
+  // it filled the basement stairwell with one big green quad: the grass you
+  // hit on the way down. The lawn covers everything inside this radius, so
+  // nothing is lost and a good deal of overdraw goes with it.
+  {
+    const INNER = 150;
+    const fidx = far.index.array;
+    const keep = [];
+    for (let i = 0; i < fidx.length; i += 3) {
+      let cx = 0, cz = 0;
+      for (let k = 0; k < 3; k++) { cx += fp.getX(fidx[i + k]); cz += fp.getZ(fidx[i + k]); }
+      if (Math.hypot(cx / 3, cz / 3) < INNER) continue;
+      keep.push(fidx[i], fidx[i + 1], fidx[i + 2]);
+    }
+    far.setIndex(keep);
+  }
   far.computeVertexNormals();
   // flat shading keeps the low-poly ridges reading as rock faces instead of
   // smooth-shaded soft-serve

@@ -609,10 +609,13 @@ function shed(world, k, M, B) {
   // past them, so both ends stood open — from inside you looked straight out
   // at the sky through the triangle. Stepped boards close it.
   for (const s of [-1, 1]) {
-    const steps = 7, rise = 1.5;
+    const steps = 9, rise = 1.55;
     for (let i = 0; i < steps; i++) {
       const t0 = i / steps, t1 = (i + 1) / steps;
-      B.box(0.17, rise / steps + 0.02, d * (1 - t1) + 0.12, wood,
+      // each board is cut to the slope at its FOOT, not its head, so the
+      // corners overshoot into the roof instead of falling short of it and
+      // leaving a row of daylight slivers up the rake
+      B.box(0.17, rise / steps + 0.03, d * (1 - t0) + 0.1, wood,
         x + s * w / 2, y + h + rise * (t0 + t1) / 2, z, { tile: 1.2 });
     }
   }
