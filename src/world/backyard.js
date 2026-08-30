@@ -605,6 +605,22 @@ function shed(world, k, M, B) {
   }
   B.box(w + 0.8, 0.14, 0.3, trim, x, y + h + 1.1, z, { tile: 0.6 });
   B.box(2.4, 0.12, 0.5, trim, x, y + 2.3, z + d / 2 + 0.1, { tile: 0.5 });
+  // Gable ends.  The side walls stop at the wall head and the roof climbs on
+  // past them, so both ends stood open — from inside you looked straight out
+  // at the sky through the triangle. Stepped boards close it.
+  for (const s of [-1, 1]) {
+    const steps = 7, rise = 1.5;
+    for (let i = 0; i < steps; i++) {
+      const t0 = i / steps, t1 = (i + 1) / steps;
+      B.box(0.17, rise / steps + 0.02, d * (1 - t1) + 0.12, wood,
+        x + s * w / 2, y + h + rise * (t0 + t1) / 2, z, { tile: 1.2 });
+    }
+  }
+  // and a boarded soffit so the shingles are not the ceiling from inside
+  for (const s of [-1, 1]) {
+    B.box(w - 0.1, 0.08, d * 0.6, M.paint(0x7a8570, 0.9, 'shedsoffit'),
+      x, y + h + 0.42, z + s * d * 0.25, { rotX: s * 0.62, tile: 1.0 });
+  }
 
   // ── contents: mower, trimmer, tools, fuel, bags ──
   const rmat = M.paint(0xd0342c, 0.5, 'mower');
@@ -626,9 +642,18 @@ function shed(world, k, M, B) {
     B.box(0.3, 0.4, 0.28, M.solid(cans[i % 3], 0.6), x - 2.2 + i * 0.9, y + 1.75, z - d / 2 + 0.32, { tile: 0.2 });
     B.box(0.26, 0.3, 0.24, M.paint(0x9a8b78, 0.9, 'sack'), x - 2.2 + i * 0.9, y + 2.3, z - d / 2 + 0.32, { tile: 0.2 });
   }
+  // Long-handled tools, stood against the west wall.  They used to stand in
+  // the plane of the doorway — three of them squarely in the 2.2 m opening —
+  // which read from outside as junk dumped across the entrance.
   const tools = [0x8a8f96, 0x6b5330, 0x2f81ff, 0xd0342c];
+  const rail = M.paint(0x6b5330, 0.85, 'toolrail');
+  B.box(0.06, 0.08, 3.6, rail, x - w / 2 + 0.3, y + 1.85, z, { tile: 0.4 });
   for (let i = 0; i < 7; i++) {
-    B.box(0.08, 1.8, 0.12, M.solid(tools[i % 4], 0.6), x - 2.8 + i * 0.5, y + 0.9, z + d / 2 - 0.3, { rotZ: 0.08 * (i % 3 - 1), tile: 0.3 });
+    const tz = z - 1.55 + i * 0.52;
+    B.box(0.12, 1.8, 0.09, M.solid(tools[i % 4], 0.6), x - w / 2 + 0.26, y + 0.9, tz,
+      { rotX: 0.07 * (i % 3 - 1), tile: 0.3 });
+    // the head — a blade, a fork, a brush — sat on the floor at the bottom
+    B.box(0.16, 0.1, 0.2, M.solid(tools[(i + 2) % 4], 0.6), x - w / 2 + 0.3, y + 0.05, tz, { tile: 0.15 });
   }
   // wheelbarrow — tub on sloped handle rails: wheel at the nose, legs at the
   // handle end, so it parks on the floor instead of floating

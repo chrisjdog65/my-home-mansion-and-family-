@@ -9,7 +9,7 @@ import { makeRng } from '../core/rng.js';
 import { planarUV } from './build.js';
 import { Atmosphere } from './atmosphere.js';
 import { plantGrass } from './vegetation.js';
-import { HOUSE } from './plan.js';
+import { HOUSE, SLAB_HOLES } from './plan.js';
 
 const noise = makeNoise2D(31415);
 
@@ -87,16 +87,41 @@ export function buildTerrain(world) {
   }
   g.computeVertexNormals();
   planarUV(g, 3.0);
-  // cut the turf out from under the skate pad: at this vertex density the
-  // lawn caps the bowl with green triangles you can see from the rim
+  // Two cuts in the turf.
+  //
+  // The skate pad: at this vertex density the lawn caps the bowl with green
+  // triangles you can see from the rim.
+  //
+  // And the stairwells.  Everywhere else inside the house the ground slab
+  // sits over the lawn and hides it — but a slab hole is deliberately open,
+  // and the lawn sheeted straight across it, so walking down to the basement
+  // you met a wall of grass. Only the holes need cutting, which keeps every
+  // blade at the foot of the walls where it belongs.
   {
+    const wells = (SLAB_HOLES.ground || []).map((r) => ({
+      x0: Math.max(HOUSE.x0, r.x0 - 1.0), x1: Math.min(HOUSE.x1, r.x1 + 1.0),
+      z0: Math.max(HOUSE.z0, r.z0 - 1.0), z1: Math.min(HOUSE.z1, r.z1 + 1.0),
+    }));
     const idx = g.index.array;
     const keep = [];
     for (let i = 0; i < idx.length; i += 3) {
       let cx = 0, cz = 0;
-      for (let k = 0; k < 3; k++) { cx += pos.getX(idx[i + k]); cz += pos.getZ(idx[i + k]); }
+      let nx = Infinity, xx = -Infinity, nz = Infinity, xz = -Infinity;
+      for (let k = 0; k < 3; k++) {
+        const px = pos.getX(idx[i + k]), pz = pos.getZ(idx[i + k]);
+        cx += px; cz += pz;
+        if (px < nx) nx = px; if (px > xx) xx = px;
+        if (pz < nz) nz = pz; if (pz > xz) xz = pz;
+      }
       cx /= 3; cz /= 3;
       if (cx > 10 && cx < 42 && cz > 50 && cz < 74) continue;
+      // a triangle goes if it overlaps a well at all, not just if its centre
+      // does — at 4.6 m to a cell, a centre test leaves the corners behind
+      let overWell = false;
+      for (const w of wells) {
+        if (xx > w.x0 && nx < w.x1 && xz > w.z0 && nz < w.z1) { overWell = true; break; }
+      }
+      if (overWell) continue;
       keep.push(idx[i], idx[i + 1], idx[i + 2]);
     }
     g.setIndex(keep);
