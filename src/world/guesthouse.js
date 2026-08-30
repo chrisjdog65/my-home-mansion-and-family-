@@ -24,7 +24,7 @@ import { groundHeight } from './terrain.js';
 import {
   Kit, bed, nightstand, dresser, wardrobe, bookshelf, desk, officeChair,
   diningChair, sofa, armchair, coffeeTable, rug, tv, fireplace, counterRun,
-  island, fridge, range, vanity, toilet, bathtub, shower, plant, artwork,
+  fridge, range, vanity, toilet, bathtub, shower, plant, artwork, tap,
   sideTable, consoleTable, bench, floorLamp, lightSwitch, wallShelf,
   tallMirror, bookStack, magazines, vase, fruitBowl, photoFrame, wastebasket,
   laundryBasket, umbrellaStand, coatHooks, wallClock, curtains, hingePanel,
@@ -332,8 +332,11 @@ function houseGroundShell(world, k, P, win) {
   runZ(world, k, HX0 + TO + TI / 2, HZ0, HZ1, y, h, TI, P.wall, W, { col: false });
   wallCols(world, HX0 + TE / 2, (HZ0 + HZ1) / 2, HZ1 - HZ0, h, TE + 0.02,
     localOpenings(W, (HZ0 + HZ1) / 2, true), HALF, y);
-  // the garage's face of that wall gets its own painted skin
-  runZ(world, k, GX1 - SKIN / 2, GZ0, GZ1, y, h, SKIN, P.garageWall,
+  // The garage's face of that wall gets its own painted skin.  It runs to the
+  // garage's own wall head, not to F1: the garage ceiling is at 3.65, so a
+  // skin that stopped with this storey left a 0.45 m band of the house's
+  // stucco showing 0.12 m back from the rest of the wall.
+  runZ(world, k, GX1 - SKIN / 2, GZ0, GZ1, y, GHEAD - F0, SKIN, P.garageWall,
     [{ at: -32.20, w: 1.10, y0: 0, y1: 2.30 }], { col: false });
 
   push(win, N, HZ0 + TE / 2, 0, y, 'n');
@@ -849,7 +852,11 @@ function lighting(world, k, P, R) {
   k.box(0.05, 1.9, 0.05, P.black, ST_X, C1 - 0.95, -35.6, { tile: 0.4 });
   k.box(0.34, 0.5, 0.34, P.gold, ST_X, C1 - 2.15, -35.6, { tile: 0.3 });
   k.box(0.26, 0.08, 0.26, k.M.emissive(WARM, 2.2), ST_X, C1 - 2.42, -35.6, { tile: 0.2 });
-  world.addLight({ pos: V(ST_X, C1 - 2.5, -35.6), color: 0xffdcb4, intensity: 18, decay: 1.9, distance: 15, room: R.hall.name, floor: R.hall.floor });
+  // The well is only 1.63 m wide, so its walls stand 0.8 m off this lantern:
+  // at 18/1.9 the nearest plaster took ~29 and burned out flat.  A ceiling
+  // fitting's 14 at decay 2 still lights the flight (≈1.0 at the bottom tread)
+  // and the step lights carry the treads themselves.
+  world.addLight({ pos: V(ST_X, C1 - 2.5, -35.6), color: 0xffdcb4, intensity: 13, decay: 2, distance: 14, room: R.hall.name, floor: R.hall.floor });
 
   // outside: a lantern over each outside door and a pair of floods on the
   // garage, which is the face that looks at the drive
@@ -1094,7 +1101,9 @@ function dressLiving(k, P, R) {
   photoFrame(k, 39.62, F0 + 0.88, -20.8, { rotY: Math.PI / 2, seed: 2 });
   artwork(k, 39.42, F0 + 2.00, -20.4, 1.1, 0.8, Math.PI / 2, 0x4b5a68);
   coatHooks(k, 39.40, F0 + 1.66, -17.1, { rotY: Math.PI / 2, w: 1.2, n: 4 });
-  umbrellaStand(k, 39.72, F0, -17.95);
+  // out from under the west curtain: those panels hang at x 39.49–39.59, and
+  // at 39.72 the stand stood inside the cloth
+  umbrellaStand(k, 39.86, F0, -17.60);
   plant(k, 40.2, F0, -16.9, 1.15);
   wastebasket(k, 51.2, F0, -21.6, {});
 
@@ -1103,10 +1112,11 @@ function dressLiving(k, P, R) {
   curtains(k, 49.2, CUR0, IZ1 - 0.22, 2.2, Math.PI, 0xbfb4a6);
   curtains(k, IX0 + 0.22, CUR0, -18.6, 1.9, Math.PI / 2, 0xbfb4a6);
 
-  // a mantel that is lived on
-  k.box(0.16, 0.26, 0.10, M.paint(0xc9d4cb, 0.5, 'ghMantelPot'), 44.6, F0 + 1.63, -16.86, { tile: 0.2 });
-  photoFrame(k, 46.3, F0 + 1.50, -16.86, { rotY: Math.PI, seed: 1 });
-  lightSwitch(k, R, IX0 + 0.06, F0 + 1.15, -21.25, { rotY: Math.PI / 2 });
+  // a mantel that is lived on — the shelf's top face is F0 + 1.42, and both
+  // of these were set out for one 0.08 higher, so they floated over it
+  k.box(0.16, 0.26, 0.10, M.paint(0xc9d4cb, 0.5, 'ghMantelPot'), 44.6, F0 + 1.55, -16.86, { tile: 0.2 });
+  photoFrame(k, 46.3, F0 + 1.435, -16.86, { rotY: Math.PI, seed: 1 });
+  lightSwitch(k, R, IX0 + 0.03, F0 + 1.15, -21.25, { rotY: Math.PI / 2 });
 }
 
 function dressDining(k, P, R) {
@@ -1145,7 +1155,7 @@ function dressKitchen(k, P, R) {
   range(k, 44.40, F0, back, { rotY: 0, ceil: CH });
   counterRun(k, 46.40, F0, back, 2.0, { rotY: 0, cabinet: 0x33414a, drawers: false });
   fridge(k, 39.72, F0, -29.60, { rotY: Math.PI / 2 });
-  island(k, 45.60, F0, -28.90, { w: 3.0, d: 1.15 });
+  kitchenIsland(k, P, 45.60, -28.90);
   wardrobe(k, 51.33, F0, -30.50, { rotY: -Math.PI / 2, w: 1.2, h: 2.3 });
 
   choppingBoard(k, 42.80, F0 + 0.93, back + 0.02, { rotY: 0 });
@@ -1155,10 +1165,72 @@ function dressKitchen(k, P, R) {
   fruitBowl(k, 46.10, F0 + 0.93, back + 0.02, {});
   bookStack(k, 46.90, F0 + 0.93, back + 0.02, { n: 2, w: 0.2 });
   wallShelf(k, 39.44, F0 + 1.80, -28.10, { rotY: Math.PI / 2, w: 1.0, items: 2 });
-  wastebasket(k, 47.30, F0, -30.55, { metal: true });
+  // clear of the 46.40 run, which ends at x 47.40 — at 47.30 the bin stood
+  // two thirds of the way inside the cabinet
+  wastebasket(k, 47.62, F0, -30.80, { metal: true });
   plant(k, 40.20, F0, -27.85, 0.95);
   wallClock(k, 50.70, F0 + 2.30, -31.09, 0, { hour: 8, minute: 20 });
   lightSwitch(k, R, 47.62, F0 + 1.15, -31.09, { rotY: 0 });
+}
+
+/**
+ * The island, built here rather than taken from the kit.
+ *
+ * furniture.js's island() is drawn for the mansion's 3.8 m rooms: it hangs
+ * its three pendants on a metre of rod centred 3.1 m over the floor, so under
+ * this 2.97 m ceiling the rods came out through the slab and stood half a
+ * metre proud of the family bathroom's floor upstairs.  Everything else about
+ * it is right, so it is reproduced to the same footprint (3.00 × 1.15 on a
+ * 3.24 × 1.39 worktop), the same worktop height — F0 + 0.95, which is what
+ * the recipe book, the mugs and the draining rack in secondFix() stand on —
+ * and the same basin cut-out, with the lights hung from the ceiling this room
+ * actually has.  The stools are turned to face the island: the kit seats them
+ * with their backs to it.
+ */
+function kitchenIsland(k, P, x, z) {
+  const M = k.M, world = k.world;
+  const w = 3.0, d = 1.15, tw = w + 0.24, td = d + 0.24;
+  const sw = 0.86, sd = 0.50, sz = -0.15;             // basin cut-out, island-local
+  const body = M.paint(0x27303a, 0.5, 'island');
+  const stone = M.get('marble');
+
+  k.box(w, 0.70, d, body, x, F0 + 0.35, z, { tile: 1 });
+  // worktop and cabinet band mitred round the cut-out, so the basin is a real
+  // hole with a steel liner in it rather than a plate laid on the stone
+  const ring = (oy, h, ww, dd, mat, tile) => {
+    k.box(ww, h, sz - sd / 2 + dd / 2, mat, x, F0 + oy, z + (sz - sd / 2 - dd / 2) / 2, { tile });
+    k.box(ww, h, dd / 2 - sz - sd / 2, mat, x, F0 + oy, z + (sz + sd / 2 + dd / 2) / 2, { tile });
+    for (const s of [-1, 1]) {
+      k.box(ww / 2 - sw / 2, h, sd, mat, x + s * (ww / 2 + sw / 2) / 2, F0 + oy, z + sz, { tile });
+    }
+  };
+  ring(0.79, 0.18, w, d, body, 1);
+  ring(0.92, 0.06, tw, td, stone, 1.4);
+  for (const s of [-1, 1]) {
+    k.box(0.03, 0.24, sd, P.steel, x + s * (sw / 2 - 0.015), F0 + 0.83, z + sz, { tile: 0.3 });
+    k.box(sw, 0.24, 0.03, P.steel, x, F0 + 0.83, z + sz + s * (sd / 2 - 0.015), { tile: 0.3 });
+  }
+  k.box(sw - 0.06, 0.03, sd - 0.06, P.steel, x, F0 + 0.715, z + sz, { tile: 0.3 });
+  k.box(0.08, 0.012, 0.08, M.get('darkPlastic'), x, F0 + 0.735, z + sz, { tile: 0.2 });
+  k.box(0.05, 0.34, 0.05, P.chrome, x, F0 + 1.10, z + sz - 0.36, { tile: 0.2 });      // gooseneck
+  k.box(0.05, 0.06, 0.20, P.chrome, x, F0 + 1.29, z + sz - 0.29, { tile: 0.2 });
+  k.box(0.045, 0.12, 0.045, P.chrome, x, F0 + 1.24, z + sz - 0.19, { tile: 0.2 });
+  k.box(0.03, 0.03, 0.13, P.chrome, x + 0.11, F0 + 1.00, z + sz - 0.36, { tile: 0.2 });   // lever
+  tap(k, x, z + sz - 0.19, F0 + 1.18, { h: 0.45, label: 'Run the tap' });
+  k.col(tw, 0.98, td, x, F0 + 0.46, z);
+
+  // stools on the dining side, facing the island
+  for (const ox of [-1, 0, 1]) barstool(k, x + ox, z + d / 2 + 0.55, F0, { rotY: Math.PI });
+
+  // three pendants, hung so the shade clears a standing head and still sits
+  // 0.85 m over the stone: C0 is 3.12 here, not the mansion's 3.80
+  for (const ox of [-1, 0, 1]) {
+    const px = x + ox;
+    k.box(0.02, C0 - 2.21, 0.02, P.black, px, (C0 + 2.21) / 2, z, { tile: 0.2 });
+    k.box(0.30, 0.26, 0.30, P.gold, px, 2.08, z, { tile: 0.3 });
+    k.box(0.24, 0.05, 0.24, M.emissive(0xffe2b4, 2.4), px, 1.95, z, { tile: 0.2 });
+    world.addLight({ pos: V(px, 1.88, z), color: 0xffd7a0, intensity: 9, distance: 7, lamp: true });
+  }
 }
 
 function dressHall(k, P, R) {
@@ -1168,7 +1240,9 @@ function dressHall(k, P, R) {
   bookStack(k, 51.42, F0 + 0.88, -33.5, { n: 2, w: 0.2 });
   coatHooks(k, 51.60, F0 + 1.70, -36.1, { rotY: -Math.PI / 2, w: 1.4, n: 4 });
   umbrellaStand(k, 51.30, F0, -37.20);
-  bench(k, 49.60, F0, -37.36, { rotY: Math.PI, w: 1.6, color: 0x8a8172, rack: true });
+  // faces south into the hall: at rotY π the seat put you 0.35 m from the
+  // north wall, looking at it
+  bench(k, 49.60, F0, -37.36, { rotY: 0, w: 1.6, color: 0x8a8172, rack: true });
   wallClock(k, 47.90, F0 + 2.20, IZ0 + 0.06, 0, { hour: 9, minute: 35 });
   artwork(k, 51.58, F0 + 2.05, -31.9, 0.9, 0.7, -Math.PI / 2, 0x5a6b57);
   plant(k, 51.20, F0, -31.60, 1.0);
@@ -1189,7 +1263,7 @@ function dressShowerRoom(k, P, R) {
   }
   k.box(0.24, 0.16, 0.34, k.M.paint(0xe8eef2, 0.95, 'ghTowel'), 44.90, F0 + 0.87, -37.54, { tile: 0.3 });
   rug(k, 42.60, F0, -35.40, 1.3, 0.8, 0xcbd6d8);
-  lightSwitch(k, R, 45.72, F0 + 1.15, -35.10, { rotY: -Math.PI / 2 });
+  lightSwitch(k, R, 45.80, F0 + 1.15, -35.10, { rotY: -Math.PI / 2 });
 }
 
 function dressUtility(k, P, R) {
@@ -1226,7 +1300,7 @@ function dressUtility(k, P, R) {
     k.box(0.16, 0.28, 0.30, M.solid(bz < -33.1 ? 0x2f4f6b : 0x3f5c3a, 0.7), 39.70, F0 + 0.14, bz, { tile: 0.2 });
   }
   wastebasket(k, 45.30, F0, -31.40, { metal: true });
-  lightSwitch(k, R, 45.72, F0 + 1.15, -31.45, { rotY: -Math.PI / 2 });
+  lightSwitch(k, R, 45.80, F0 + 1.15, -31.45, { rotY: -Math.PI / 2 });
 }
 
 function dressBedTwo(k, P, R) {
@@ -1243,12 +1317,15 @@ function dressBedTwo(k, P, R) {
   rug(k, 42.60, F1, -34.60, 3.2, 2.6, 0x6a7684);
   bookshelf(k, 39.62, F1, -36.60, { rotY: Math.PI / 2, w: 1.3, h: 1.7 });
   floorLamp(k, 44.60, F1, -33.40, { h: 1.5 });
-  artwork(k, 42.60, F1 + 2.05, -31.24, 1.1, 0.8, Math.PI, 0x37485c);
+  // 0.10 proud of the wall face at −31.27, as the mansion hangs everything:
+  // at −31.24 the gold frame sat wholly inside the partition and only the
+  // canvas showed
+  artwork(k, 42.60, F1 + 2.05, -31.37, 1.1, 0.8, Math.PI, 0x37485c);
   photoFrame(k, 43.60, F1 + 0.92, -31.82, { rotY: Math.PI, seed: 0 });
   wastebasket(k, 40.90, F1, -33.30, {});
   curtains(k, 41.2, CUR1, IZ0 + 0.22, 1.9, 0, 0xbfb4a6);
   curtains(k, 44.0, CUR1, IZ0 + 0.22, 1.7, 0, 0xbfb4a6);
-  lightSwitch(k, R, 45.74, F1 + 1.15, -31.60, { rotY: -Math.PI / 2 });
+  lightSwitch(k, R, 45.80, F1 + 1.15, -31.60, { rotY: -Math.PI / 2 });
 }
 
 function dressFamilyBath(k, P, R) {
@@ -1271,7 +1348,7 @@ function dressFamilyBath(k, P, R) {
     k.box(0.08, 0.18, 0.08, M.solid([0x6ab04c, 0x3f6ea8, 0xd8e3ea, 0xb56fa8][i], 0.5),
       39.60, F1 + 1.67, -27.15 + i * 0.26, { tile: 0.1 });
   }
-  lightSwitch(k, R, 45.74, F1 + 1.15, -29.45, { rotY: -Math.PI / 2 });
+  lightSwitch(k, R, 45.80, F1 + 1.15, -29.45, { rotY: -Math.PI / 2 });
 }
 
 function dressLanding(k, P, R) {
@@ -1285,10 +1362,12 @@ function dressLanding(k, P, R) {
   artwork(k, 48.60, F1 + 2.05, IZ0 + 0.10, 0.9, 0.7, 0, 0x6b5b45);
   photoFrame(k, 51.45, F1 + 0.88, -27.40, { rotY: -Math.PI / 2, seed: 1 });
   plant(k, 46.60, F1, -27.20, 1.0);
-  wastebasket(k, 51.20, F1, -26.10, {});
+  wastebasket(k, 51.20, F1, -25.95, {});      // clear of the console's south leg
+  // Only the north window is curtained.  The pane at −29.0 has the bench
+  // under it, and these panels hang to 0.15 above the floor — a second pair
+  // there ran straight down through the seat and the towels folded on it.
   curtains(k, IX1 - 0.22, CUR1, -35.0, 1.7, -Math.PI / 2, 0xc9bcae);
-  curtains(k, IX1 - 0.22, CUR1, -29.0, 1.7, -Math.PI / 2, 0xc9bcae);
-  lightSwitch(k, R, 48.05, F1 + 1.15, -25.80, { rotY: Math.PI });
+  lightSwitch(k, R, 48.05, F1 + 1.15, -25.77, { rotY: Math.PI });
 }
 
 function dressBedOne(k, P, R) {
@@ -1325,7 +1404,7 @@ function dressEnsuite(k, P, R) {
   rug(k, 49.60, F1, -19.40, 1.2, 0.8, 0xd6dee2);
   k.box(0.05, 0.05, 0.90, P.chrome, 47.62, F1 + 1.40, -18.90, { tile: 0.3 });
   k.box(0.10, 0.62, 0.34, k.M.paint(0xe8eef2, 0.95, 'ghTowel'), 47.66, F1 + 1.11, -18.90, { tile: 0.4 });
-  lightSwitch(k, R, 47.53, F1 + 1.15, -20.20, { rotY: Math.PI / 2 });
+  lightSwitch(k, R, 47.50, F1 + 1.15, -20.20, { rotY: Math.PI / 2 });
 }
 
 function dressGarage(k, P, R) {
@@ -1547,11 +1626,14 @@ function hallSecond(k, P) {
   // Pictures climbing the flight.  The stairwell is open to the first-floor
   // ceiling, so the run keeps going up past the storey line instead of
   // stopping dead at three metres the way a hung wall normally has to.
+  // They hang 0.10 proud of the wall face at x 45.97, which is also what
+  // clears them of the stairwell trimmer: that board stands on the same face
+  // from y 2.90 to 3.20, and at 45.99 the middle picture ran through it.
   for (const [z, y, w, h, c] of [
     [-36.50, 2.48, 0.70, 0.55, 0x4b5a68],
     [-35.60, 3.11, 0.55, 0.75, 0x6b5b45],
     [-34.70, 3.75, 0.70, 0.55, 0x5a6b57],
-  ]) artwork(k, 45.99, y, z, w, h, HALF, c);
+  ]) artwork(k, 46.07, y, z, w, h, HALF, c);
 
   // a lamp on the console in front of the mirror, the dish the keys land in,
   // and the post nobody has opened yet
