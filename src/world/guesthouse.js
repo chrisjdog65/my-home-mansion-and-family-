@@ -29,7 +29,7 @@ import {
   tallMirror, bookStack, magazines, vase, fruitBowl, photoFrame, wastebasket,
   laundryBasket, umbrellaStand, coatHooks, wallClock, curtains, hingePanel,
   cookPot, utensilCrock, mixingBowl, choppingBoard, placeSetting, servingDish,
-  jug, tableLamp,
+  jug, tableLamp, sconce, radio, openBook, barstool,
 } from './furniture.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -84,7 +84,6 @@ const WARM = 0xffd9a8, BRIGHT = 0xf4f8ff;
 
 export function buildGuestHouse(world) {
   const M = world.mats;
-  const B = world.static;
   const k = new Kit(world);
 
   const P = {
@@ -141,18 +140,21 @@ export function buildGuestHouse(world) {
   doors(world, k, P);
   garageDoors(world, k, P);
 
-  dressLiving(world, k, P, R.living);
-  dressDining(world, k, P, R.dining);
-  dressKitchen(world, k, P, R.kitchen);
-  dressHall(world, k, P, R.hall);
-  dressShowerRoom(world, k, P, R.shower);
-  dressUtility(world, k, P, R.utility);
-  dressBedTwo(world, k, P, R.bed2);
-  dressFamilyBath(world, k, P, R.bath);
-  dressLanding(world, k, P, R.landing);
-  dressBedOne(world, k, P, R.bed1);
-  dressEnsuite(world, k, P, R.ensuite);
-  dressGarage(world, k, P, R.garage);
+  dressLiving(k, P, R.living);
+  dressDining(k, P, R.dining);
+  dressKitchen(k, P, R.kitchen);
+  dressHall(k, P, R.hall);
+  dressShowerRoom(k, P, R.shower);
+  dressUtility(k, P, R.utility);
+  dressBedTwo(k, P, R.bed2);
+  dressFamilyBath(k, P, R.bath);
+  dressLanding(k, P, R.landing);
+  dressBedOne(k, P, R.bed1);
+  dressEnsuite(k, P, R.ensuite);
+  dressGarage(k, P, R.garage);
+
+  // ── 6b. second fix: the things that say somebody lives here ──────────────
+  secondFix(world, k, P);
 
   // ── 7. spots and navigation ──────────────────────────────────────────────
   world.spot('guestHouse', 37.4, GY, -22.0);
@@ -305,7 +307,7 @@ function houseGroundShell(world, k, P, win) {
     { at: -19.6, w: 2.40, y0: 0, y1: 2.55, door: 'french' },
   ];
   const W = [
-    { at: -32.6, w: 1.10, y0: 0, y1: 2.30, door: 'inner' },   // through to the garage
+    { at: -32.20, w: 1.10, y0: 0, y1: 2.30, door: 'inner' },  // through to the garage
     { at: -22.0, w: 1.30, y0: 0, y1: 2.40, door: 'front' },
     { at: -18.6, w: 1.6, y0: sill, y1: head },
   ];
@@ -332,7 +334,7 @@ function houseGroundShell(world, k, P, win) {
     localOpenings(W, (HZ0 + HZ1) / 2, true), HALF, y);
   // the garage's face of that wall gets its own painted skin
   runZ(world, k, GX1 - SKIN / 2, GZ0, GZ1, y, h, SKIN, P.garageWall,
-    [{ at: -32.6, w: 1.10, y0: 0, y1: 2.30 }], { col: false });
+    [{ at: -32.20, w: 1.10, y0: 0, y1: 2.30 }], { col: false });
 
   push(win, N, HZ0 + TE / 2, 0, y, 'n');
   push(win, S, HZ1 - TE / 2, 0, y, 's');
@@ -475,10 +477,13 @@ function partitions(world, k, P) {
   const D = (at, w = 1.10, y1 = 2.30) => ({ at, w, y0: 0, y1 });
 
   // ── ground ──
-  // hall's west wall: shower room and utility open off it, and it is what the
-  // first-floor bedroom wall stands on
-  runZ(world, k, 45.90, IZ0, -31.13, F0, gh, TP, P.wall, [D(-35.9), D(-32.6)]);
-  runX(world, k, -34.13, IX0, 45.83, F0, gh, TP, P.wall, []);            // shower / utility
+  // The hall's west wall carries the stair for its northern four metres, so
+  // its one doorway sits south of the flight — a door any further north would
+  // open straight into the side of the treads.  The utility beyond it is the
+  // service lobby: hall on one side, garage on the other, shower room through
+  // the wall at the back.
+  runZ(world, k, 45.90, IZ0, -31.13, F0, gh, TP, P.wall, [D(-32.20)]);
+  runX(world, k, -34.13, IX0, 45.83, F0, gh, TP, P.wall, [D(44.30)]);    // shower / utility
   runX(world, k, -31.20, IX0, IX1, F0, gh, TP, P.wall,
     [{ at: 49.0, w: 2.40, y0: 0, y1: 2.60 }]);                           // north block / open plan
 
@@ -498,8 +503,8 @@ function partitions(world, k, P) {
     if (alongZ) k.box(TP + 0.06, 0.09, w + 0.18, P.trim, pos, F0 + h + 0.045, at, { tile: 0.5 });
     else k.box(w + 0.18, 0.09, TP + 0.06, P.trim, at, F0 + h + 0.045, pos, { tile: 0.5 });
   };
-  case1(true, 45.90, -35.9, 1.10, 2.30);
-  case1(true, 45.90, -32.6, 1.10, 2.30);
+  case1(true, 45.90, -32.20, 1.10, 2.30);
+  case1(false, -34.13, 44.30, 1.10, 2.30);
   case1(false, -31.20, 49.0, 2.40, 2.60);
 
   // Wet-room dados, run wall by wall.  The tiling stops 1.27 m up — under
@@ -605,7 +610,12 @@ function pitched(world, k, P, o) {
     const rake = Math.hypot(run, o.drop * run);
     const cxp = (o.rx + edge) / 2;
     const cyp = o.ry - (o.drop * run) / 2;
-    k.box(rake, o.thick, lenZ, shingle, cxp, cyp, cz, { rotZ: s * slope, tile: 1.4 });
+    // A box rotated about Z by +θ lifts its own +x end, so the WEST slab
+    // (s = -1, ridge to its east) takes +θ and the east slab −θ: rotZ = −s·θ.
+    // Signing this the other way round gives a butterfly roof that drains
+    // into the ridge, which is not a thing.
+    const tilt = -s * slope;
+    k.box(rake, o.thick, lenZ, shingle, cxp, cyp, cz, { rotZ: tilt, tile: 1.4 });
 
     // stepped colliders, four bands across the slope
     for (let i = 0; i < 4; i++) {
@@ -624,8 +634,8 @@ function pitched(world, k, P, o) {
     const yMid = o.ry - o.drop * uMid - vt / 2;
     const dn = 0.20;
     k.box(1.2, 0.05, lenZ, P.board,
-      xMid + s * dn * Math.sin(slope), yMid - dn * Math.cos(slope), cz,
-      { rotZ: s * slope, tile: 0.8 });
+      xMid - s * dn * Math.sin(slope), yMid - dn * Math.cos(slope), cz,
+      { rotZ: tilt, tile: 0.8 });
     const fx = edge + s * 0.06;
     const fTop = o.ry - o.drop * Math.abs(fx - o.rx);
     k.box(0.07, 0.34, lenZ, P.board, fx, fTop - 0.15, cz, { tile: 0.7 });
@@ -703,9 +713,12 @@ function stairFlight(world, k, P) {
     world.addLight({ pos: V(bx + 0.38, y + 0.05, z), color: 0xffd0a0, intensity: 0.45, decay: 2, distance: 2.9 });
   }
 
-  // guard rails round the void on the landing
+  // Guard rail down the open side of the void.  The well is barely wider than
+  // the flight, so its south end is the stair mouth: railing that off would
+  // fence the landing away from the stair it belongs to, and the newel plus
+  // the raking balustrade already close the two hand's-breadth slivers left
+  // either side of the top tread.
   railing(world, post, rail, WELL.x1, F1, (WELL.z0 + WELL.z1) / 2, WELL.z1 - WELL.z0, HALF, 1.05, 0.85);
-  railing(world, post, rail, (WELL.x0 + WELL.x1) / 2, F1, WELL.z1, WELL.x1 - WELL.x0, 0, 1.05, 0.8);
 
   world.spot('guestStairBottom', ST_X, F0, ST_Z0 - 0.9);
   world.spot('guestStairTop', ST_X, F1, WELL.z1 + 0.9);
@@ -886,12 +899,12 @@ function doors(world, k, P) {
   for (const s of [-1, 1]) k.box(0.44, 0.08, 0.08, P.board, HX0 - 0.18, F0 + 2.36, -22.0 + s * 0.8, { rotZ: 0.5, tile: 0.4 });
 
   // utility → garage, and the garage's own side door onto the path
-  leaf(world, k, { x: HX0 + TE / 2, y: F0, z: -32.6, w: 1.04, h: 2.22, rotY: HALF, side: 1, face: d, label: 'Open the door to the garage' });
+  leaf(world, k, { x: HX0 + TE / 2, y: F0, z: -32.20, w: 1.04, h: 2.22, rotY: HALF, side: 1, face: d, label: 'Open the door to the garage' });
   leaf(world, k, { x: 36.50, y: F0, z: GZ1 - GE / 2, w: 1.04, h: 2.22, rotY: 0, side: -1, face: d, label: 'Open the garage side door' });
 
-  // ground floor, off the hall
-  leaf(world, k, { x: 45.90, y: F0, z: -35.9, w: 1.04, h: 2.22, rotY: HALF, side: -1, face: d, label: 'Open the shower room door' });
-  leaf(world, k, { x: 45.90, y: F0, z: -32.6, w: 1.04, h: 2.22, rotY: HALF, side: 1, face: d, label: 'Open the utility door' });
+  // ground floor: the hall into the utility, and the utility into the shower room
+  leaf(world, k, { x: 45.90, y: F0, z: -32.20, w: 1.04, h: 2.22, rotY: HALF, side: -1, face: d, label: 'Open the utility door' });
+  leaf(world, k, { x: 44.30, y: F0, z: -34.13, w: 1.04, h: 2.22, rotY: 0, side: -1, face: d, label: 'Open the shower room door' });
 
   // first floor
   leaf(world, k, { x: 45.90, y: F1, z: -32.4, w: 1.04, h: 2.22, rotY: HALF, side: -1, face: d, label: 'Open the bedroom door' });
@@ -906,7 +919,11 @@ function doors(world, k, P) {
 function frenchDoors(world, k, P) {
   const zc = -19.6, x = HX1 - TE / 2, W = 2.40, H = 2.55;
   for (const s of [-1, 1]) {
-    const leafW = W / 2 - 0.05, leafH = H - 0.07, dir = -s;
+    // The pivot group is turned a quarter turn to stand in a wall that runs
+    // along Z, which swaps the sense of its own +x: local +x comes out as
+    // world −z.  So a leaf hinged on the jamb at +s reaches back to the middle
+    // along local +s, not −s, and it swings out over the terrace on −s.
+    const leafW = W / 2 - 0.05, leafH = H - 0.07, dir = s;
     const pivot = new THREE.Group();
     pivot.position.set(x, F0, zc + s * (W / 2 - 0.03));
     pivot.rotation.y = HALF;
@@ -928,7 +945,7 @@ function frenchDoors(world, k, P) {
     const door = { open: false, t: 0 };
     world.onUpdate((dt) => {
       door.t += ((door.open ? 1 : 0) - door.t) * Math.min(1, dt * 2.4);
-      pivot.rotation.y = HALF + door.t * 1.7 * s;
+      pivot.rotation.y = HALF - door.t * 1.7 * s;
     });
     world.addBlocker({
       get active() { return door.t < 0.35; },
@@ -1056,7 +1073,7 @@ function garageShell(world, k, P, win) {
 // ───────────────────────────────────────────────────────────────────────────
 // Furnishing.
 // ───────────────────────────────────────────────────────────────────────────
-function dressLiving(world, k, P, R) {
+function dressLiving(k, P, R) {
   const M = k.M;
   fireplace(k, 45.5, F0, -16.77, { rotY: Math.PI, w: 2.4, h: 2.85 });
   tv(k, 45.5, F0, -16.90, { rotY: Math.PI, w: 1.4, h: 2.02, wall: true });
@@ -1077,7 +1094,7 @@ function dressLiving(world, k, P, R) {
   photoFrame(k, 39.62, F0 + 0.88, -20.8, { rotY: Math.PI / 2, seed: 2 });
   artwork(k, 39.42, F0 + 2.00, -20.4, 1.1, 0.8, Math.PI / 2, 0x4b5a68);
   coatHooks(k, 39.40, F0 + 1.66, -17.1, { rotY: Math.PI / 2, w: 1.2, n: 4 });
-  umbrellaStand(k, 39.75, F0, -21.5);
+  umbrellaStand(k, 39.72, F0, -17.95);
   plant(k, 40.2, F0, -16.9, 1.15);
   wastebasket(k, 51.2, F0, -21.6, {});
 
@@ -1092,7 +1109,7 @@ function dressLiving(world, k, P, R) {
   lightSwitch(k, R, IX0 + 0.06, F0 + 1.15, -21.25, { rotY: Math.PI / 2 });
 }
 
-function dressDining(world, k, P, R) {
+function dressDining(k, P, R) {
   const tx = 45.4, tz = -25.30;
   k.box(2.30, 0.07, 1.10, P.walnut, tx, F0 + 0.75, tz, { tile: 1.0 });
   k.box(2.00, 0.10, 0.86, P.walnut, tx, F0 + 0.66, tz, { tile: 1.0 });
@@ -1120,10 +1137,9 @@ function dressDining(world, k, P, R) {
   wallShelf(k, 51.55, F0 + 1.75, -26.8, { rotY: -Math.PI / 2, w: 1.1, items: 3 });
   plant(k, 51.0, F0, -23.6, 1.05);
   curtains(k, IX1 - 0.22, CUR0, -25.2, 2.1, -Math.PI / 2, 0xa8b2bb);
-  void R; void world;
 }
 
-function dressKitchen(world, k, P, R) {
+function dressKitchen(k, P, R) {
   const back = -30.78;
   counterRun(k, 41.60, F0, back, 4.2, { rotY: 0, cabinet: 0x33414a });
   range(k, 44.40, F0, back, { rotY: 0, ceil: CH });
@@ -1143,10 +1159,9 @@ function dressKitchen(world, k, P, R) {
   plant(k, 40.20, F0, -27.85, 0.95);
   wallClock(k, 50.70, F0 + 2.30, -31.09, 0, { hour: 8, minute: 20 });
   lightSwitch(k, R, 47.62, F0 + 1.15, -31.09, { rotY: 0 });
-  void P; void world;
 }
 
-function dressHall(world, k, P, R) {
+function dressHall(k, P, R) {
   consoleTable(k, 51.42, F0, -33.0, { rotY: -Math.PI / 2, w: 1.4, d: 0.42 });
   tallMirror(k, 51.62, F0, -33.0, { rotY: -Math.PI / 2, w: 0.8, h: 1.3, base: 1.05 });
   vase(k, 51.42, F0 + 0.88, -32.5, { scale: 0.9, color: 0x9aa8b4 });
@@ -1159,10 +1174,9 @@ function dressHall(world, k, P, R) {
   plant(k, 51.20, F0, -31.60, 1.0);
   curtains(k, IX1 - 0.22, CUR0, -34.5, 1.5, -Math.PI / 2, 0xc9bcae);
   lightSwitch(k, R, 47.60, F0 + 1.15, -31.31, { rotY: Math.PI });
-  void P; void world;
 }
 
-function dressShowerRoom(world, k, P, R) {
+function dressShowerRoom(k, P, R) {
   shower(k, 40.30, F0, -36.90, { w: 1.6, d: 1.4 });
   toilet(k, 44.90, F0, -37.30, { rotY: 0 });
   vanity(k, 42.60, F0, -34.50, { rotY: Math.PI, w: 1.4 });
@@ -1176,13 +1190,12 @@ function dressShowerRoom(world, k, P, R) {
   k.box(0.24, 0.16, 0.34, k.M.paint(0xe8eef2, 0.95, 'ghTowel'), 44.90, F0 + 0.87, -37.54, { tile: 0.3 });
   rug(k, 42.60, F0, -35.40, 1.3, 0.8, 0xcbd6d8);
   lightSwitch(k, R, 45.72, F0 + 1.15, -35.10, { rotY: -Math.PI / 2 });
-  void world;
 }
 
-function dressUtility(world, k, P, R) {
+function dressUtility(k, P, R) {
   const M = k.M;
   const app = M.paint(0xeceef0, 0.42, 'ghAppliance');
-  const back = -33.72;
+  const back = -33.75;
   for (const x of [40.10, 40.85]) {
     k.box(0.66, 0.86, 0.62, app, x, F0 + 0.43, back, { tile: 0.5 });
     k.box(0.36, 0.36, 0.03, M.get('carGlass'), x, F0 + 0.46, back + 0.32, { tile: 0.3 });
@@ -1204,20 +1217,19 @@ function dressUtility(world, k, P, R) {
       40.20 + i * 0.36, F0 + 1.71, back - 0.10, { tile: 0.2 });
     k.box(0.24, 0.18, 0.22, M.paint(0x9a8b78, 0.9, 'ghSack'), 40.20 + i * 0.36, F0 + 2.12, back - 0.10, { tile: 0.2 });
   }
-  k.box(0.56, 0.86, 0.36, M.paint(0xf0f2f4, 0.4, 'ghBoiler'), 44.90, F0 + 1.72, back - 0.02, { tile: 0.4 });
-  k.box(0.12, 0.70, 0.12, P.chrome, 44.90, F0 + 2.50, back - 0.02, { tile: 0.3 });
-  laundryBasket(k, 43.60, F0, -31.60, {});
-  coatHooks(k, 45.75, F0 + 1.70, -33.65, { rotY: -Math.PI / 2, w: 0.8, n: 3 });
-  for (let i = 0; i < 3; i++) {
-    k.box(0.16, 0.28, 0.30, M.solid([0x2f4f6b, 0x3f5c3a, 0x6b5330][i], 0.7),
-      39.70, F0 + 0.14, -31.90 + i * 0.26, { tile: 0.2 });
+  k.box(0.56, 0.86, 0.36, M.paint(0xf0f2f4, 0.4, 'ghBoiler'), 45.35, F0 + 1.72, back - 0.02, { tile: 0.4 });
+  k.box(0.12, 0.70, 0.12, P.chrome, 45.35, F0 + 2.50, back - 0.02, { tile: 0.3 });
+  k.col(0.60, 0.90, 0.40, 45.35, F0 + 1.72, back - 0.02);
+  laundryBasket(k, 43.40, F0, -31.60, {});
+  // boots kicked off against the west wall, clear of the two door swings
+  for (const bz of [-33.25, -33.00]) {
+    k.box(0.16, 0.28, 0.30, M.solid(bz < -33.1 ? 0x2f4f6b : 0x3f5c3a, 0.7), 39.70, F0 + 0.14, bz, { tile: 0.2 });
   }
-  wastebasket(k, 45.30, F0, -31.55, { metal: true });
-  lightSwitch(k, R, 45.72, F0 + 1.15, -31.50, { rotY: -Math.PI / 2 });
-  void world;
+  wastebasket(k, 45.30, F0, -31.40, { metal: true });
+  lightSwitch(k, R, 45.72, F0 + 1.15, -31.45, { rotY: -Math.PI / 2 });
 }
 
-function dressBedTwo(world, k, P, R) {
+function dressBedTwo(k, P, R) {
   bed(k, 44.63, F1, -34.80, { size: 'queen', rotY: -Math.PI / 2, duvet: 0xc8d3cb, sheet: 0xf6f4ef, cushion: 0x8a8172 });
   nightstand(k, 45.40, F1, -36.05, { rotY: -Math.PI / 2 });
   nightstand(k, 45.40, F1, -33.60, { rotY: -Math.PI / 2, lamp: false });
@@ -1237,10 +1249,9 @@ function dressBedTwo(world, k, P, R) {
   curtains(k, 41.2, CUR1, IZ0 + 0.22, 1.9, 0, 0xbfb4a6);
   curtains(k, 44.0, CUR1, IZ0 + 0.22, 1.7, 0, 0xbfb4a6);
   lightSwitch(k, R, 45.74, F1 + 1.15, -31.60, { rotY: -Math.PI / 2 });
-  void P; void world;
 }
 
-function dressFamilyBath(world, k, P, R) {
+function dressFamilyBath(k, P, R) {
   const M = k.M;
   bathtub(k, 39.80, F1, -26.75, { rotY: Math.PI / 2 });
   shower(k, 44.60, F1, -26.44, { w: 1.5, d: 1.4, rotY: Math.PI });
@@ -1261,10 +1272,9 @@ function dressFamilyBath(world, k, P, R) {
       39.60, F1 + 1.67, -27.15 + i * 0.26, { tile: 0.1 });
   }
   lightSwitch(k, R, 45.74, F1 + 1.15, -29.45, { rotY: -Math.PI / 2 });
-  void world;
 }
 
-function dressLanding(world, k, P, R) {
+function dressLanding(k, P, R) {
   bookshelf(k, 51.50, F1, -32.00, { rotY: -Math.PI / 2, w: 1.8, h: 1.9 });
   consoleTable(k, 51.45, F1, -26.80, { rotY: -Math.PI / 2, w: 1.2, d: 0.40 });
   vase(k, 51.45, F1 + 0.88, -26.80, { scale: 1.0, color: 0xd8cfbe });
@@ -1279,10 +1289,9 @@ function dressLanding(world, k, P, R) {
   curtains(k, IX1 - 0.22, CUR1, -35.0, 1.7, -Math.PI / 2, 0xc9bcae);
   curtains(k, IX1 - 0.22, CUR1, -29.0, 1.7, -Math.PI / 2, 0xc9bcae);
   lightSwitch(k, R, 48.05, F1 + 1.15, -25.80, { rotY: Math.PI });
-  void P; void world;
 }
 
-function dressBedOne(world, k, P, R) {
+function dressBedOne(k, P, R) {
   bed(k, 42.50, F1, -24.49, { size: 'king', rotY: 0, duvet: 0xd8dee6, sheet: 0xf7f6f2, cushion: 0x6a7684, throw: 0x9c8b70 });
   nightstand(k, 40.90, F1, -24.90, { rotY: 0 });
   nightstand(k, 44.10, F1, -24.90, { rotY: 0, lamp: false });
@@ -1306,10 +1315,9 @@ function dressBedOne(world, k, P, R) {
   curtains(k, IX0 + 0.22, CUR1, -18.6, 1.9, Math.PI / 2, 0xc9bcae);
   curtains(k, IX0 + 0.22, CUR1, -22.5, 1.7, Math.PI / 2, 0xc9bcae);
   lightSwitch(k, R, 48.05, F1 + 1.15, -25.56, { rotY: 0 });
-  void P; void world;
 }
 
-function dressEnsuite(world, k, P, R) {
+function dressEnsuite(k, P, R) {
   vanity(k, 50.20, F1, -21.05, { rotY: 0, w: 1.5 });
   shower(k, 48.30, F1, -17.05, { w: 1.4, d: 1.4, rotY: Math.PI });
   toilet(k, 51.32, F1, -19.40, { rotY: -Math.PI / 2 });
@@ -1318,10 +1326,9 @@ function dressEnsuite(world, k, P, R) {
   k.box(0.05, 0.05, 0.90, P.chrome, 47.62, F1 + 1.40, -18.90, { tile: 0.3 });
   k.box(0.10, 0.62, 0.34, k.M.paint(0xe8eef2, 0.95, 'ghTowel'), 47.66, F1 + 1.11, -18.90, { tile: 0.4 });
   lightSwitch(k, R, 47.53, F1 + 1.15, -20.20, { rotY: Math.PI / 2 });
-  void world;
 }
 
-function dressGarage(world, k, P, R) {
+function dressGarage(k, P, R) {
   const M = k.M;
   const bx = GIX1 - 0.36;                       // bench against the east wall
   const b0 = -30.6, b1 = -25.4;
@@ -1370,7 +1377,6 @@ function dressGarage(world, k, P, R) {
     k.box(6.4, 0.012, 0.10, M.paint(0xe8e4d6, 0.8, 'ghBayLine'), 34.2, F0 + 0.006, z, { tile: 0.6 });
   }
   wallClock(k, 34.5, F0 + 2.60, GIZ0 + 0.06, 0, { hour: 4, minute: 50 });
-  void R; void world;
 }
 
 function bikeAgainstWall(k, P, x, y, z) {
@@ -1417,6 +1423,690 @@ function navigation(world, GY) {
   link(landing, lsouth);
   link(landing, bed2);
   link(lsouth, bed1);
+}
 
-  world.stairLinks = world.stairLinks || [];
+// ───────────────────────────────────────────────────────────────────────────
+// Second fix.
+//
+// The shell, the fitted joinery and the big furniture are all in above.  This
+// pass is everything you would only notice once you had lived here a week:
+// the logs by the hearth, the game nobody has finished, the kettle, the boots
+// inside the front door, the ladder the garage swallowed.  Every piece is
+// somewhere a person actually put it — the rule for the whole section is that
+// if you cannot say who left it there and why, it does not go in.
+//
+// Placement rules that everything below obeys:
+//   • it stands on a real surface — worktops at F+0.93, the island at F+0.95,
+//     the dining table at F+0.785, consoles at F+0.88, dressers at F+0.90;
+//   • it clears the door swings, the stair, the bay openings and the aisles;
+//   • anything you would walk into gets a collider, anything you would knock
+//     over with your hand does not;
+//   • every lamp declares its light AND carries a lit body, and anything
+//     hanging on plaster stays under an intensity of 1.
+// ───────────────────────────────────────────────────────────────────────────
+function secondFix(world, k, P) {
+  livingSecond(k, P);
+  kitchenSecond(k, P);
+  diningSecond(world, k, P);
+  hallSecond(k, P);
+  showerSecond(k, P);
+  utilitySecond(k, P);
+  bedTwoSecond(k, P);
+  familyBathSecond(k, P);
+  landingSecond(k, P);
+  bedOneSecond(k, P);
+  ensuiteSecond(k, P);
+  garageSecond(k, P);
+}
+
+// ── the living room ────────────────────────────────────────────────────────
+function livingSecond(k, P) {
+  // Sconces either side of the chimney breast.  Anything this close to
+  // plaster stays under 1: at a third of a metre even a modest bulb burns a
+  // white disc into the wall behind it and the whole gable goes flat.
+  for (const x of [43.90, 47.10]) {
+    sconce(k, x, F0 + 1.85, IZ1 - 0.03, Math.PI, { intensity: 0.9 });
+  }
+
+  logBasket(k, P, 43.60, F0, -16.72);          // west of the hearth, off the rug
+  fireIrons(k, P, 47.05, F0, -16.80);          // east of it, where the hand falls
+
+  // Four moves old and white is a pawn up.  It shares the coffee table with
+  // the magazines and the book stack that were already on it, so it sits in
+  // the gap between them rather than on top of either.
+  chessSet(k, 45.30, F0 + 0.43, -18.25);
+
+  // The record player lives on the console under the window; the sleeves
+  // stand on the shelf below it, which is exactly what that shelf is for.
+  radio(k, 39.62, F0 + 0.88, -20.40, { rotY: HALF });
+  records(k, 39.62, F0 + 0.241, -20.94, 7);
+
+  // The front door end: a mat clear of the leaf's swing, the boots that came
+  // off on it, and the chest under the east window with the games on top.
+  rug(k, 40.35, F0, -22.00, 1.10, 0.80, 0x4f4941);
+  bootPair(k, 39.58, F0, -22.72, { color: 0x35424b });
+  blanketChest(k, P, 51.40, F0, -22.35);
+}
+
+// ── the kitchen ────────────────────────────────────────────────────────────
+function kitchenSecond(k, P) {
+  const M = k.M;
+  const back = -30.78, cy = F0 + 0.93, iy = F0 + 0.95;
+
+  // The stretch of worktop between the bowl and the board is the one nobody
+  // cooks on, so it is where the kettle and the tea things end up.
+  k.box(0.20, 0.26, 0.20, P.steel, 41.30, cy + 0.13, back - 0.02, { tile: 0.2 });
+  k.box(0.06, 0.05, 0.15, P.black, 41.17, cy + 0.19, back - 0.02, { tile: 0.1 });
+  k.box(0.09, 0.03, 0.09, P.black, 41.30, cy + 0.27, back - 0.02, { tile: 0.1 });
+  knifeBlock(k, P, 41.78, cy, back - 0.04);
+  for (let i = 0; i < 3; i++) {
+    const c = [0xd8cfbe, 0xc9d4cb, 0xdfe3e8][i];
+    k.box(0.13, 0.19, 0.13, M.paint(c, 0.4, `ghJar${i}`), 42.02 + i * 0.18, cy + 0.095, back - 0.06, { tile: 0.15 });
+    k.box(0.135, 0.02, 0.135, P.walnut, 42.02 + i * 0.18, cy + 0.20, back - 0.06, { tile: 0.1 });
+  }
+  // coffee machine on the short run, cup already under the group head
+  k.box(0.30, 0.34, 0.30, M.paint(0x2b2f35, 0.4, 'ghEspresso'), 45.72, cy + 0.17, back - 0.02, { tile: 0.2 });
+  k.box(0.24, 0.04, 0.18, P.chrome, 45.72, cy + 0.09, back + 0.09, { tile: 0.1 });
+  k.box(0.05, 0.09, 0.05, P.chrome, 45.72, cy + 0.20, back + 0.10, { tile: 0.1 });
+  mug(k, 45.72, cy + 0.11, back + 0.11, 0xe8e4db);
+  // a tea towel over the oven rail — the one thing always hanging on a range
+  k.box(0.28, 0.34, 0.03, M.paint(0x9fc6d4, 0.95, 'ghTeaTowel'), 44.40, F0 + 0.63, back + 0.40, { tile: 0.2 });
+
+  // The island: the recipe propped where whoever is on a stool can read it,
+  // two mugs at the west end, the rack of plates draining east of the basin.
+  openBook(k, 46.60, iy, -28.58, { rotY: Math.PI, stand: true, color: 0x8c3b3b, w: 0.16 });
+  mug(k, 44.52, iy, -28.62, 0xd0342c);
+  mug(k, 44.74, iy, -28.54, 0xe8e4db);
+  dishRack(k, P, 46.35, iy, -29.12);
+
+  // herbs on the cill of the east window, and a second shelf over the first
+  plant(k, 51.66, F0 + 0.905, -29.24, 0.34);
+  plant(k, 51.66, F0 + 0.905, -28.86, 0.30);
+  wallShelf(k, 39.44, F0 + 2.24, -28.10, { rotY: HALF, w: 1.0, items: 2 });
+}
+
+// ── the dining room ────────────────────────────────────────────────────────
+function diningSecond(world, k, P) {
+  const tz = -25.30;
+  // A pair of candles lit down the middle of the laid table, between the
+  // dish and the jug that were already there.  One small warm source between
+  // them is enough — the pendant overhead is doing the work.
+  for (const x of [44.55, 46.25]) candlestick(k, P, x, F0 + 0.785, tz);
+  world.addLight({ pos: V(45.40, F0 + 1.16, tz), color: 0xffb066, intensity: 1.5, decay: 2, distance: 4.5 });
+
+  // the bottle somebody opened before they sat down, on the dresser
+  wineBottle(k, 39.72, F0 + 0.91, -25.02);
+  wineGlass(k, 39.78, F0 + 0.91, -24.86);
+  wineGlass(k, 39.78, F0 + 0.91, -24.72);
+  for (const z of [-25.55, -23.65]) sconce(k, IX0 + 0.03, F0 + 1.95, z, HALF, { intensity: 0.9 });
+}
+
+// ── the stair hall ─────────────────────────────────────────────────────────
+function hallSecond(k, P) {
+  const M = k.M;
+  // Pictures climbing the flight.  The stairwell is open to the first-floor
+  // ceiling, so the run keeps going up past the storey line instead of
+  // stopping dead at three metres the way a hung wall normally has to.
+  for (const [z, y, w, h, c] of [
+    [-36.50, 2.48, 0.70, 0.55, 0x4b5a68],
+    [-35.60, 3.11, 0.55, 0.75, 0x6b5b45],
+    [-34.70, 3.75, 0.70, 0.55, 0x5a6b57],
+  ]) artwork(k, 45.99, y, z, w, h, HALF, c);
+
+  // a lamp on the console in front of the mirror, the dish the keys land in,
+  // and the post nobody has opened yet
+  tableLamp(k, 51.42, -33.00, F0 + 0.88);
+  k.box(0.16, 0.035, 0.16, M.paint(0x9aa8b4, 0.4, 'ghKeyDish'), 51.42, F0 + 0.90, -32.70, { tile: 0.1 });
+  for (let i = 0; i < 3; i++) {
+    k.box(0.20, 0.006, 0.13, M.paint([0xf2ede1, 0xe8e4db, 0xf6f2e6][i], 0.85, `ghPost${i}`),
+      51.42, F0 + 0.886 + i * 0.007, -33.32 + i * 0.012, { rotY: 0.12 - i * 0.14, tile: 0.1 });
+  }
+  rug(k, 49.40, F0, -34.60, 1.10, 4.00, 0x6b4f3a);
+  void P;
+}
+
+// ── the ground-floor shower room ───────────────────────────────────────────
+function showerSecond(k, P) {
+  robeHook(k, P, 45.81, F0 + 1.70, -36.20, -HALF, 0x7a8b93);
+  rollHolder(k, P, 45.55, F0 + 0.74, IZ0 + 0.02, 0);
+  // a shelf over the cistern with the spares rolled on it
+  k.box(0.86, 0.04, 0.24, P.walnut, 44.90, F0 + 1.58, IZ0 + 0.12, { tile: 0.3 });
+  for (const s of [-1, 1]) k.box(0.04, 0.14, 0.18, P.chrome, 44.90 + s * 0.34, F0 + 1.50, IZ0 + 0.12, { tile: 0.2 });
+  towelRolls(k, 44.90, F0 + 1.60, IZ0 + 0.12, { n: 3 });
+}
+
+// ── the utility ────────────────────────────────────────────────────────────
+function utilitySecond(k, P) {
+  const M = k.M;
+  // The corner past the machines, which is where the mop, the broom and the
+  // bucket live in every house.  Both poles lean on the wall itself and their
+  // feet stand clear of the skirting.
+  leanTool(k, 39.47, F0, -31.75, { head: 'mop' });
+  leanTool(k, 39.47, F0, -31.58, { head: 'broom', h: 1.30 });
+  k.box(0.30, 0.28, 0.30, M.paint(0x3f6ea8, 0.55, 'ghBucket'), 39.90, F0 + 0.14, -32.05, { tile: 0.2 });
+  k.box(0.33, 0.03, 0.33, M.paint(0x2f5a86, 0.6, 'ghBucketRim'), 39.90, F0 + 0.28, -32.05, { tile: 0.2 });
+
+  // the board folded against the wall between the two doors, and the corkboard
+  // the whole house runs off
+  ironingBoard(k, P, 42.30, F0, -31.52);
+  noticeBoard(k, P, 44.60, F0 + 1.72, -31.30, Math.PI);
+}
+
+// ── bedroom two ────────────────────────────────────────────────────────────
+function bedTwoSecond(k, P) {
+  // Reading sconces over the bed head, clear of the headboard's top rail;
+  // one side has the nightstand lamp, the other has nothing, so both guests
+  // get a light they can turn off without getting up.
+  for (const z of [-35.45, -34.15]) sconce(k, 45.79, F1 + 1.75, z, -HALF, { intensity: 0.9 });
+
+  // A guest's case, still open on the rack at the foot of the bed, and the
+  // slippers that came out of it first.
+  luggageRack(k, P, 42.85, F1, -34.85);
+  suitcase(k, 42.85, F1 + 0.47, -34.85, { color: 0x6b4a33 });
+  slippers(k, 43.28, F1, -35.35, 0x4a3355);
+  jug(k, 44.10, F1 + 0.91, -31.52, { scale: 0.9, fill: 0xdfe8ee });
+}
+
+// ── the family bathroom ────────────────────────────────────────────────────
+function familyBathSecond(k, P) {
+  bathRack(k, P, 39.80, F1 + 0.62, -26.60);
+  robeHook(k, P, 43.00, F1 + 1.70, -25.76, Math.PI, 0x6b7a54);
+  rollHolder(k, P, 45.79, F1 + 0.74, -30.30, -HALF);
+  // a stool with the clean towels folded on it, and something green in the
+  // corner the bath does not reach
+  k.box(0.38, 0.40, 0.38, P.walnut, 41.80, F1 + 0.20, -26.45, { tile: 0.3 });
+  k.box(0.42, 0.04, 0.42, P.walnut, 41.80, F1 + 0.42, -26.45, { tile: 0.3 });
+  k.col(0.44, 0.46, 0.44, 41.80, F1 + 0.22, -26.45);
+  towelRolls(k, 41.80, F1 + 0.44, -26.45, { n: 2, color: 0xdfe8ec });
+  plant(k, 44.55, F1, -29.35, 0.85);
+}
+
+// ── the landing ────────────────────────────────────────────────────────────
+function landingSecond(k, P) {
+  // A linen chest under the north window with a lamp on it: the landing is
+  // long and its two ceiling fittings both sit south of here.
+  dresser(k, 49.80, F1, -37.32, { rotY: 0, w: 1.40 });
+  tableLamp(k, 49.80, -37.30, F1 + 0.90);
+  photoFrame(k, 49.20, F1 + 0.91, -37.28, { rotY: 0, seed: 3 });
+  towelRolls(k, 51.35, F1 + 0.53, -28.70, { n: 2, alongZ: true, color: 0xe8eef2 });
+  plant(k, 48.30, F1, -37.30, 1.05);
+  void P;
+}
+
+// ── bedroom one ────────────────────────────────────────────────────────────
+function bedOneSecond(k, P) {
+  for (const x of [40.90, 44.10]) sconce(k, x, F1 + 1.55, -25.575, 0, { intensity: 0.9 });
+
+  // The armchair by the west window gets a footstool; the tray somebody
+  // carried up sits on the end of the bench, not in the middle of it.
+  k.box(0.50, 0.18, 0.42, k.M.paint(0x7b8a92, 0.9, 'ghFootstool'), 41.45, F1 + 0.31, -18.60, { tile: 0.3 });
+  for (const [ox, oz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    k.box(0.05, 0.24, 0.05, P.walnut, 41.45 + ox * 0.19, F1 + 0.12, -18.60 + oz * 0.15, { tile: 0.2 });
+  }
+  k.col(0.52, 0.40, 0.44, 41.45, F1 + 0.20, -18.60);
+  teaTray(k, P, 43.05, F1 + 0.53, -22.55);
+
+  // a book left face-down on the duvet, and the glasses on the nightstand
+  openBook(k, 42.90, F1 + 0.63, -23.90, { rotY: 0.3, color: 0x3f5c3a });
+  readingGlasses(k, P, 44.02, F1 + 0.56, -25.02);
+  tallMirror(k, 47.30, F1, -20.20, { rotY: -HALF, w: 0.80, h: 1.60, base: 0.55 });
+}
+
+// ── the ensuite ────────────────────────────────────────────────────────────
+function ensuiteSecond(k, P) {
+  // shelf over the cistern, towels rolled along it
+  k.box(0.24, 0.04, 0.90, P.walnut, 51.55, F1 + 1.45, -19.40, { tile: 0.3 });
+  for (const s of [-1, 1]) k.box(0.18, 0.14, 0.04, P.chrome, 51.55, F1 + 1.37, -19.40 + s * 0.36, { tile: 0.2 });
+  towelRolls(k, 51.55, F1 + 1.47, -19.40, { n: 3, alongZ: true });
+  robeHook(k, P, 47.49, F1 + 1.66, -19.60, HALF, 0x8a7f6d);
+  plant(k, 49.90, F1 + 0.855, -16.30, 0.34);
+}
+
+// ── the garage ─────────────────────────────────────────────────────────────
+function garageSecond(k, P) {
+  // Everything here goes down the east strip, behind where a bonnet stops:
+  // the four bays keep x 30.3 → 35.2 clear, the bench and the racking own the
+  // wall itself, so the metre and a half between them is the workshop.
+  chestFreezer(k, P, 36.95, F0, -36.35);
+  jerryCan(k, 38.25, F0, -37.30, 0xd0342c);
+  jerryCan(k, 38.56, F0, -37.30, 0x2f6f4a);
+  oilDrum(k, P, 36.90, F0, -34.60);
+  hoseReel(k, P, 35.10, F0 + 1.75, GIZ0 + 0.02);
+
+  // a job half set up in front of the bench: two horses, a plank across them,
+  // the stool pulled round and the jack left where it was last used
+  sawhorse(k, P, 36.90, F0, -29.60);
+  sawhorse(k, P, 36.90, F0, -28.40);
+  k.box(0.28, 0.045, 2.10, P.walnut, 36.90, F0 + 0.80, -29.00, { tile: 0.6 });
+  barstool(k, 37.55, -27.30, F0, { rotY: HALF });
+  floorJack(k, P, 36.60, F0, -26.60);
+  for (const z of [-27.10, -26.10]) axleStand(k, P, 35.95, F0, z);
+
+  // the ladder against the south wall, south of where a car in bay four ends
+  stepLadder(k, P, 33.20, F0, -24.80);
+  extinguisher(k, P, 38.86, F0 + 1.15, -31.30, -HALF);
+  // the year, pinned to the pegboard over the bench
+  wallCalendar(k, P, 38.82, F0 + 2.02, -29.60, -HALF);
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// The pieces themselves.  All boxes, all batched, colliders only where a
+// player could walk into the thing.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** A basket of split logs — the fire above it is a real one. */
+function logBasket(k, P, x, y, z) {
+  const M = k.M;
+  const wire = M.paint(0x2f3238, 0.6, 'ghLogBasket');
+  const bark = M.get('bark');
+  const cut = M.paint(0xc7a878, 0.9, 'ghLogEnd');
+  for (const [dx, dz, w, d] of [[0, -0.25, 0.52, 0.04], [0, 0.25, 0.52, 0.04], [-0.25, 0, 0.04, 0.54], [0.25, 0, 0.04, 0.54]]) {
+    k.box(w, 0.40, d, wire, x + dx, y + 0.20, z + dz, { tile: 0.3 });
+  }
+  k.box(0.50, 0.03, 0.50, wire, x, y + 0.02, z, { tile: 0.3 });
+  for (const [ox, oy, oz, r] of [[-0.10, 0.24, -0.06, 0.10], [0.08, 0.26, 0.05, -0.07], [-0.02, 0.38, -0.01, 0.22], [0.11, 0.40, 0.07, -0.16]]) {
+    k.box(0.40, 0.12, 0.12, bark, x + ox, y + oy, z + oz, { rotY: r, rotZ: 0.03, tile: 0.2 });
+    k.box(0.02, 0.11, 0.11, cut, x + ox + 0.20, y + oy + 0.006, z + oz + 0.20 * Math.sin(r), { rotY: r, tile: 0.1 });
+  }
+  k.col(0.56, 0.46, 0.58, x, y + 0.23, z);
+  void P;
+}
+
+/** Poker, brush and shovel on their stand, at the hand-side of the hearth. */
+function fireIrons(k, P, x, y, z) {
+  const M = k.M;
+  const iron = M.paint(0x1e2124, 0.45, 'ghFireIron');
+  k.box(0.18, 0.025, 0.18, iron, x, y + 0.012, z, { tile: 0.15 });
+  k.box(0.03, 0.86, 0.03, iron, x, y + 0.44, z, { tile: 0.2 });
+  k.box(0.15, 0.03, 0.15, iron, x, y + 0.88, z, { tile: 0.15 });
+  k.box(0.05, 0.05, 0.05, P.gold, x, y + 0.91, z, { tile: 0.1 });
+  const tools = [[-0.055, 0.02], [0.05, -0.03], [0.01, 0.055]];
+  for (let i = 0; i < 3; i++) {
+    const [ox, oz] = tools[i];
+    k.box(0.022, 0.66, 0.022, iron, x + ox, y + 0.50, z + oz, { tile: 0.15 });
+    k.box(0.03, 0.06, 0.03, P.gold, x + ox, y + 0.85, z + oz, { tile: 0.1 });
+    if (i === 0) k.box(0.02, 0.06, 0.09, iron, x + ox, y + 0.20, z + oz + 0.03, { tile: 0.1 });   // poker crook
+    if (i === 1) k.box(0.10, 0.03, 0.11, iron, x + ox, y + 0.18, z + oz, { tile: 0.1 });          // shovel pan
+    if (i === 2) k.box(0.08, 0.13, 0.05, M.paint(0x6b5330, 0.9, 'ghHearthBrush'), x + ox, y + 0.22, z + oz, { tile: 0.1 });
+  }
+}
+
+/**
+ * A game four moves old: the queens have come off, white is a pawn up and
+ * black is about to lose the exchange.  The taken men lie beside the board,
+ * which is the whole difference between a game and a set on display.
+ */
+function chessSet(k, x, y, z) {
+  const M = k.M;
+  const s = 0.34, sq = s / 8;
+  const cream = M.paint(0xe9e0cc, 0.45, 'ghChessCream');
+  const ebony = M.paint(0x2e2823, 0.45, 'ghChessEbony');
+  k.box(s + 0.05, 0.026, s + 0.05, M.get('walnut'), x, y + 0.013, z, { tile: 0.2 });
+  k.box(s, 0.006, s, cream, x, y + 0.029, z, { tile: 0.2 });
+  for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) {
+    if ((i + j) % 2 === 0) continue;
+    k.box(sq, 0.004, sq, ebony, x - s / 2 + (i + 0.5) * sq, y + 0.033, z - s / 2 + (j + 0.5) * sq, { tile: 0.1 });
+  }
+  const men = [
+    [4, 0, 0, 0.055], [0, 0, 0, 0.036], [7, 0, 0, 0.036], [2, 2, 0, 0.044],
+    [0, 1, 0, 0.026], [1, 1, 0, 0.026], [5, 1, 0, 0.026], [6, 1, 0, 0.026], [7, 1, 0, 0.026], [3, 3, 0, 0.026],
+    [4, 7, 1, 0.055], [7, 7, 1, 0.036], [5, 5, 1, 0.044],
+    [0, 6, 1, 0.026], [1, 6, 1, 0.026], [5, 6, 1, 0.026], [6, 6, 1, 0.026], [3, 4, 1, 0.026],
+  ];
+  for (const [f, r, black, h] of men) {
+    const mat = black ? ebony : cream;
+    const px = x - s / 2 + (f + 0.5) * sq, pz = z - s / 2 + (r + 0.5) * sq;
+    k.box(sq * 0.6, h, sq * 0.6, mat, px, y + 0.035 + h / 2, pz, { tile: 0.1 });
+    k.box(sq * 0.38, 0.012, sq * 0.38, mat, px, y + 0.041 + h, pz, { tile: 0.1 });
+  }
+  for (let i = 0; i < 4; i++) {
+    k.box(0.05, 0.026, 0.026, i < 2 ? cream : ebony, x + s / 2 + 0.05, y + 0.048, z - 0.09 + i * 0.06,
+      { rotY: 0.2 - i * 0.1, tile: 0.1 });
+  }
+}
+
+/** Sleeves stood on edge, the way records are actually kept. */
+function records(k, x, y, z, n) {
+  const M = k.M;
+  const cols = [0x8c3b3b, 0x2f4f6b, 0x3f5c3a, 0x6b5330, 0x4a3355, 0xa8895b, 0x2b2b2b];
+  for (let i = 0; i < n; i++) {
+    k.box(0.30, 0.30, 0.010, M.solid(cols[i % cols.length], 0.72), x, y + 0.15, z + i * 0.014,
+      { rotZ: 0.02, tile: 0.15 });
+  }
+}
+
+/** A pair of boots, toes into the room, kicked off against the wall. */
+function bootPair(k, x, y, z, o = {}) {
+  const M = k.M;
+  const col = M.paint(o.color ?? 0x2f4f6b, 0.7, `ghBoot${o.color ?? 0}`);
+  const sole = M.paint(0x22262a, 0.92, 'ghBootSole');
+  for (const s of [-1, 1]) {
+    const bz = z + s * 0.085;
+    k.box(0.13, 0.30, 0.14, col, x, y + 0.18, bz, { rotZ: s * 0.05, tile: 0.2 });
+    k.box(0.24, 0.10, 0.14, col, x + 0.08, y + 0.06, bz, { rotY: s * 0.09, tile: 0.2 });
+    k.box(0.25, 0.03, 0.15, sole, x + 0.08, y + 0.014, bz, { rotY: s * 0.09, tile: 0.2 });
+  }
+}
+
+/** Blanket chest under a window, with what a house keeps in one on top. */
+function blanketChest(k, P, x, y, z) {
+  const M = k.M;
+  const body = M.paint(0x6f6355, 0.7, 'ghChest');
+  k.box(0.46, 0.46, 1.10, body, x, y + 0.23, z, { tile: 0.6 });
+  k.box(0.50, 0.05, 1.14, P.walnut, x, y + 0.485, z, { tile: 0.5 });
+  for (const s of [-1, 1]) k.box(0.47, 0.03, 0.03, P.gold, x, y + 0.30, z + s * 0.42, { tile: 0.2 });
+  k.col(0.50, 0.52, 1.14, x, y + 0.26, z);
+  k.box(0.30, 0.05, 0.42, M.solid(0x2f4f6b, 0.72), x, y + 0.535, z - 0.28, { rotY: 0.12, tile: 0.2 });
+  k.box(0.28, 0.05, 0.40, M.solid(0x8c3b3b, 0.72), x, y + 0.585, z - 0.30, { rotY: -0.08, tile: 0.2 });
+  k.box(0.36, 0.12, 0.44, M.paint(0xb5a181, 0.96, 'ghChestThrow'), x, y + 0.57, z + 0.28, { tile: 0.3 });
+}
+
+/** Candle in a stick, lit — the flame is its own emissive body. */
+function candlestick(k, P, x, y, z) {
+  const M = k.M;
+  k.box(0.09, 0.02, 0.09, P.gold, x, y + 0.01, z, { tile: 0.1 });
+  k.box(0.028, 0.20, 0.028, P.gold, x, y + 0.12, z, { tile: 0.1 });
+  k.box(0.055, 0.02, 0.055, P.gold, x, y + 0.23, z, { tile: 0.1 });
+  k.box(0.026, 0.15, 0.026, M.paint(0xf2ead6, 0.7, 'ghCandle'), x, y + 0.315, z, { tile: 0.1 });
+  k.box(0.018, 0.035, 0.018, M.emissive(0xffb347, 2.4), x, y + 0.408, z, { tile: 0.1 });
+}
+
+function wineBottle(k, x, y, z) {
+  const M = k.M;
+  const g = M.paint(0x1f3a2a, 0.25, 'ghBottle');
+  k.box(0.08, 0.20, 0.08, g, x, y + 0.10, z, { tile: 0.1 });
+  k.box(0.055, 0.06, 0.055, g, x, y + 0.22, z, { tile: 0.1 });
+  k.box(0.032, 0.11, 0.032, g, x, y + 0.30, z, { tile: 0.1 });
+  k.box(0.034, 0.04, 0.034, M.paint(0x8c3b3b, 0.6, 'ghFoil'), x, y + 0.37, z, { tile: 0.1 });
+  k.box(0.083, 0.07, 0.083, M.paint(0xe8e0cc, 0.75, 'ghLabel'), x, y + 0.10, z, { tile: 0.1 });
+}
+
+function wineGlass(k, x, y, z) {
+  const M = k.M, g = M.get('glass');
+  k.box(0.07, 0.01, 0.07, g, x, y + 0.005, z, { tile: 0.1 });
+  k.box(0.012, 0.08, 0.012, g, x, y + 0.05, z, { tile: 0.1 });
+  k.box(0.07, 0.10, 0.07, g, x, y + 0.14, z, { tile: 0.1 });
+  k.box(0.062, 0.025, 0.062, M.paint(0x7a1f2b, 0.3, 'ghWine'), x, y + 0.115, z, { tile: 0.1 });
+}
+
+function mug(k, x, y, z, color) {
+  const M = k.M, m = M.paint(color, 0.4, `ghMug${color}`);
+  k.box(0.08, 0.09, 0.08, m, x, y + 0.045, z, { tile: 0.1 });
+  k.box(0.025, 0.05, 0.03, m, x + 0.05, y + 0.055, z, { tile: 0.1 });
+}
+
+/** Knife block, leaned back on its wedge, five handles standing out of it. */
+function knifeBlock(k, P, x, y, z) {
+  k.box(0.14, 0.24, 0.16, P.walnut, x, y + 0.135, z + 0.01, { rotX: -0.14, tile: 0.15 });
+  for (let i = 0; i < 5; i++) {
+    k.box(0.02, 0.10, 0.02, P.black, x - 0.05 + i * 0.025, y + 0.295, z + 0.045, { rotX: -0.14, tile: 0.1 });
+  }
+}
+
+/** Plates draining beside a sink. */
+function dishRack(k, P, x, y, z) {
+  const M = k.M;
+  k.box(0.40, 0.025, 0.30, P.chrome, x, y + 0.013, z, { tile: 0.2 });
+  for (let i = 0; i < 5; i++) k.box(0.012, 0.10, 0.28, P.chrome, x - 0.14 + i * 0.07, y + 0.06, z, { tile: 0.1 });
+  for (let i = 0; i < 3; i++) {
+    k.box(0.018, 0.19, 0.19, M.paint(0xf7f5f0, 0.32, 'china'), x - 0.105 + i * 0.07, y + 0.115, z, { tile: 0.1 });
+  }
+  k.box(0.09, 0.10, 0.09, M.paint(0xd0342c, 0.4, `ghMug${0xd0342c}`), x + 0.13, y + 0.06, z + 0.02, { rotZ: 0.5, tile: 0.1 });
+}
+
+/** Towels rolled and stacked on a shelf; `alongZ` for a shelf that runs in z. */
+function towelRolls(k, x, y, z, o = {}) {
+  const M = k.M, n = o.n ?? 3, col = o.color ?? 0xe8eef2;
+  const m = M.paint(col, 0.95, `ghRoll${col}`);
+  const band = M.paint(0xb9c8d2, 0.95, 'ghRollBand');
+  for (let i = 0; i < n; i++) {
+    const off = (i - (n - 1) / 2) * 0.20;
+    const px = o.alongZ ? x : x + off, pz = o.alongZ ? z + off : z;
+    k.box(o.alongZ ? 0.17 : 0.16, 0.15, o.alongZ ? 0.16 : 0.17, m, px, y + 0.075, pz, { tile: 0.15 });
+    k.box(o.alongZ ? 0.175 : 0.05, 0.06, o.alongZ ? 0.05 : 0.175, band, px, y + 0.075, pz, { tile: 0.1 });
+  }
+}
+
+/** A hook with a robe on it — the plate sits on the wall, the robe hangs. */
+function robeHook(k, P, x, y, z, rotY, color) {
+  const M = k.M;
+  const nx = Math.sin(rotY), nz = Math.cos(rotY);
+  const cx = Math.cos(rotY), cz = -Math.sin(rotY);      // along the wall
+  k.box(0.20, 0.05, 0.03, P.chrome, x, y, z, { rotY, tile: 0.1 });
+  for (const s of [-1, 1]) {
+    k.box(0.03, 0.03, 0.08, P.chrome, x + nx * 0.04 + cx * s * 0.06, y - 0.012, z + nz * 0.04 + cz * s * 0.06,
+      { rotY, tile: 0.1 });
+  }
+  const cloth = M.paint(color, 0.94, `ghRobe${color}`);
+  k.box(0.34, 0.55, 0.10, cloth, x + nx * 0.08, y - 0.32, z + nz * 0.08, { rotY, tile: 0.3 });
+  k.box(0.27, 0.44, 0.09, cloth, x + nx * 0.08, y - 0.75, z + nz * 0.08, { rotY, tile: 0.3 });
+  k.box(0.05, 0.26, 0.05, cloth, x + nx * 0.10 + cx * 0.15, y - 0.58, z + nz * 0.10 + cz * 0.15, { rotY, tile: 0.2 });
+}
+
+function rollHolder(k, P, x, y, z, rotY) {
+  const nx = Math.sin(rotY), nz = Math.cos(rotY);
+  k.box(0.06, 0.10, 0.02, P.chrome, x, y, z, { rotY, tile: 0.1 });
+  k.box(0.03, 0.03, 0.12, P.chrome, x + nx * 0.07, y, z + nz * 0.07, { rotY, tile: 0.1 });
+  k.box(0.12, 0.12, 0.12, k.M.paint(0xf7f5ee, 0.9, 'ghRollPaper'), x + nx * 0.13, y, z + nz * 0.13, { rotY, tile: 0.1 });
+}
+
+/** Mop or broom, leaning on the wall with its foot clear of the skirting. */
+function leanTool(k, x, y, z, o = {}) {
+  const M = k.M, h = o.h ?? 1.34, tilt = o.tilt ?? 0.16;
+  const dx = (h / 2) * Math.sin(tilt);                  // the foot stands out this far
+  k.box(0.035, h, 0.035, M.get('maple'), x, y + (h / 2) * Math.cos(tilt), z, { rotZ: tilt, tile: 0.2 });
+  if (o.head === 'mop') {
+    k.box(0.14, 0.22, 0.14, M.paint(0xb9c2c8, 0.95, 'ghMopHead'), x + dx, y + 0.11, z, { tile: 0.2 });
+  } else {
+    k.box(0.30, 0.08, 0.09, M.get('walnut'), x + dx, y + 0.16, z, { tile: 0.2 });
+    k.box(0.28, 0.13, 0.08, M.paint(0x9a8b78, 0.9, 'ghBristle'), x + dx, y + 0.065, z, { tile: 0.2 });
+  }
+}
+
+/** The board, folded and stood against the wall with its legs shut. */
+function ironingBoard(k, P, x, y, z) {
+  const M = k.M, h = 1.30, tilt = 0.13;
+  const c = Math.cos(tilt), s = Math.sin(tilt);
+  k.box(0.38, h, 0.05, M.paint(0xd7e3e8, 0.9, 'ghIroningTop'), x, y + (h / 2) * c, z + (h / 2) * s,
+    { rotX: tilt, tile: 0.4 });
+  for (const sx of [-1, 1]) {
+    k.box(0.035, h - 0.24, 0.035, P.steel, x + sx * 0.10, y + ((h - 0.24) / 2) * c + 0.10, z + ((h - 0.24) / 2) * s - 0.05,
+      { rotX: tilt, tile: 0.2 });
+  }
+  k.col(0.44, h, 0.28, x, y + h / 2, z + 0.06);
+}
+
+/** Cork board: the school letter, the takeaway menu, two lists. */
+function noticeBoard(k, P, x, y, z, rotY) {
+  const M = k.M;
+  const nx = Math.sin(rotY), nz = Math.cos(rotY);
+  const cx = Math.cos(rotY), cz = -Math.sin(rotY);
+  k.box(0.62, 0.46, 0.03, P.walnut, x, y, z, { rotY, tile: 0.3 });
+  k.box(0.54, 0.38, 0.02, M.paint(0xc9a06a, 0.9, 'ghCork'), x + nx * 0.02, y, z + nz * 0.02, { rotY, tile: 0.2 });
+  const pins = [[-0.16, 0.08, 0xf6f2e6], [0.07, 0.10, 0xd7e3e8], [0.15, -0.08, 0xf0e2c0], [-0.09, -0.09, 0xe8eef2]];
+  for (const [ox, oy, c] of pins) {
+    k.box(0.13, 0.11, 0.006, M.solid(c, 0.9), x + nx * 0.035 + cx * ox, y + oy, z + nz * 0.035 + cz * ox,
+      { rotY, tile: 0.1 });
+  }
+}
+
+/** Folding rack for a case, the kind that lives at the foot of a guest bed. */
+function luggageRack(k, P, x, y, z) {
+  const M = k.M;
+  const strap = M.paint(0x6b5330, 0.85, 'ghStrap');
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    k.box(0.05, 0.46, 0.05, P.walnut, x + sx * 0.26, y + 0.23, z + sz * 0.20, { rotZ: sx * 0.10, tile: 0.2 });
+  }
+  for (const sz of [-1, 1]) k.box(0.58, 0.04, 0.04, P.walnut, x, y + 0.44, z + sz * 0.20, { tile: 0.2 });
+  for (let i = 0; i < 4; i++) k.box(0.56, 0.02, 0.06, strap, x, y + 0.46, z - 0.15 + i * 0.10, { tile: 0.2 });
+  k.col(0.62, 0.50, 0.50, x, y + 0.25, z);
+}
+
+/** A case still open, half unpacked. */
+function suitcase(k, x, y, z, o = {}) {
+  const M = k.M;
+  const hide = M.paint(o.color ?? 0x6b4a33, 0.6, `ghCase${o.color ?? 0}`);
+  const trim = M.paint(0x2f2a24, 0.6, 'ghCaseTrim');
+  const lin = M.paint(0xe8eef2, 0.95, 'ghCaseLinen');
+  k.box(0.60, 0.18, 0.42, hide, x, y + 0.09, z, { tile: 0.3 });
+  k.box(0.62, 0.03, 0.44, trim, x, y + 0.185, z, { tile: 0.2 });
+  k.box(0.48, 0.06, 0.32, lin, x, y + 0.20, z + 0.02, { tile: 0.2 });
+  k.box(0.30, 0.05, 0.24, M.solid(0x2f6fb5, 0.9), x - 0.08, y + 0.245, z + 0.02, { rotY: 0.2, tile: 0.2 });
+  // the lid, hinged at the back and standing open
+  const a = 1.1, ca = Math.cos(a), sa = Math.sin(a);
+  k.box(0.60, 0.05, 0.42, hide, x, y + 0.19 + 0.21 * sa, z - 0.21 - 0.21 * ca, { rotX: a, tile: 0.3 });
+}
+
+function slippers(k, x, y, z, color) {
+  const M = k.M, m = M.paint(color, 0.92, `ghSlipper${color}`);
+  for (const s of [-1, 1]) {
+    k.box(0.11, 0.05, 0.26, m, x + s * 0.07, y + 0.025, z + s * 0.02, { rotY: s * 0.14, tile: 0.15 });
+    k.box(0.11, 0.08, 0.11, m, x + s * 0.07, y + 0.06, z + s * 0.02 - 0.07, { rotY: s * 0.14, tile: 0.15 });
+  }
+}
+
+/** The board across the bath: a book, a candle, the sponge. */
+function bathRack(k, P, x, y, z) {
+  const M = k.M;
+  k.box(1.02, 0.03, 0.16, M.get('maple'), x, y, z, { tile: 0.3 });
+  for (const s of [-1, 1]) k.box(0.05, 0.05, 0.16, M.get('maple'), x + s * 0.46, y - 0.035, z, { tile: 0.2 });
+  openBook(k, x - 0.17, y + 0.015, z, { rotY: HALF, color: 0x4a3355, w: 0.14, d: 0.19 });
+  k.box(0.07, 0.09, 0.07, M.paint(0xe8e4db, 0.5, 'ghBathCandle'), x + 0.20, y + 0.06, z, { tile: 0.1 });
+  k.box(0.02, 0.03, 0.02, M.emissive(0xffb347, 2.2), x + 0.20, y + 0.12, z, { tile: 0.1 });
+  k.box(0.11, 0.07, 0.11, M.paint(0xf0d8b0, 0.92, 'ghSponge'), x + 0.37, y + 0.05, z, { tile: 0.1 });
+  void P;
+}
+
+/** Tea for two, carried up and left on the end of the bench. */
+function teaTray(k, P, x, y, z) {
+  const M = k.M;
+  const china = M.paint(0xf7f5f0, 0.32, 'china');
+  k.box(0.44, 0.02, 0.32, P.walnut, x, y + 0.01, z, { tile: 0.2 });
+  for (const s of [-1, 1]) k.box(0.44, 0.04, 0.02, P.walnut, x, y + 0.03, z + s * 0.15, { tile: 0.1 });
+  k.box(0.17, 0.14, 0.15, china, x - 0.10, y + 0.09, z, { tile: 0.1 });
+  k.box(0.05, 0.03, 0.08, china, x - 0.20, y + 0.11, z, { tile: 0.1 });
+  k.box(0.06, 0.035, 0.06, P.gold, x - 0.10, y + 0.175, z, { tile: 0.1 });
+  for (const s of [-1, 1]) mug(k, x + 0.12, y + 0.02, z + s * 0.08, 0xf7f5f0);
+}
+
+/** Reading glasses, folded, left where they were taken off. */
+function readingGlasses(k, P, x, y, z) {
+  const M = k.M;
+  const frame = M.paint(0x3a3128, 0.4, 'ghSpecs');
+  k.box(0.12, 0.008, 0.035, frame, x, y + 0.008, z, { rotY: 0.3, tile: 0.05 });
+  for (const s of [-1, 1]) k.box(0.04, 0.006, 0.032, M.get('glass'), x + s * 0.032, y + 0.012, z + s * 0.010, { rotY: 0.3, tile: 0.05 });
+  k.box(0.10, 0.006, 0.01, frame, x + 0.08, y + 0.006, z - 0.03, { rotY: 0.9, tile: 0.05 });
+  void P;
+}
+
+// ── garage pieces ──────────────────────────────────────────────────────────
+function chestFreezer(k, P, x, y, z) {
+  const M = k.M;
+  const shell = M.paint(0xe6e8ea, 0.45, 'ghFreezer');
+  k.box(0.72, 0.80, 1.30, shell, x, y + 0.40, z, { tile: 0.5 });
+  k.box(0.76, 0.06, 1.34, M.paint(0xdcdfe2, 0.45, 'ghFreezerLid'), x, y + 0.83, z, { tile: 0.4 });
+  k.box(0.05, 0.04, 0.34, P.chrome, x + 0.36, y + 0.79, z, { tile: 0.2 });
+  k.box(0.08, 0.04, 0.04, M.emissive(0x6fd3ff, 1.1), x - 0.28, y + 0.60, z + 0.66, { tile: 0.1 });
+  k.col(0.76, 0.88, 1.34, x, y + 0.44, z);
+}
+
+function jerryCan(k, x, y, z, color) {
+  const M = k.M, m = M.paint(color, 0.55, `ghJerry${color}`);
+  k.box(0.20, 0.42, 0.34, m, x, y + 0.21, z, { tile: 0.2 });
+  k.box(0.16, 0.05, 0.24, m, x, y + 0.44, z, { tile: 0.15 });
+  k.box(0.03, 0.05, 0.20, m, x, y + 0.48, z - 0.02, { tile: 0.1 });
+  k.box(0.05, 0.06, 0.05, M.get('darkPlastic'), x, y + 0.48, z + 0.10, { tile: 0.1 });
+}
+
+function oilDrum(k, P, x, y, z) {
+  const M = k.M;
+  const m = M.paint(0x2f6f4a, 0.55, 'ghDrum');
+  const rib = M.paint(0x24593c, 0.6, 'ghDrumRib');
+  k.box(0.56, 0.86, 0.56, m, x, y + 0.43, z, { tile: 0.4 });
+  for (const oy of [0.28, 0.58]) k.box(0.59, 0.04, 0.59, rib, x, y + oy, z, { tile: 0.2 });
+  k.box(0.60, 0.03, 0.60, P.steel, x, y + 0.865, z, { tile: 0.2 });
+  k.box(0.10, 0.025, 0.10, P.chrome, x + 0.16, y + 0.89, z - 0.04, { tile: 0.1 });
+  // the funnel somebody left standing on the lid
+  k.box(0.18, 0.09, 0.18, M.paint(0xd0342c, 0.6, 'ghFunnel'), x - 0.13, y + 0.925, z + 0.07, { tile: 0.1 });
+  k.box(0.05, 0.12, 0.05, M.paint(0xd0342c, 0.6, 'ghFunnel'), x - 0.13, y + 1.02, z + 0.07, { tile: 0.1 });
+  k.col(0.60, 0.90, 0.60, x, y + 0.45, z);
+}
+
+function sawhorse(k, P, x, y, z) {
+  k.box(0.10, 0.08, 0.90, P.walnut, x, y + 0.74, z, { tile: 0.3 });
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    k.box(0.055, 0.74, 0.055, P.walnut, x + sx * 0.20, y + 0.37, z + sz * 0.34,
+      { rotZ: sx * 0.24, rotX: -sz * 0.10, tile: 0.2 });
+  }
+  k.col(0.52, 0.80, 0.94, x, y + 0.40, z);
+}
+
+/** Hose on its bracket, hung in a hank the way it comes off the reel. */
+function hoseReel(k, P, x, y, z) {
+  const M = k.M;
+  const hose = M.paint(0x2f6f4a, 0.82, 'ghHose');
+  k.box(0.40, 0.06, 0.06, P.black, x, y + 0.24, z + 0.05, { tile: 0.2 });
+  for (const s of [-1, 1]) k.box(0.05, 0.30, 0.06, P.black, x + s * 0.18, y + 0.10, z + 0.05, { tile: 0.2 });
+  for (let i = 0; i < 4; i++) {
+    k.box(0.40 - i * 0.05, 0.06, 0.14 + i * 0.02, hose, x, y - i * 0.07, z + 0.13, { tile: 0.2 });
+  }
+  k.box(0.05, 0.05, 0.16, P.chrome, x + 0.16, y - 0.30, z + 0.13, { tile: 0.1 });
+}
+
+function floorJack(k, P, x, y, z) {
+  const M = k.M;
+  const body = M.paint(0xb3231f, 0.5, 'ghJack');
+  k.box(0.26, 0.14, 0.62, body, x, y + 0.10, z, { tile: 0.2 });
+  k.box(0.11, 0.10, 0.11, P.steel, x, y + 0.21, z - 0.08, { tile: 0.1 });
+  k.box(0.05, 0.05, 0.78, P.black, x, y + 0.36, z + 0.36, { rotX: -0.5, tile: 0.2 });
+  for (const s of [-1, 1]) {
+    k.box(0.07, 0.07, 0.07, M.get('rubber'), x + s * 0.09, y + 0.035, z - 0.24, { tile: 0.1 });
+    k.box(0.07, 0.07, 0.07, M.get('rubber'), x + s * 0.09, y + 0.035, z + 0.26, { tile: 0.1 });
+  }
+  k.col(0.30, 0.30, 0.70, x, y + 0.15, z);
+}
+
+function axleStand(k, P, x, y, z) {
+  k.box(0.24, 0.03, 0.24, P.steel, x, y + 0.015, z, { tile: 0.15 });
+  for (const s of [-1, 1]) {
+    k.box(0.05, 0.36, 0.05, P.steel, x + s * 0.08, y + 0.18, z, { rotZ: s * 0.2, tile: 0.15 });
+  }
+  k.box(0.06, 0.24, 0.06, P.steel, x, y + 0.30, z, { tile: 0.15 });
+  k.box(0.10, 0.04, 0.10, P.steel, x, y + 0.42, z, { tile: 0.1 });
+}
+
+function stepLadder(k, P, x, y, z) {
+  const M = k.M, h = 2.20, tilt = 0.17;
+  const c = Math.cos(tilt), s = Math.sin(tilt);
+  const rail = M.paint(0x9aa2a8, 0.5, 'ghLadder');
+  for (const sx of [-1, 1]) {
+    k.box(0.06, h, 0.05, rail, x + sx * 0.22, y + (h / 2) * c, z + (h / 2) * s, { rotX: tilt, tile: 0.3 });
+  }
+  for (let i = 0; i < 7; i++) {
+    const t = 0.18 + i * 0.30;
+    k.box(0.44, 0.03, 0.10, rail, x, y + t * c, z + t * s, { rotX: tilt, tile: 0.2 });
+  }
+  k.col(0.50, h * 0.94, 0.36, x, y + h / 2, z + 0.20);
+  void P;
+}
+
+function extinguisher(k, P, x, y, z, rotY) {
+  const M = k.M;
+  const nx = Math.sin(rotY), nz = Math.cos(rotY);
+  k.box(0.10, 0.30, 0.03, P.black, x, y, z, { rotY, tile: 0.1 });
+  k.box(0.16, 0.44, 0.16, M.paint(0xb3231f, 0.5, 'ghExt'), x + nx * 0.11, y - 0.02, z + nz * 0.11, { tile: 0.15 });
+  k.box(0.07, 0.10, 0.07, P.black, x + nx * 0.11, y + 0.25, z + nz * 0.11, { tile: 0.1 });
+  k.box(0.05, 0.05, 0.13, P.black, x + nx * 0.17, y + 0.27, z + nz * 0.17, { rotY, tile: 0.1 });
+  k.box(0.10, 0.10, 0.012, M.paint(0xf6f2e6, 0.8, 'ghExtLabel'), x + nx * 0.19, y - 0.04, z + nz * 0.19, { rotY, tile: 0.1 });
+}
+
+function wallCalendar(k, P, x, y, z, rotY) {
+  const M = k.M;
+  const nx = Math.sin(rotY), nz = Math.cos(rotY);
+  k.box(0.30, 0.40, 0.008, M.paint(0xf6f2e6, 0.85, 'ghCalendar'), x, y, z, { rotY, tile: 0.1 });
+  k.box(0.28, 0.13, 0.010, M.paint(0x2f6fb5, 0.8, 'ghCalendarHead'), x + nx * 0.002, y + 0.13, z + nz * 0.002, { rotY, tile: 0.1 });
+  for (let r = 0; r < 4; r++) {
+    k.box(0.26, 0.012, 0.010, M.solid(0xb9b2a4, 0.9), x + nx * 0.002, y + 0.02 - r * 0.06, z + nz * 0.002, { rotY, tile: 0.1 });
+  }
+  void P;
 }
