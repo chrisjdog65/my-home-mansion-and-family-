@@ -433,6 +433,10 @@ function makeVehicle(world, cfg, x, z, rotY) {
     steerRate: 9, rollGain: 0.12, pitchGain: 0.05,
     slipLimit: 26, slipGain: 0.2, reverseMax: 0.35, reverseAccel: 0.5,
     travel: 0.06, track: 2, beamPower: 30, drag: 0.2,
+    // the shunt on a car-to-car hit divides by these, and both builders set
+    // one — but a third vehicle added without would put NaN into its speed and
+    // never come back, so the default belongs here rather than by convention
+    mass: 2,
   }, cfg);
   v.home = V(x, 0, z);
   v.homeHeading = rotY;

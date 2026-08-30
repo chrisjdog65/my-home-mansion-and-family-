@@ -149,6 +149,9 @@ export class Engine {
     // dirty when it flips (shadowMap.needsUpdate only re-renders the maps), so
     // Off → Soft used to leave USE_SHADOWMAP compiled out and the shadows never
     // came back, while On → Off left the last map bound and froze them in place.
+    // Game.applyShadowQuality now guards the same flip for its own filter-type
+    // recompile; both are idempotent (needsUpdate only bumps a version counter
+    // that the next render reads), so whichever listener runs first is fine.
     const shadows = s.shadows > 0;
     if (shadows !== this._shadowsWereEnabled) {
       this._shadowsWereEnabled = shadows;

@@ -42,11 +42,13 @@ function terrace(world, k, M, B) {
     B.box(w, 0.3, d, M.get('paver'), (r.x0 + r.x1) / 2, -0.14, (r.z0 + r.z1) / 2, { tile: 1.2 });
     world.collider(w, 0.3, d, (r.x0 + r.x1) / 2, -0.14, (r.z0 + r.z1) / 2);
   }
-  // steps down to the lawn
-  for (let i = 0; i < 3; i++) {
-    B.box(24, 0.18, 0.5, M.get('stone'), -6, -0.09 - i * 0.18, 33.2 + i * 0.5, { tile: 1 });
-    world.collider(24, 0.24, 0.5, -6, -0.12 - i * 0.18, 33.2 + i * 0.5);
-  }
+  // A threshold course, not a flight.  There used to be three steps down here,
+  // but this strip is inside the flat house pad: the lawn is at 0 and the deck
+  // top at 0.01, so the top step z-fought the grass along its whole 24 m and
+  // the lower two were buried under the turf, drawing nothing and carrying
+  // nobody. One course flush with the paving is what the 1 cm actually is.
+  B.box(24, 0.18, 0.5, M.get('stone'), -6, -0.08, 33.2, { tile: 1 });
+  world.collider(24, 0.24, 0.5, -6, -0.11, 33.2);
 
   // pergola over the outdoor lounge
   const px = -22, pz = 20;
@@ -158,6 +160,22 @@ function hotTub(world, k, M, B) {
     const a = (i / 12) * Math.PI * 2;
     B.box(1.18, 1.0, 0.3, M.get('stone'), cxp + Math.cos(a) * 2.05, 0.2, czp + Math.sin(a) * 2.05, { rotY: Math.PI / 2 - a, tile: 0.7 });
     world.collider(1.24, 1.0, 0.34, cxp + Math.cos(a) * 2.05, 0.2, czp + Math.sin(a) * 2.05, Math.PI / 2 - a);
+  }
+  // The deck is cut with a 5 m square hole for a round tub, so between the
+  // shell and the paving there was a 0.3 m slot all round and a 1.26 m notch
+  // at each corner — no paving, no collider, and a 1.28 m drop onto the
+  // excavated basin. This skirt fills the annulus: its inner edge at 1.95
+  // tucks under the shell ring (which spans 1.9..2.2), its outer edge lands
+  // exactly on the hole.
+  const HIN = 1.95, HOUT = 2.5;
+  for (const [sx, sz, sw, sd] of [
+    [0, (HIN + HOUT) / 2, HOUT * 2, HOUT - HIN],
+    [0, -(HIN + HOUT) / 2, HOUT * 2, HOUT - HIN],
+    [(HIN + HOUT) / 2, 0, HOUT - HIN, HIN * 2],
+    [-(HIN + HOUT) / 2, 0, HOUT - HIN, HIN * 2],
+  ]) {
+    B.box(sw, 0.3, sd, M.get('paver'), cxp + sx, -0.14, czp + sz, { tile: 1.2 });
+    world.collider(sw, 0.3, sd, cxp + sx, -0.14, czp + sz);
   }
   B.box(4.6, 0.3, 4.6, M.get('poolTile'), cxp, -0.9, czp, { tile: 0.8 });
   world.collider(4.6, 0.3, 4.6, cxp, -0.9, czp);
@@ -679,9 +697,24 @@ function shed(world, k, M, B) {
 // ── driveway & front ───────────────────────────────────────────────────────
 function driveway(world, k, M, B) {
   const asphalt = M.get('asphalt');
+  // The porch and the walk up to it are stone, and the asphalt was laid over
+  // the top of them — a 7 x 4.3 m block of the porch buried under tarmac
+  // sitting 7.5 cm proud of it, the east column and its planter standing in
+  // the road, and one foot on stone and one on a kerb as you came out of the
+  // front doors. Both slabs are cut round them.
+  const KEEP = [
+    { x0: -7.2, x1: 7.2, z0: -17.65, z1: -13 },     // the porch itself
+    { x0: -2.2, x1: 2.2, z0: -25, z1: -17.5 },      // the walk out to the drive
+  ];
+  const slab = (rect) => {
+    for (const r of rectSubtract(rect, KEEP)) {
+      const w = r.x1 - r.x0, d = r.z1 - r.z0;
+      B.box(w, 0.16, d, asphalt, (r.x0 + r.x1) / 2, 0.02, (r.z0 + r.z1) / 2, { tile: 3 });
+      world.collider(w, 0.2, d, (r.x0 + r.x1) / 2, 0.0, (r.z0 + r.z1) / 2);
+    }
+  };
   // main run out to the road
-  B.box(12, 0.16, 46, asphalt, 6, 0.02, -36, { tile: 3 });
-  world.collider(12, 0.2, 46, 6, 0.0, -36);
+  slab({ x0: 0, x1: 12, z0: -59, z1: -13 });
   // the lawn falls away beyond the pad, so the last stretch to the front gate
   // rides the ground down
   const roadY = (z) => 0.02 + (groundHeight(6, z) + 0.12 - 0.02) * smoothstep(60, 74, -z);
@@ -691,15 +724,17 @@ function driveway(world, k, M, B) {
     B.box(12, 0.16, Math.hypot(1.95, y1 - y0) + 0.06, asphalt, 6, (y0 + y1) / 2, (z0 + z1) / 2, { rotX: -Math.atan2(y0 - y1, 1.95), tile: 3 });
     world.collider(12, 0.22, 2.0, 6, (y0 + y1) / 2 - 0.02, (z0 + z1) / 2);
   }
-  // apron in front of the garage
-  B.box(26, 0.16, 14, asphalt, 14, 0.02, -20, { tile: 3 });
-  world.collider(26, 0.2, 14, 14, 0.0, -20);
+  // The apron in front of the garage.  It used to stop at x = 27 while the
+  // east bay's opening runs to 29.7, so that door opened onto grass; it now
+  // reaches the corner of the house. APRON is named because the forecourt
+  // below subtracts it — the two must not drift apart.
+  const APRON = { x0: 1, x1: 30, z0: -27, z1: -13 };
+  slab(APRON);
   // The forecourt that runs on to the guest house garage. It has to meet the
   // apron edge to edge — laid as one rectangle it would overlap it between
   // z -27 and -24 and the two coplanar surfaces would z-fight — so the part
   // the apron already covers is subtracted out and the join is a butt seam.
-  for (const r of rectSubtract({ x0: 18, x1: 30, z0: -40, z1: -24 },
-    [{ x0: 1, x1: 27, z0: -27, z1: -13 }])) {
+  for (const r of rectSubtract({ x0: 18, x1: 30, z0: -40, z1: -24 }, [APRON])) {
     const cw = r.x1 - r.x0, cd = r.z1 - r.z0;
     B.box(cw, 0.16, cd, asphalt, (r.x0 + r.x1) / 2, 0.02, (r.z0 + r.z1) / 2, { tile: 3 });
     world.collider(cw, 0.2, cd, (r.x0 + r.x1) / 2, 0.0, (r.z0 + r.z1) / 2);

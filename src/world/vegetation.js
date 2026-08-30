@@ -126,13 +126,17 @@ normal = normalize(mix(normal, (viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz, 0.55
     scl.set(s, s * rng.range(0.8, 1.25), s);
     m4.compose(p, q, scl);
     mesh.setMatrixAt(placed, m4);
-    // This multiplies the blade texture, which is already the grass colour, so
-    // what belongs here is a jitter about white — not a tint. It used to be a
-    // 0.3-lightness green, and setHSL writes straight into the linear working
-    // space, so that landed as a 0.3× multiply: every tuft came out at a third
-    // of the lawn's albedo and the 7000 of them read as dirt on it.
-    const v = rng.range(0.86, 1.12);
-    tint.setRGB(v * 0.97, v, v * 0.9);
+    // This multiplies the blade texture, and that texture is much brighter than
+    // the turf underneath: its strokes run #3d6428 → #7fa348, which decodes to
+    // about 0.23 of linear green where the lawn's own map sits at 0.107. So a
+    // jitter about white is not neutral here — it puts every tuft at twice the
+    // lawn's albedo (and 3.6× in red) and the yard reads as pale speckles.
+    // Roughly 0.36/0.56/0.25 brings the product back onto the ground it stands
+    // in — a shade brighter and more saturated than the averaged turf, which is
+    // what a blade catching the light actually looks like. setRGB writes
+    // straight into the linear working space, so these are the multipliers.
+    const v = rng.range(0.82, 1.18);
+    tint.setRGB(v * 0.36, v * 0.56, v * 0.25);
     mesh.setColorAt(placed, tint);
     placed++;
   }

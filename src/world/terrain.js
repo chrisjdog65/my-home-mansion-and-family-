@@ -376,7 +376,12 @@ export class SkySystem {
       this.sun.intensity = 3.1 * day * clamp((day - 0.06) / 0.06, 0, 1);
     }
     this.sun.position.copy(this.lightDir).multiplyScalar(160);
-    this.sun.visible = this.sun.intensity > 0.005;
+    // Never hidden. numDirectionalLights is compiled into every program and an
+    // invisible light is not counted, so blanking it for the two or three
+    // frames where the sun has faded out and the moon has not yet come up would
+    // relink every material in the scene four times a day cycle — the same
+    // reason the point-light pool holds a constant slot count. At zero
+    // intensity it costs one shadow pass and contributes nothing.
 
     // Sky fill is kept deliberately low: without it every interior washes out,
     // and the house is meant to be lit by its own fixtures.
