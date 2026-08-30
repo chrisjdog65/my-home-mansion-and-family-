@@ -34580,10 +34580,10 @@ function dressGarage(k, P, R) {
     k.box(0.66, 0.22, 0.66, M.get("rubber"), 31.4, F0 + 0.11 + i * 0.22, -37.3, { tile: 0.3 });
   }
   k.col(0.7, 0.7, 0.7, 31.4, F0 + 0.35, -37.3);
-  bikeAgainstWall(k, P, 31.1, F0, -25.4);
-  k.box(0.56, 0.9, 0.56, M.paint(3884880, 0.6, "ghBin"), 30.8, F0 + 0.45, -36.3, { tile: 0.4 });
-  k.box(0.6, 0.06, 0.6, M.paint(2765626, 0.6, "ghBinLid"), 30.8, F0 + 0.93, -36.3, { tile: 0.3 });
-  k.col(0.6, 0.96, 0.6, 30.8, F0 + 0.48, -36.3);
+  bikeAgainstWall(k, P, 37.6, F0, -30.9);
+  k.box(0.56, 0.9, 0.56, M.paint(3884880, 0.6, "ghBin"), 37.3, F0 + 0.45, -32.2, { tile: 0.4 });
+  k.box(0.6, 0.06, 0.6, M.paint(2765626, 0.6, "ghBinLid"), 37.3, F0 + 0.93, -32.2, { tile: 0.3 });
+  k.col(0.6, 0.96, 0.6, 37.3, F0 + 0.48, -32.2);
   for (const z of [-34.26, -31, -27.74]) {
     k.box(6.4, 0.012, 0.1, M.paint(15262934, 0.8, "ghBayLine"), 34.2, F0 + 6e-3, z, { tile: 0.6 });
   }
@@ -34784,7 +34784,7 @@ function garageSecond(k, P) {
   barstool(k, 37.55, -27.3, F0, { rotY: HALF });
   floorJack(k, P, 36.6, F0, -26.6);
   for (const z of [-27.1, -26.1]) axleStand(k, P, 35.95, F0, z);
-  stepLadder(k, P, 33.2, F0, -24.8);
+  stepLadder(k, P, 36.3, F0, -24.9);
   extinguisher(k, P, 38.86, F0 + 1.15, -31.3, -HALF);
   wallCalendar(k, P, 38.82, F0 + 2.02, -29.6, -HALF);
 }

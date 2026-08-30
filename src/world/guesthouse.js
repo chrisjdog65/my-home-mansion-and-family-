@@ -1447,10 +1447,16 @@ function dressGarage(k, P, R) {
     k.box(0.66, 0.22, 0.66, M.get('rubber'), 31.40, F0 + 0.11 + i * 0.22, -37.30, { tile: 0.3 });
   }
   k.col(0.70, 0.70, 0.70, 31.40, F0 + 0.35, -37.30);
-  bikeAgainstWall(k, P, 31.10, F0, -25.40);
-  k.box(0.56, 0.90, 0.56, M.paint(0x3b4750, 0.6, 'ghBin'), 30.80, F0 + 0.45, -36.30, { tile: 0.4 });
-  k.box(0.60, 0.06, 0.60, M.paint(0x2a333a, 0.6, 'ghBinLid'), 30.80, F0 + 0.93, -36.30, { tile: 0.3 });
-  k.col(0.60, 0.96, 0.60, 30.80, F0 + 0.48, -36.30);
+  // The bike and the bin used to stand at x 30.8–31.1, which is not a corner
+  // at all — it is the mouth of bay one and the mouth of bay four, right
+  // inside the doors. Measured against the bay lines on the slab, they left
+  // bay four with 2.4 m of clear lane and bay one with 4.2 m, where a car
+  // needs about five. Both now live in the workshop strip east of x 35.2,
+  // which is where everything that is not a car belongs.
+  bikeAgainstWall(k, P, 37.60, F0, -30.90);
+  k.box(0.56, 0.90, 0.56, M.paint(0x3b4750, 0.6, 'ghBin'), 37.30, F0 + 0.45, -32.20, { tile: 0.4 });
+  k.box(0.60, 0.06, 0.60, M.paint(0x2a333a, 0.6, 'ghBinLid'), 37.30, F0 + 0.93, -32.20, { tile: 0.3 });
+  k.col(0.60, 0.96, 0.60, 37.30, F0 + 0.48, -32.20);
   // bay markings on the slab
   for (const z of [-34.26, -31.00, -27.74]) {
     k.box(6.4, 0.012, 0.10, M.paint(0xe8e4d6, 0.8, 'ghBayLine'), 34.2, F0 + 0.006, z, { tile: 0.6 });
@@ -1766,8 +1772,11 @@ function garageSecond(k, P) {
   floorJack(k, P, 36.60, F0, -26.60);
   for (const z of [-27.10, -26.10]) axleStand(k, P, 35.95, F0, z);
 
-  // the ladder against the south wall, south of where a car in bay four ends
-  stepLadder(k, P, 33.20, F0, -24.80);
+  // The ladder against the south wall. At x 33.20 it stood in bay four's
+  // driving lane with 0.15 m to spare against a parked car — inside the
+  // tolerance a player will actually hit — so it moves east to join the rest
+  // of the workshop rather than sit where a bonnet swings.
+  stepLadder(k, P, 36.30, F0, -24.90);
   extinguisher(k, P, 38.86, F0 + 1.15, -31.30, -HALF);
   // the year, pinned to the pegboard over the bench
   wallCalendar(k, P, 38.82, F0 + 2.02, -29.60, -HALF);
